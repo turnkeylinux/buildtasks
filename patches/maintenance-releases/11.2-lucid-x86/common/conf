@@ -1,0 +1,4 @@
+#!/bin/bash -e
+
+rm /usr/lib/inithooks/firstboot.d/80tklbam
+rm /usr/lib/inithooks/bin/tklbam.py
