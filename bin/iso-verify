@@ -1,0 +1,60 @@
+#!/bin/bash -e
+
+fatal() {
+    echo "FATAL [$(basename $0)]: $@" 1>&2
+    exit 1
+}
+
+info() {
+    echo "INFO [$(basename $0)]: $@"
+}
+
+usage() {
+cat<<EOF
+Syntax: $0 appname version isodir
+Verify ISO by getting .sig and verifying (skipped if .sig exists)
+
+Arguments::
+
+    appname     - appliance name (e.g., core)
+    version     - appliance version (e.g., 11.1-lucid-x86)
+    isodir      - directory containing ISO
+
+Environment::
+
+    BT_RELEASE_KEY  - GPG release key ID
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+appname=$1
+version=$2
+isodir=$3
+
+isofile=turnkey-$appname-$version.iso
+sigfile=turnkey-$appname-$version.iso.sig
+
+[ -n "$BT_RELEASE_KEY" ] || fatal "BT_RELEASE_KEY not set"
+
+if [ -e $isodir/$sigfile ]; then
+    info "$sigfile already exists, skipping..."
+    exit 0
+fi
+
+if ! gpg --list-keys $BT_RELEASE_KEY 2>&1 >/dev/null; then
+    gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0x$BT_RELEASE_KEY
+fi
+
+src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
+wget $src -O $isodir/$sigfile
+
+if ! gpg --verify $isodir/$sigfile; then
+    mv $isodir/$isofile $isodir/$isofile.corrupt
+    rm $isodir/$sigfile
+    fatal "$isofile verification failed"
+fi
+

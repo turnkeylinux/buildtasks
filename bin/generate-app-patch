@@ -1,0 +1,85 @@
+#!/bin/bash -e
+
+fatal() {
+    echo "FATAL [$(basename $0)]: $@" 1>&2
+    exit 1
+}
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs patch-src patch-dst
+Generate appliance patch
+
+Arguments::
+
+    rootfs      - root filesystem of system being patched
+    patch-src   - maintenance release patch path
+                  e.g., patches/maintenance-releases/11.2-lucid-x86
+
+        patches/
+            maintenance-releases/ 
+                11.2-lucid-x86/
+                    common/
+                        changelog.tmpl
+                        conf
+                        overlay/
+                        debs/
+                    drupal6/
+                        changelog
+                        conf
+                        overlay/
+
+    patch-dst   - appliance patch destination patch to generate
+                  e.g., builds/iso/turnkey-appname-version.patch
+
+Environment::
+
+    BT          - path of buildtasks
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+rootfs=$1
+patch_src=$2
+patch_dst=$3
+
+newname=$(basename $patch_dst | sed "s/.patch//")
+appname=$(echo $newname |sed 's|turnkey-\(.*\)-\(.*\)-\(.*\)-\(.*\)|\1|')
+
+[ -d $patch_dst ] && fatal "$patch_dst already exists"
+
+# copy appliance specific patch if it exists
+[ -d $patch_src/$appname ] && cp -a $patch_src/$appname $patch_dst
+
+mkdir -p $patch_dst
+mkdir -p $patch_dst/debs
+
+# auto-generate changelog if it does not exist
+if [ ! -e $patch_dst/changelog ]; then
+    cp $patch_src/common/changelog.tmpl $patch_dst/changelog
+    sed -i "s|APPNAME|$appname|" $patch_dst/changelog
+    sed -i "s|DATE|$(date -R)|" $patch_dst/changelog
+    cat $rootfs/usr/share/doc/turnkey-$appname-*/changelog >> $patch_dst/changelog
+fi
+
+# auto-generate release package if it does not exist
+if [ ! -e $patch_dst/debs/turnkey-$appname-*.deb ]; then
+    $BT/bin/generate-release-deb $patch_dst/changelog $patch_dst/debs
+fi
+
+# auto-generate version bump code in appliance conf patch
+if [ ! -e $patch_dst/conf ]; then
+    echo -e '#!/bin/bash -e\n' > $patch_dst/conf
+    chmod +x $patch_dst/conf
+fi
+cat >> $patch_dst/conf <<EOF
+
+# AUTO-GENERATED VERSION BUMP
+echo "$newname" > /etc/turnkey_version
+echo "Acquire::http::User-Agent \"TurnKey APT-HTTP/1.3 ($newname)\";" > /etc/apt/apt.conf.d/01turnkey
+EOF
+

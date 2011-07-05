@@ -1,0 +1,27 @@
+#!/bin/bash -e
+
+fatal() {
+    echo "FATAL [$(basename $0)]: $@" 1>&2
+    exit 1
+}
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs
+Prints rootfs package manifest to stdout
+
+Arguments::
+
+    rootfs      - root filesystem to query for package manifest
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+
+awk '/^Package:/ {p=$2}; /^Status:/ {s=$2 " " $3 " " $4}; /^Version:/ {v=$2; if(s=="install ok installed") { print p " " v }}' $rootfs/var/lib/dpkg/status | sort
+

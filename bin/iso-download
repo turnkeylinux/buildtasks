@@ -1,0 +1,43 @@
+#!/bin/bash -e
+
+fatal() {
+    echo "FATAL [$(basename $0)]: $@" 1>&2
+    exit 1
+}
+
+info() {
+    echo "INFO [$(basename $0)]: $@"
+}
+
+usage() {
+cat<<EOF
+Syntax: $0 appname version outdir
+Download ISO if it doesn't already exist in outdir
+
+Arguments::
+
+    appname     - appliance name (e.g., core)
+    version     - appliance version (e.g., 11.1-lucid-x86)
+    outdir      - destination directory to save ISO
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+appname=$1
+version=$2
+outdir=$3
+
+isofile=turnkey-$appname-$version.iso
+
+if [ -e $outdir/$isofile ]; then
+    info "$isofile already exists, skipping..."
+    exit 0
+fi
+
+sfproject="http://downloads.sourceforge.net/project/turnkeylinux"
+wget $sfproject/turnkey-$appname/$version/$isofile -O $outdir/$isofile
+

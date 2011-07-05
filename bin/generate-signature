@@ -1,0 +1,39 @@
+#!/bin/bash -ex
+
+fatal() {
+    echo "FATAL [$(basename $0)]: $@" 1>&2
+    exit 1
+}
+
+usage() {
+cat<<EOF
+Syntax: $0 filepath
+Generate GPG signed signature for filepath (e.g., path/to/iso)
+
+Arguments::
+
+    filepath        - path to file to be signed
+
+Environment::
+
+    BT_CONFIG       - Patch to buildtasks config directory
+    BT_RELEASE_KEY  - GPG release key ID
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+filepath=$1
+
+[ -n "$BT_RELEASE_KEY" ] || fatal "BT_RELEASE_KEY not set"
+
+if ! gpg --list-secret-keys $BT_RELEASE_KEY 2>&1 >/dev/null; then
+    gpg --import $BT_CONFIG/$BT_RELEASE_KEY.asc
+fi
+
+gpg -abs -u $BT_RELEASE_KEY --output $filepath.sig $filepath
+
