@@ -32,6 +32,7 @@ if [ -e $outdir/$isofile ]; then
     exit 0
 fi
 
+mkdir -p $outdir
 sfproject="http://downloads.sourceforge.net/project/turnkeylinux"
 wget $sfproject/turnkey-$appname/$version/$isofile -O $outdir/$isofile
 
