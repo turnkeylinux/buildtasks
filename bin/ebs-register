@@ -1,0 +1,49 @@
+#!/bin/bash -e
+# depends on ec2-api-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 snapshot_name
+Register snapshot as an ebs ami
+
+Arguments::
+
+    snapshot_name   - name of snapshot
+
+Environment::
+
+    REGION          - Amazon region ($REGION)
+    KERNEL          - Amazon kernel ID ($KERNEL)
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+[ -n "$REGION" ] || fatal "REGION not set"
+[ -n "$KERNEL" ] || fatal "KERNEL not set"
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+snapshot_name=$1
+appname=$(echo $snapshot_name |sed 's|turnkey-\(.*\)-\(.*\)-\(.*\)-\(.*\)|\1|')
+
+SNAPSHOTID=$(ec2-describe-snapshots --region $REGION |grep $snapshot_name |cut -f2)
+[ "$SNAPSHOTID" ] || fatal "could not determine snapshot id"
+[ "$(echo $SNAPSHOTID | wc -w)" == "1" ] || fatal "more than one snapshot match"
+
+info "registering snapshot ami ($snapshot_name)"
+
+ec2-register \
+    --cert $EC2_CERT --private-key $EC2_PRIVATE_KEY \
+    --region $REGION --kernel $KERNEL --architecture i386 \
+    --name "$snapshot_name" --description "http://www.turnkeylinux.org/$appname" \
+    --snapshot $SNAPSHOTID --block-device-mapping "/dev/sda2=ephemeral0"
+

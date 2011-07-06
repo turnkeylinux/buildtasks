@@ -1,0 +1,35 @@
+#!/bin/bash -e
+# depends on ec2-api-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 snapshot_name
+Publish ebs backed ami (i.e., make public)
+
+Arguments::
+
+    snapshot_name      - name of snapshot
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+snapshot_name=$1
+
+ZONE=$(ec2metadata --availability-zone)
+REGION=$(echo -n $ZONE | head -c -1)
+
+info "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+info "XXXXXXXXXXXXXX not yet implemented XXXXXXXXXXXXXX"
+info "XXXXXXXXXXXXXX    see s3-publish   XXXXXXXXXXXXXX"
+info "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+#info "setting ebs ami visibility to public"
+#ec2-modify-image-attribute --region=$REGION $amiid --launch-permission -a all
