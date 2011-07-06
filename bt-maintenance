@@ -1,9 +1,7 @@
 #!/bin/bash -e
 
-fatal() {
-    echo "FATAL [$(basename $0)]: $@" 1>&2
-    exit 1
-}
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
@@ -36,13 +34,10 @@ fi
 
 [ -n "$BT_DEBUG" ] && set -x
 
-BT=$(dirname `pwd`/$(basename $0))
-BT_CONFIG=$BT/config
+export BT=$(dirname `pwd`/$(basename $0))
+export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
-
-export BT=$BT
-export BT_CONFIG=$BT_CONFIG
 
 O=$BT_BUILDS/iso
 mkdir -p $O
