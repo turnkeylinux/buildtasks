@@ -1,0 +1,18 @@
+#!/bin/bash -e
+
+. /etc/default/inithooks
+[ -e $INITHOOKS_CONF ] && . $INITHOOKS_CONF
+
+[ -z $RESTORE_BACKUPID ] && exit 0
+
+mkdir -p /etc/rc.local.d
+RESTORE_SCRIPT=/etc/rc.local.d/50tklbam-restore
+
+cat>$RESTORE_SCRIPT<<EOF
+#!/bin/bash
+hubclient-status tklbam-restore
+tklbam-restore --noninteractive $RESTORE_BACKUPID
+rm -f \$0
+EOF
+
+chmod +x $RESTORE_SCRIPT

@@ -1,0 +1,19 @@
+#!/bin/sh -ex
+
+# remove packages we don't need (eg. generic kernel)
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+
+# fix grub
+sed -i 's|root=/dev/hda1|root=/dev/sda1|' /boot/grub/menu.lst
+sed -i 's| console=hvc0| xencons=hvc0 console=hvc0|' /boot/grub/menu.lst
+update-grub-legacy-ec2
+
+# disable confconsole init script
+update-rc.d -f confconsole disable
+
+# disable sshd dns checks (if resolution fails will prevent logins)
+echo "UseDNS no" >> /etc/ssh/sshd_config
+
+# create symlink to ec2metadata
+ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
+
