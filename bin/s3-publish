@@ -1,0 +1,49 @@
+#!/bin/bash -e
+# depends on ec2-api-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 ami_name
+Publish s3 backed ami (i.e., set for devpay and make public)
+
+Arguments::
+
+    ami_name    - name of ami
+
+Environment::
+
+    REGION          - Amazon region ($REGION)
+    AWS_USERID      - Amazon userid without dashes ($AWS_USERID)
+    AWS_PRODUCTCODE - Devpay product code ($AWS_PRODUCTCODE)
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)"
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)"
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+[ -n "$REGION" ] || fatal "REGION not set"
+[ -n "$AWS_USERID" ] || fatal "AWS_USERID not set"
+[ -n "$AWS_PRODUCTCODE" ] || fatal "AWS_PRODUCTCODE not set"
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+ami_name=$1
+
+info "determining ami id ($ami_name)"
+ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID | grep private | grep $AWS_USERID/$(echo $ami_name | sed |.ami||)$'\t' | cut -f 2)
+[ "$ami_id" ] || fatal "could not determine ami id"
+[ "$(echo $ami_id | wc -w)" == "1" ] || fatal "more than one ami id match"
+
+info "assigning productcode ($AWS_PRODUCTCODE) to ($ami_name $ami_id)"
+ec2-modify-image-attribute --region=$REGION $ami_id --product-code $AWS_PRODUCTCODE
+
+info "setting ami visibility to public ($ami_name $ami_id)"
+ec2-modify-image-attribute --region=$REGION $ami_id --launch-permission -a all
+

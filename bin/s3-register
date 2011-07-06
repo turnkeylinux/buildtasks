@@ -1,0 +1,58 @@
+#!/bin/bash -e
+# depends on ec2-ami-tools, ec2-api-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 ami_manifest
+Upload and register AMI
+
+Arguments::
+
+    ami_manifest    - name of the ami to create
+
+Environment::
+
+    REGION          - Amazon region ($REGION)
+    BUCKET          - Bucket for AMI storage ($BUCKET)
+    LOCATION        - Amazon stupid region location ($LOCATION)
+    AWS_ACCESSKEY   - Amazon s3 access key ($AWS_ACCESSKEY)
+    AWS_SECRETKEY   - Amazon s3 secret key ($AWS_SECRETKEY)
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+[ -n "$REGION" ] || fatal "REGION not set"
+[ -n "$BUCKET" ] || fatal "BUCKET not set"
+[ -n "$LOCATION" ] || fatal "LOCATION not set"
+[ -n "$AWS_ACCESSKEY" ] || fatal "AWS_ACCESSKEY not set"
+[ -n "$AWS_SECRETKEY" ] || fatal "AWS_SECRETKEY not set"
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+ami_manifest=$1
+[ -f "$ami_manifest" ] || fatal "ami_manifest_path does not exist"
+
+name=$(echo $ami_manifest | sed 's|.ami.manifest.xml||' )
+[ -n "$name" ] || fatal "could not determine appliance description"
+
+appname=$(echo $name | sed 's|turnkey-\(.*\)-\(.*\)-\(.*\)-\(.*\)|\1|')
+[ -n "$appname" ] || fatal "could not determine appliance appname"
+
+info "uploading bundled ami ($BUCKET/$ami_manifest)"
+ec2-upload-bundle --batch --retry \
+    --access-key $AWS_ACCESSKEY --secret-key $AWS_SECRETKEY \
+    --bucket $BUCKET --manifest $ami_manifest --location $LOCATION
+
+info "registering ami ($BUCKET/$ami_manifest)"
+ec2-register --region=$REGION $BUCKET/$ami_manifest \
+    --name $name --description "http://www.turnkeylinux.org/$appname"
+
