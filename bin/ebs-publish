@@ -13,6 +13,12 @@ Arguments::
 
     snapshot_name      - name of snapshot
 
+Environment::
+
+    REGION          - Amazon region ($REGION)
+    AWS_USERID      - Amazon userid without dashes ($AWS_USERID)
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)"
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)"
 EOF
 exit 1
 }
@@ -21,15 +27,18 @@ if [[ "$#" != "1" ]]; then
     usage
 fi
 
+[ -n "$REGION" ] || fatal "REGION not set"
+[ -n "$AWS_USERID" ] || fatal "AWS_USERID not set"
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
 snapshot_name=$1
 
-ZONE=$(ec2metadata --availability-zone)
-REGION=$(echo -n $ZONE | head -c -1)
+info "determining ami id ($snapshot_name)"
+ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID | grep private | grep $AWS_USERID/$snapshot_name$'\t' | cut -f 2)
+[ "$ami_id" ] || fatal "could not determine ami id"
+[ "$(echo $ami_id | wc -w)" == "1" ] || fatal "more than one ami id match"
 
-info "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-info "XXXXXXXXXXXXXX not yet implemented XXXXXXXXXXXXXX"
-info "XXXXXXXXXXXXXX    see s3-publish   XXXXXXXXXXXXXX"
-info "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+info "setting ami visibility to public ($snapshot_name $ami_id)"
+ec2-modify-image-attribute --region=$REGION $ami_id --launch-permission -a all
 
-#info "setting ebs ami visibility to public"
-#ec2-modify-image-attribute --region=$REGION $amiid --launch-permission -a all
