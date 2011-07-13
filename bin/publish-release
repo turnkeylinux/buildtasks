@@ -11,7 +11,7 @@ Publish files to PUBLISH_DEST while setting up release directory structure
 Arguments::
 
     file            - similar to turnkey-appname-version[-foo].bar
-    release dir     - turnkey-appname/version/file
+                    - release dir -> turnkey-appname/version/file
 
 Environment::
 
@@ -49,7 +49,7 @@ done
 set +e
 cd $tmpdir
 while true; do
-    rsync -Pav ./ $PUBLISH_DEST && break
+    rsync -rlDPOv ./ $PUBLISH_DEST && break
 
     echo "autoresume rsync: sleeping for 5 seconds"
     sleep 5
