@@ -1,14 +1,12 @@
 #!/usr/bin/python
 # 
 # Copyright (c) 2010 Liraz Siri <liraz@turnkeylinux.org>
-# 
-# This file is part of TKLBAM (TurnKey Linux BAckup and Migration).
-# 
-# TKLBAM is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as
-# published by the Free Software Foundation; either version 3 of
-# the License, or (at your option) any later version.
-# 
+#
+# This file is (was) part of TKLBAM (TurnKey Linux Backup and Migration).
+#
+# It's been modified to accept rootfs as input in addition to iso, and
+# leverages the installed TKLBAM code at /usr/lib/tklbam
+#
 """
 Make profile archive
 
@@ -29,6 +27,7 @@ import re
 from StringIO import StringIO
 import executil
 
+sys.path.append("/usr/lib/tklbam")
 from temp import TempDir, TempFile
 from backup import ProfilePaths
 import dirindex
@@ -40,7 +39,7 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Syntax: %s path/to/appliance.iso output/dir" % sys.argv[0]
+    print >> sys.stderr, "Syntax: %s path/to/iso|rootfs output/dir" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
@@ -187,14 +186,18 @@ def main():
     if not profiles_conf:
         fatal("need a profiles conf dir")
 
-    iso_path, output_dir = args
+    input_path, output_dir = args
 
     if not isdir(output_dir):
         fatal("'%s' is not a directory" % output_dir)
 
-    mount = MountISO(iso_path)
+    if isdir(input_path):
+        rootfs_path = input_path
+    else:
+        mount = MountISO(input_path)
+        rootfs_path = mount.rootfs
 
-    profile = Profile(mount.rootfs, profiles_conf)
+    profile = Profile(rootfs_path, profiles_conf)
     profile.write(output_dir)
 
 if __name__=="__main__":
