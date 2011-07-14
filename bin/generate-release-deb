@@ -24,7 +24,9 @@ import getopt
 import re
 from string import Template
 
+sys.path.append("/usr/lib/tklbam")
 from temp import TempDir
+
 from executil import system
 
 CONTROL_TPL = """\
