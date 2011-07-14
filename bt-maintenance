@@ -16,6 +16,9 @@ Environment::
     BT_PUBLISH          - if set, iso and meta files will be published
     BT_PUBLISH_IMGS     - rsync destination for release image
     BT_PUBLISH_META     - rsync destination for release meta files
+    BT_PUBLISH_PROFILES - rsync destination for release tklbam profile
+
+    BT_PROFILES         - path containing tklbam profile conf files
 
     BT_DEBUG            - turn on debugging
 
@@ -47,9 +50,13 @@ appname=$1
 [ -n "$BT_CUR_VERSION" ] || fatal "BT_CUR_VERSION not set"
 [ -n "$BT_NEW_VERSION" ] || fatal "BT_NEW_VERSION not set"
 
+[ -n "$BT_PROFILES" ] || fatal "BT_PROFILES not set"
+export PROFILES_CONF=$BT_PROFILES
+
 if [ -n "$BT_PUBLISH" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
 fi
 
 isofile=turnkey-$appname-$BT_CUR_VERSION.iso
@@ -79,10 +86,13 @@ tklpatch-apply $rootfs $maintenance_app_patch
 $BT/bin/generate-manifest $rootfs > $O/$newname.manifest
 cp $maintenance_app_patch/changelog $O/$newname.changelog
 
+mkdir -p $O/$newname.tklbam
+$BT/bin/generate-tklbam-profile $rootfs $O/$newname.tklbam
+
 tklpatch-prepare-cdroot $rootfs $cdroot
 TKLPATCH_ISOLABEL=$appname tklpatch-geniso $cdroot $O/$newname.iso
 
-$BT/bin/generate-signature $O/$newname.iso 
+$BT/bin/generate-signature $O/$newname.iso
 
 # hardlink iso and sig to isos (followup builds)
 ln $O/$newname.iso $BT_ISOS/
@@ -95,6 +105,9 @@ if [ -n "$BT_PUBLISH" ]; then
 
     export PUBLISH_DEST=$BT_PUBLISH_META
     $BT/bin/publish-release $O/$newname.{changelog,manifest,iso.sig}
+
+    export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+    $BT/bin/publish-files $O/$newname.tklbam/*.tar.gz
 fi
 
 # cleanup unless BT_DEBUG
@@ -102,7 +115,4 @@ if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
 fi
-
-#todo: generate tklbam-profile
-#todo: publish tklbam profile to iota
 
