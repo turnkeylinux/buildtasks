@@ -71,6 +71,8 @@ maintenance_patch=$BT/patches/maintenance-releases/$BT_NEW_VERSION
 maintenance_app_patch=$O/$newname.patch
 [ -d $maintenance_app_patch ] && fatal "$maintenance_app_patch already exists"
 
+[ -e "$BT_PROFILES/$appname" ] || fatal "$BT_PROFILES/$appname does not exist"
+
 $BT/bin/iso-download $appname $BT_CUR_VERSION $BT_ISOS
 $BT/bin/iso-verify $appname $BT_CUR_VERSION $BT_ISOS
 
