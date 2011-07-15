@@ -1,0 +1,70 @@
+Usage (from backup)
+===================
+
+export HUB_APIKEY=.... # smp
+hub-launch BACKUP_ID --region=us-east-1 --label=BT_USEAST --fqdn=$FQDN
+
+ssh root@$FQDN
+
+cd /root/buildtasks
+sed -i "/BT_PUBLISH=y/ s/#//" config/build.cfg
+
+bt-maintenance core
+bt-s3 core
+bt-ebs core
+...
+
+Setting up buildtasks server / backup on EC2 (from scratch)
+===========================================================
+
+FQDN=bt-us-east.tklapp.com
+
+export HUB_APIKEY=.... # smp
+hub-launch core --region=us-east-1 --label=BT_USEAST --fqdn=$FQDN
+
+ssh root@$FQDN
+
+/etc/init.d/shellinabox stop
+/etc/init.d/webmin stop
+
+sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -y install tklpatch bzip2 curl qemu parted kpartx zip openjdk-6-jre-headless
+apt-get -y install ec2-api-tools ec2-ami-tools
+
+# workaround weird kpartx bug
+modprobe dm-mod
+
+BT_HOOK=/etc/tklbam/hooks.d/buildtasks
+cat >$BT_HOOK<EOF
+#!/bin/bash -e
+# hooks are always called with two arguments
+op=$1       # backup / restore
+state=$2    # pre / post
+
+if [ "$op" == "restore" ] && [ "$state" == "post" ]; then
+    sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get -y install ec2-api-tools ec2-ami-tools
+
+    /etc/init.d/shellinabox stop || true
+    /etc/init.d/webmin stop || true
+fi
+EOF
+chmod +x $BT_HOOK
+
+cd public
+rsync -avP --no-owner --no-group --progress \
+    --exclude=.git* --exclude-from=tklbam-profiles/.gitignore \
+    -e ssh tklbam-profiles root@$FQDN:/root/
+
+cd private
+rsync -avP --no-owner --no-group --progress \
+    --exclude=.git* \
+    -e ssh buildtasks root@$FQDN:/root/
+
+tklbam-backup
+
