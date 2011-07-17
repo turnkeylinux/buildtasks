@@ -46,7 +46,7 @@ mkdir $rootfs.img.mount
 mount -o loop $rootfs.img $rootfs.img.mount
 
 info "syncing rootfs to loopback"
-rsync -a -t -r -S -I -H --progress $rootfs/ $rootfs.img.mount
+rsync -a -t -r -S -I -H $rootfs/ $rootfs.img.mount
 
 info "umount loopback"
 umount -d $rootfs.img.mount
