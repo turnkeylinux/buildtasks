@@ -1,0 +1,57 @@
+#!/bin/bash -e
+# depends on ec2-api-tools/ec2-ami-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 ami_name
+Delete s3 backed ami (i.e., deregister and removed bundle from s3)
+
+Arguments::
+
+    ami_name    - name of ami (e.g., turnkey-core-11.2-lucid-x86)
+
+Environment::
+
+    REGION          - Amazon region ($REGION)
+    AWS_USERID      - Amazon userid without dashes ($AWS_USERID)
+    AWS_ACCESSKEY   - Amazon access key ($AWS_ACCESSKEY)
+    AWS_SECRETKEY   - Amazon secret key ($AWS_SECRETKEY)
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+[ -n "$REGION" ] || fatal "REGION not set"
+[ -n "$AWS_USERID" ] || fatal "AWS_USERID not set"
+[ -n "$AWS_ACCESSKEY" ] || fatal "AWS_ACCESSKEY not set"
+[ -n "$AWS_SECRETKEY" ] || fatal "AWS_SECRETKEY not set"
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+[ "$REGION" == "us-east-1" ] && BUCKET=$USEAST_BUCKET
+[ "$REGION" == "us-west-1" ] && BUCKET=$USWEST_BUCKET
+[ "$REGION" == "eu-west-1" ] && BUCKET=$EUWEST_BUCKET
+[ "$REGION" == "ap-southeast-1" ] && BUCKET=$APSOUTHEAST_BUCKET
+[ -n "$BUCKET" ] || fatal "could not determine bucket"
+
+ami_name=$1
+
+info "determining ami id ($ami_name)"
+ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID | grep $AWS_USERID/$ami_name$'\t' | cut -f 2)
+[ "$ami_id" ] || fatal "could not determine ami id"
+[ "$(echo $ami_id | wc -w)" == "1" ] || fatal "more than one ami id match"
+
+info "deregistering ami ($ami_id)"
+ec2-deregister --region=$REGION $ami_id
+
+info "deleting bundle from s3 bucket"
+ec2-delete-bundle -b $BUCKET -a $AWS_ACCESSKEY -s $AWS_SECRETKEY -p $ami_name.ami -y
+
