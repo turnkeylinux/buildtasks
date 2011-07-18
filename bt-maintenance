@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -71,7 +72,9 @@ maintenance_patch=$BT/patches/maintenance-releases/$BT_NEW_VERSION
 maintenance_app_patch=$O/$newname.patch
 [ -d $maintenance_app_patch ] && fatal "$maintenance_app_patch already exists"
 
-[ -e "$BT_PROFILES/$appname" ] || fatal "$BT_PROFILES/$appname does not exist"
+if [ ! -e "$BT_PROFILES/$appname" ]; then
+    warning "$BT_PROFILES/$appname does not exist, skipping profile generation"
+fi
 
 $BT/bin/iso-download $appname $BT_CUR_VERSION $BT_ISOS
 $BT/bin/iso-verify $appname $BT_CUR_VERSION $BT_ISOS
@@ -88,8 +91,10 @@ tklpatch-apply $rootfs $maintenance_app_patch
 $BT/bin/generate-manifest $rootfs > $O/$newname.manifest
 cp $maintenance_app_patch/changelog $O/$newname.changelog
 
-mkdir -p $O/$newname.tklbam
-$BT/bin/generate-tklbam-profile $rootfs $O/$newname.tklbam
+if [ -e "$BT_PROFILES/$appname" ]; then
+    mkdir -p $O/$newname.tklbam
+    $BT/bin/generate-tklbam-profile $rootfs $O/$newname.tklbam
+fi
 
 tklpatch-prepare-cdroot $rootfs $cdroot
 TKLPATCH_ISOLABEL=$appname tklpatch-geniso $cdroot $O/$newname.iso
@@ -108,8 +113,10 @@ if [ -n "$BT_PUBLISH" ]; then
     export PUBLISH_DEST=$BT_PUBLISH_META
     $BT/bin/publish-release $O/$newname.{changelog,manifest,iso.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_PROFILES
-    $BT/bin/publish-files $O/$newname.tklbam/*.tar.gz
+    if [ -e "$BT_PROFILES/$appname" ]; then
+        export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+        $BT/bin/publish-files $O/$newname.tklbam/*.tar.gz
+    fi
 fi
 
 # cleanup unless BT_DEBUG
