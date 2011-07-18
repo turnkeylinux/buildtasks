@@ -1,0 +1,35 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) task appliance.list
+Batch processing (used pre-cloudtasks)
+
+Arguments:
+    task                - build task to execute (e.g. bt-maintenance)
+    appliance.list      - path to file containing appliance names
+                          one appliance name per line
+                          lines starting with # are ignored
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "2" ]]; then
+    usage
+fi
+
+task=$1
+list=$2
+
+[ -x "$task" ] || fatal "$task does not exist or not executable"
+[ -e "$list" ] || fatal "$list does not exist"
+
+for appname in $(cat $list | grep -v "^#"); do
+    info "STARTING: $task $appname"
+    ./$task $appname
+    info "FINISHED: $task $appname"
+done
