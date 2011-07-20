@@ -1,0 +1,227 @@
+#!/bin/bash -e
+# depends: qemu grub2 parted kpartx zip ovftool
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs
+Bundles rootfs into VM optimized builds (vmdk and ovf)
+
+Arguments::
+
+    rootfs          - root filesystem path
+
+Environment::
+
+    VM_URL        - Product URL ($VM_URL)
+    VM_MEMORY     - Amount of memory - integer ($VM_MEMORY)
+    VM_FULLNAME   - Display name of image ($VM_FULLNAME)
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+name=$(echo $rootfs | sed 's/.rootfs//')
+
+[ -n "$VM_URL" ] || fatal "VM_URL not set"
+[ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
+[ -n "$VM_FULLNAME" ] || fatal "VM_FULLNAME not set"
+
+# image size consts.
+VM_SIZE="20GB"
+VM_PARTED_BOOT="0 512"      #  0.5GB
+VM_PARTED_LVM="513 20000"   # 19.5GB (free: 2GB)
+VM_PARTED_LVM_ROOT="17GB"
+VM_PARTED_LVM_SWAP="512MB"
+
+#VM_SIZE="1GB"
+#VM_PARTED_BOOT="0 50"       #  50MB
+#VM_PARTED_LVM="51 1000"     # 950MB (free: 100MB)
+#VM_PARTED_LVM_ROOT="800MB"
+#VM_PARTED_LVM_SWAP="50MB"
+
+# workaround weird kpartx bug
+modprobe dm-mod
+
+VG=turnkey
+[ -e /dev/$VG ] && VG=turnkeyvm
+[ -e /dev/$VG ] && fatal "VG exists: $VG"
+info "using volume group: $VG"
+
+info "creating raw image ($VM_SIZE sparse) and partitions"
+qemu-img create -f raw $rootfs.raw $VM_SIZE
+parted --script $rootfs.raw mklabel msdos
+parted --script -- $rootfs.raw mkpart primary $VM_PARTED_BOOT
+parted --script -- $rootfs.raw mkpart primary $VM_PARTED_LVM
+parted --script -- $rootfs.raw set 1 boot on
+parted --script -- $rootfs.raw set 2 LVM on
+
+info "setting up loop device and LVM"
+loopdev=$(losetup --show -f $rootfs.raw)
+kpartx -a $loopdev
+
+pvcreate /dev/mapper/$(basename $loopdev)p2
+vgcreate $VG /dev/mapper/$(basename $loopdev)p2
+lvcreate -L $VM_PARTED_LVM_ROOT -n root $VG
+lvcreate -L $VM_PARTED_LVM_SWAP -n swap_1 $VG
+vgscan
+vgchange -a y
+
+info "creating filesystems (boot, root, swap)"
+mkfs.ext2 /dev/mapper/$(basename $loopdev)p1
+mkfs.ext4 /dev/mapper/$VG-root
+mkswap /dev/mapper/$VG-swap_1
+
+info "mounting raw root partition and syncing rootfs, removing boot/*"
+mkdir $rootfs.root
+mount /dev/mapper/$VG-root $rootfs.root
+rsync -a -t -r -S -I -H $rootfs/ $rootfs.root
+rm -rf $rootfs.root/boot/*
+umount $rootfs.root
+rmdir $rootfs.root
+
+info "mounting boot partition, syncing boot/* from rootfs"
+mkdir $rootfs.boot
+mount /dev/mapper/$(basename $loopdev)p1 $rootfs.boot
+rsync -a -t -r -S -I -H $rootfs/boot/ $rootfs.boot
+umount $rootfs.boot
+rmdir $rootfs.boot
+
+info "creating rootfs.fs (root and boot)"
+looproot=$(losetup --show -f /dev/mapper/$VG-root)
+loopboot=$(losetup --show -f /dev/mapper/`basename $loopdev`p1)
+mkdir $rootfs.fs
+mount $looproot $rootfs.fs
+mount $loopboot $rootfs.fs/boot
+
+info "installing and configuring grub"
+grubcfg=$rootfs.fs/boot/grub/grub.cfg
+devicemap=$rootfs.fs/boot/grub/device.map
+
+mount -o bind /dev $rootfs.fs/dev
+mount -o bind /proc $rootfs.fs/proc
+
+cat > $devicemap <<EOF
+(hd0)   $loopdev
+(hd0,1) $loopboot
+EOF
+
+chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
+grub-install --force --grub-mkdevicemap=$devicemap --root-directory=$rootfs.fs $loopdev
+
+info "tweaking grub settings"
+UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
+cat > $devicemap <<EOF
+(sd0)   /dev/sda
+(sd0)   UUID=$UUID
+EOF
+
+sed -i "s|root='(hd0,1)'|root=(sd0,1)|g" $grubcfg
+sed -i "/loopback/d" $grubcfg
+sed -i "/set root=(loop/d" $grubcfg
+
+info "creating fstab"
+fstab="$rootfs.fs/etc/fstab"
+echo -e "proc\t\t\t/proc\tproc\tnodev,noexec,nosuid\t0\t0" > $fstab
+echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" >> $fstab
+echo -e "UUID=$UUID\t/boot\text2\tdefaults\t0\t2" >> $fstab
+echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
+
+info "umounting the jumble..."
+umount $rootfs.fs/proc
+umount $rootfs.fs/dev
+umount $rootfs.fs/boot
+umount $rootfs.fs/
+losetup -d $loopboot
+losetup -d $looproot
+rmdir $rootfs.fs
+
+info "converting raw image to vmdk"
+qemu-img convert -f raw $rootfs.raw -O vmdk -6 $name.vmdk
+
+info "cleaning up"
+lvremove -f /dev/$VG/root
+lvremove -f /dev/$VG/swap_1
+vgremove -f /dev/$VG
+vgscan
+vgchange -a y
+rm -f /etc/lvm/backup/$VG
+kpartx -d $loopdev
+losetup -d $loopdev
+
+info "creating vmx"
+cat > $name.vmx<<EOF 
+#!/usr/bin/vmware
+config.version = "8"
+virtualHW.version = "7"
+memsize = "$VM_MEMORY"
+Ethernet0.present = "TRUE"
+Ethernet0.connectionType = "bridged"
+displayName = "$VM_FULLNAME"
+annotation = "$VM_URL"
+guestinfo.vmware.product.long = "$VM_FULLNAME"
+guestinfo.vmware.product.url = "$VM_URL"
+guestinfo.vmware.product.class = "virtual machine"
+guestOS = "ubuntu"
+priority.grabbed = "normal"
+priority.ungrabbed = "normal"
+usb.present = "TRUE"
+tools.syncTime = "TRUE"
+usb.generic.autoconnect = "TRUE"
+powerType.powerOff = "hard"
+powerType.powerOn = "hard"
+powerType.suspend = "hard"
+powerType.reset = "hard"
+floppy0.present = "FALSE"
+scsi0.present = "TRUE"
+scsi0.virtualDev = "lsilogic"
+scsi0:0.deviceType = "disk"
+scsi0:0.present = "TRUE"
+scsi0:0.fileName = "$name.vmdk"
+scsi0:0.mode = "persistent"
+scsi0:0.startConnected = "TRUE"
+scsi0:0.writeThrough = "TRUE"
+ide1:0.present = "TRUE"
+ide1:0.deviceType = "cdrom-raw"
+ide1:0.startConnected = "TRUE"
+ide1:0.fileName = "auto detect"
+ide1:0.autodetect = "TRUE"
+EOF
+
+info "setting up image directory"
+mkdir $name
+mv $name.vmx $name.vmdk $name/
+
+cat > $name/README.txt <<EOF
+For virtualization specific documentation, please refer to:
+http://www.turnkeylinux.org/docs/virtualization
+EOF
+
+chown -R root:root $name
+chmod 600 $name/*
+chmod 644 $name/$name.vmx
+
+info "generating vmdk zip"
+zip -r -T $name-vmdk.zip $name
+
+info "creating ovf and generate zip"
+cd $name
+    ovftool $name.vmx $name.ovf
+    mkdir tmp
+    mv *.txt *.mf *.ovf *-disk1.vmdk tmp
+    rm *.vmdk *.vmx
+    mv tmp/* ./
+    rmdir tmp
+cd ../
+zip -r -T $name-ovf.zip $name
+
+info "performing final cleanup"
+rm -rf $name
+rm -f $rootfs.raw
+

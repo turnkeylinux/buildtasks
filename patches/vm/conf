@@ -1,0 +1,10 @@
+#!/bin/sh -ex
+
+# configure sshd to permit empty passwords
+sed -i 's/^PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
+
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+
+# disable udev persistent net generation
+echo -n > /etc/udev/rules.d/70-persistent-net.rules
+echo -n > /lib/udev/rules.d/75-persistent-net-generator.rules

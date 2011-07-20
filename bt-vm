@@ -1,0 +1,86 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) appname
+Converts appliance appname (e.g., core) to vmdk and ovf
+
+Environment::
+
+    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
+    BT_PUBLISH          - if set, image will be devpay'ed and made public
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname `pwd`/$(basename $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/build.cfg
+
+O=$BT_BUILDS/vm
+mkdir -p $O
+
+appname=$1
+
+[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+
+export VM_URL="http://www.turnkeylinux.org/$appname"
+export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
+
+case "$appname" in
+    appengine)        export VM_MEMORY=384 ;;
+    moodle)           export VM_MEMORY=384 ;;
+    openbravo)        export VM_MEMORY=384 ;;
+    tomcat-apache)    export VM_MEMORY=384 ;;
+    zimbra)           export VM_MEMORY=640 ;;
+    *)                export VM_MEMORY=256 ;;
+esac
+
+isofile=turnkey-$appname-$BT_VERSION.iso
+name=turnkey-$appname-$BT_VERSION
+rootfs=$name.rootfs
+cdroot=$name.cdroot
+
+$BT/bin/iso-download $appname $BT_VERSION $BT_ISOS
+$BT/bin/iso-verify $appname $BT_VERSION $BT_ISOS
+
+cd $O
+tklpatch-extract-iso $BT_ISOS/$isofile
+
+tklpatch-apply $rootfs $BT/patches/vm
+
+$BT/bin/aptconf-tag $rootfs vm
+
+$BT/bin/vm-bundle $rootfs
+
+$BT/bin/generate-signature $O/$name-vmdk.zip
+$BT/bin/generate-signature $O/$name-ovf.zip
+
+# only publish if specifically set
+if [ -n "$BT_PUBLISH" ]; then
+    export PUBLISH_DEST=$BT_PUBLISH_IMGS
+    $BT/bin/publish-release $O/$name-vmdk.zip
+    $BT/bin/publish-release $O/$name-ovf.zip
+
+    export PUBLISH_DEST=$BT_PUBLISH_META
+    $BT/bin/publish-release $O/$new-vmdk.zip.sig
+    $BT/bin/publish-release $O/$new-ovf.zip.sig
+fi
+
+if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    rm -rf $rootfs
+    rm -rf $cdroot
+fi
+
