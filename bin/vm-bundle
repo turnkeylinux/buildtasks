@@ -212,12 +212,8 @@ zip -r -T $name-vmdk.zip $name
 
 info "creating ovf and generate zip"
 cd $name
-    ovftool $name.vmx $name.ovf
-    mkdir tmp
-    mv *.txt *.mf *.ovf *-disk1.vmdk tmp
-    rm *.vmdk *.vmx
-    mv tmp/* ./
-    rmdir tmp
+ovftool $name.vmx $name.ovf
+rm $name.vmx $name.vmdk
 cd ../
 zip -r -T $name-ovf.zip $name
 
