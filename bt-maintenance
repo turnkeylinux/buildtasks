@@ -76,8 +76,8 @@ if [ ! -e "$BT_PROFILES/$appname" ]; then
     warning "$BT_PROFILES/$appname does not exist, skipping profile generation"
 fi
 
-$BT/bin/iso-download $appname $BT_CUR_VERSION $BT_ISOS
-$BT/bin/iso-verify $appname $BT_CUR_VERSION $BT_ISOS
+$BT/bin/iso-download $BT_ISOS $BT_CUR_VERSION $appname
+$BT/bin/iso-verify $BT_ISOS $BT_CUR_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile

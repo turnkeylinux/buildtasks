@@ -5,14 +5,14 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $0 appname version isodir
+Syntax: $0 isodir version appname
 Verify ISO by getting .sig and verifying (skipped if .sig exists)
 
 Arguments::
 
-    appname     - appliance name (e.g., core)
-    version     - appliance version (e.g., 11.1-lucid-x86)
     isodir      - directory containing ISO
+    version     - appliance version (e.g., 11.1-lucid-x86)
+    appname     - appliance name (e.g., core)
 
 Environment::
 
@@ -25,9 +25,9 @@ if [[ "$#" != "3" ]]; then
     usage
 fi
 
-appname=$1
+isodir=$1
 version=$2
-isodir=$3
+appname=$3
 
 isofile=turnkey-$appname-$version.iso
 sigfile=turnkey-$appname-$version.iso.sig

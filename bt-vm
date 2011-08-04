@@ -53,8 +53,8 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
-$BT/bin/iso-download $appname $BT_VERSION $BT_ISOS
-$BT/bin/iso-verify $appname $BT_VERSION $BT_ISOS
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
@@ -75,8 +75,8 @@ if [ -n "$BT_PUBLISH" ]; then
     $BT/bin/publish-release $O/$name-ovf.zip
 
     export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$new-vmdk.zip.sig
-    $BT/bin/publish-release $O/$new-ovf.zip.sig
+    $BT/bin/publish-release $O/$name-vmdk.zip.sig
+    $BT/bin/publish-release $O/$name-ovf.zip.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
