@@ -1,19 +1,26 @@
 #!/usr/bin/python
 # 
-# Copyright (c) 2010 Liraz Siri <liraz@turnkeylinux.org>
-#
-# This file is (was) part of TKLBAM (TurnKey Linux Backup and Migration).
-#
-# It's been modified to accept rootfs as input in addition to iso, and
-# leverages the installed TKLBAM code at /usr/lib/tklbam
-#
+# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# 
+# This file is part of TKLBAM (TurnKey Linux BAckup and Migration).
+# 
+# TKLBAM is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation; either version 3 of
+# the License, or (at your option) any later version.
+# 
 """
 Make profile archive
 
 Options:
     
     --profiles-conf=PATH    Dir containing profile conf files
-                            Environment: PROFILES_CONF
+                            Default: PROFILES_CONF from environment
+
+Enviroment variables:
+
+    PROFILES_CONF           See above
+    TKLBAM_LIB_PATH         Defaults to /usr/lib/tklbam
 
 """
 import os
@@ -27,10 +34,18 @@ import re
 from StringIO import StringIO
 import executil
 
-sys.path.append("/usr/lib/tklbam")
-from temp import TempDir, TempFile
-from backup import ProfilePaths
-import dirindex
+TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH', 
+                                 '/usr/lib/tklbam')
+sys.path.insert(0, TKLBAM_LIB_PATH)
+
+try:
+    from temp import TempDir, TempFile
+    from backup import ProfilePaths
+    import dirindex
+except ImportError, e:
+    print >> sys.stderr, \
+            "Can't find TKLBAM modules in TKLBAM_LIB_PATH=%s\n" % TKLBAM_LIB_PATH
+    raise
 
 class Error(Exception):
     pass
@@ -39,7 +54,7 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Syntax: %s path/to/iso|rootfs output/dir" % sys.argv[0]
+    print >> sys.stderr, "Syntax: %s path/to/rootfs|appliance.iso output/dir" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
@@ -49,18 +64,24 @@ def fatal(e):
 
 class MountISO:
     def __init__(self, iso):
+        self.cdroot = None
+        self.rootfs = None
+
         cdroot = TempDir()
         rootfs = TempDir()
 
         executil.system("mount -o loop", iso, cdroot)
-        executil.system("mount -o loop", join(cdroot, "casper/10root.squashfs"), rootfs)
-
         self.cdroot = cdroot
+
+        executil.system("mount -o loop", join(cdroot, "casper/10root.squashfs"), rootfs)
         self.rootfs = rootfs
 
     def __del__(self):
-        executil.system("umount", self.rootfs)
-        executil.system("umount", self.cdroot)
+        if self.rootfs:
+            executil.system("umount", self.rootfs)
+
+        if self.cdroot:
+            executil.system("umount", self.cdroot)
 
 class Profile:
 
@@ -162,6 +183,7 @@ class Profile:
         executil.system("tar -C %s -zcf %s ." % (self.paths.path, path_archive))
 
 def main():
+
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], 'h', 
                                        ['profiles-conf=', 'help'])
@@ -186,18 +208,16 @@ def main():
     if not profiles_conf:
         fatal("need a profiles conf dir")
 
-    input_path, output_dir = args
+    path, output_dir = args
 
     if not isdir(output_dir):
         fatal("'%s' is not a directory" % output_dir)
 
-    if isdir(input_path):
-        rootfs_path = input_path
-    else:
-        mount = MountISO(input_path)
-        rootfs_path = mount.rootfs
+    if not isdir(path):
+        mount = MountISO(path)
+        path = mount.rootfs
 
-    profile = Profile(rootfs_path, profiles_conf)
+    profile = Profile(path, profiles_conf)
     profile.write(output_dir)
 
 if __name__=="__main__":
