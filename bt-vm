@@ -11,7 +11,9 @@ Converts appliance appname (e.g., core) to vmdk and ovf
 Environment::
 
     BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-    BT_PUBLISH          - if set, image will be devpay'ed and made public
+    BT_PUBLISH          - if set, image and meta files will be published
+    BT_PUBLISH_IMGS     - rsync destination for release image
+    BT_PUBLISH_META     - rsync destination for release meta files
 
     BT_DEBUG            - turn on debugging
 EOF
@@ -35,6 +37,11 @@ mkdir -p $O
 appname=$1
 
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+
+if [ -n "$BT_PUBLISH" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+fi
 
 export VM_URL="http://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
