@@ -16,7 +16,7 @@ for actionfile in /etc/cron-apt/action.d/*; do
     done < $actionfile
 done
 
-if [ $(dpkg-query -W 'linux-image-2.6.*' |wc -l) > 1 ]; then
+if [[ $(dpkg-query -W 'linux-image-2.6.*' |wc -l) > 1 ]]; then
     DEBIAN_FRONTEND=noninteractive apt-get -y purge $CURRENT_KERNEL
 fi
 
