@@ -1,26 +1,38 @@
 #!/bin/bash -e
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) appname
+Syntax: $(basename $0) [--publish] appname
 Converts appliance appname (e.g., core) to ec2 s3 backed ami
+
+Options::
+
+    --publish           - if set, image will be devpay'ed and made public
 
 Environment::
 
     BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-    BT_PUBLISH          - if set, image will be devpay'ed and made public
 
     BT_DEBUG            - turn on debugging
 EOF
 exit 1
 }
 
-if [[ "$#" != "1" ]]; then
-    usage
-fi
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -60,8 +72,6 @@ esac
 O=$BT_BUILDS/s3
 mkdir -p $O
 
-appname=$1
-
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
 isofile=turnkey-$appname-$BT_VERSION.iso
@@ -82,8 +92,10 @@ $BT/bin/aptconf-tag $rootfs s3
 $BT/bin/s3-bundle $rootfs $name.ami
 $BT/bin/s3-register $name.ami.manifest.xml
 
-# only publish if specifically set
-[ -n "$BT_PUBLISH" ] && $BT/bin/s3-publish $name
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    $BT/bin/s3-publish $name
+fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs

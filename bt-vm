@@ -1,17 +1,22 @@
 #!/bin/bash -e
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) appname
+Syntax: $(basename $0) [--publish] appname
 Converts appliance appname (e.g., core) to vmdk and ovf
+
+Options::
+
+    --publish           - if set, image and meta files will be published
 
 Environment::
 
     BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-    BT_PUBLISH          - if set, image and meta files will be published
+
     BT_PUBLISH_IMGS     - rsync destination for release image
     BT_PUBLISH_META     - rsync destination for release meta files
 
@@ -20,9 +25,17 @@ EOF
 exit 1
 }
 
-if [[ "$#" != "1" ]]; then
-    usage
-fi
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -34,11 +47,9 @@ export BT_CONFIG=$BT/config
 O=$BT_BUILDS/vm
 mkdir -p $O
 
-appname=$1
-
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
-if [ -n "$BT_PUBLISH" ]; then
+if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
 fi
@@ -75,8 +86,8 @@ $BT/bin/vm-bundle $rootfs
 $BT/bin/generate-signature $O/$name-vmdk.zip
 $BT/bin/generate-signature $O/$name-ovf.zip
 
-# only publish if specifically set
-if [ -n "$BT_PUBLISH" ]; then
+# publish if specified
+if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=$BT_PUBLISH_IMGS
     $BT/bin/publish-release $O/$name-vmdk.zip
     $BT/bin/publish-release $O/$name-ovf.zip
