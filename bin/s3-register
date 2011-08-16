@@ -11,7 +11,7 @@ Upload and register AMI
 
 Arguments::
 
-    ami_manifest    - name of the ami to create
+    ami_manifest    - AMI to upload and register
 
 Environment::
 
@@ -39,13 +39,14 @@ fi
 [ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
 
 ami_manifest=$1
-[ -f "$ami_manifest" ] || fatal "ami_manifest_path does not exist"
+[ -f "$ami_manifest" ] || fatal "ami_manifest path does not exist"
 
-name=$(echo $ami_manifest | sed 's|.ami.manifest.xml||' )
-[ -n "$name" ] || fatal "could not determine appliance description"
+ami_name=$(echo $ami_manifest | sed 's|.manifest.xml||' )
+[ -n "$ami_name" ] || fatal "could not determine ami_name"
 
-appname=$(echo $name | sed 's|turnkey-\(.*\)-\(.*\)-\(.*\)-\(.*\)|\1|')
-[ -n "$appname" ] || fatal "could not determine appliance appname"
+appname=$(echo $ami_name | sed 's|turnkey-\(.*\)-\(.*\)-\(.*\)-\(.*\)|\1|')
+[ -n "$appname" ] || fatal "could not determine appname"
+
 
 info "uploading bundled ami ($BUCKET/$ami_manifest)"
 ec2-upload-bundle --batch --retry \
@@ -54,5 +55,5 @@ ec2-upload-bundle --batch --retry \
 
 info "registering ami ($BUCKET/$ami_manifest)"
 ec2-register --region=$REGION $BUCKET/$ami_manifest \
-    --name $name --description "http://www.turnkeylinux.org/$appname"
+    --name "$ami_name" --description "http://www.turnkeylinux.org/$appname"
 

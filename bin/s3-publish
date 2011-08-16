@@ -11,7 +11,7 @@ Publish s3 backed ami (i.e., set for devpay and make public)
 
 Arguments::
 
-    ami_name    - name of ami
+    ami_name        - name of ami
 
 Environment::
 
@@ -37,9 +37,8 @@ fi
 ami_name=$1
 
 info "determining ami id ($ami_name)"
-ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID | grep private | grep $AWS_USERID/$ami_name$'\t' | cut -f 2)
+ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID --filter name=$ami_name | cut -f 2 | head -n1)
 [ "$ami_id" ] || fatal "could not determine ami id"
-[ "$(echo $ami_id | wc -w)" == "1" ] || fatal "more than one ami id match"
 
 info "assigning productcode ($AWS_PRODUCTCODE) to ($ami_name $ami_id)"
 ec2-modify-image-attribute --region=$REGION $ami_id --product-code $AWS_PRODUCTCODE
