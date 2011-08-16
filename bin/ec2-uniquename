@@ -1,0 +1,134 @@
+#!/usr/bin/python
+"""
+Prints unique name (version will be incremented if needed)
+
+Environment:
+
+    REGION          - Amazon region
+    AWS_USERID      - Amazon userid without dashes
+    AWS_ACCESSKEY   - Amazon userid's access key
+    AWS_SECRETKEY   - Amazon userid's secret key
+
+    TKLBAM_DEPS     - Path to TKLBAM deps for boto library (optional)
+
+Options:
+
+    --pickle        - Use pickle to save/load image data (debugging)
+
+"""
+import os
+import sys
+import getopt
+
+import pickle
+
+def _find_pylib(path, name):
+    if not os.path.isdir(path):
+        return None
+
+    for fpath, dnames, fnames in os.walk(path):
+        if name in dnames:
+            return fpath
+
+    return None
+
+TKLBAM_DEPS = os.environ.get('TKLBAM_DEPS', '/usr/lib/tklbam/deps')
+BOTO_PYLIB = _find_pylib(TKLBAM_DEPS, 'boto')
+sys.path.insert(0, BOTO_PYLIB)
+
+from boto.ec2 import connect_to_region
+
+def usage(e=None):
+    if e:
+        print >> sys.stderr, "error: " + str(e)
+
+    print >> sys.stderr, "Syntax: %s [-opts] name" % (sys.argv[0])
+    print >> sys.stderr, __doc__
+
+    sys.exit(1)
+
+def _connect(accesskey, secretkey, region):
+    return connect_to_region(region,
+                             aws_access_key_id=accesskey,
+                             aws_secret_access_key=secretkey)
+
+def get_names(region, accesskey, secretkey, owner_id):
+    conn = _connect(accesskey, secretkey, region)
+    images = conn.get_all_images(owners=[owner_id])
+    return set(map(lambda image: image.name, images))
+
+def get_names_pickle(region, accesskey, secretkey, owner_id):
+    fname = 'names.pickle'
+
+    if os.path.exists(fname):
+        fh = file(fname, 'r')
+        names = pickle.load(fh)
+    else:
+        names = get_names(region, accesskey, secretkey, owner_id)
+        fh = file(fname, 'w')
+        pickle.dump(names, fh)
+
+    fh.close()
+    return names
+
+def get_unique_name(name, names):
+    def inc_name(name):
+        try:
+            name, version = name.split('_')
+            version = int(version) + 1
+        except ValueError:
+            version = 2
+
+        return "_".join([name, str(version)])
+  
+    while True:
+        if name in names:
+            name = inc_name(name)
+            continue
+
+        break
+
+    return name
+
+def main():
+    try:
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help", "pickle"])
+    except getopt.GetoptError, e:
+        usage(e)
+
+    get_names_func = get_names
+    for opt, val in opts:
+        if opt in ('-h', '--help'):
+            usage()
+
+        if opt in ('--pickle'):
+            get_names_func = get_names_pickle
+
+    if not len(args) == 1:
+        usage()
+
+    name = args[0]
+
+    region = os.environ.get('REGION')
+    userid = os.environ.get('AWS_USERID')
+    accesskey = os.environ.get('AWS_ACCESSKEY')
+    secretkey = os.environ.get('AWS_SECRETKEY')
+
+    if not region:
+        usage('REGION not specified')
+
+    if not userid:
+        usage('AWS_USERID not specified')
+
+    if not accesskey:
+        usage('AWS_ACCESSKEY not specified')
+
+    if not secretkey:
+        usage('AWS_SECRETKEY not specified')
+
+    names = get_names_func(region, accesskey, secretkey, userid)
+    print get_unique_name(name, names)
+
+
+if __name__ == "__main__":
+    main()
