@@ -6,7 +6,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish --gen-profile] appname
+Syntax: $(basename $0) [--publish] [--gen-profile] appname
 Perform bugfix release for appliance appname (e.g., core)
 
 Options::
