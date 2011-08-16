@@ -79,6 +79,8 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
+snapshot_name=$($BT/bin/ec2-uniquename $name.ebs)
+
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
@@ -89,12 +91,12 @@ tklpatch-apply $rootfs $BT/patches/ec2
 
 $BT/bin/aptconf-tag $rootfs ebs
 
-$BT/bin/ebs-bundle $rootfs $name.ebs
-$BT/bin/ebs-register $name.ebs
+$BT/bin/ebs-bundle $rootfs $snapshot_name
+$BT/bin/ebs-register $snapshot_name
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    $BT/bin/ebs-publish $name.ebs
+    $BT/bin/ebs-publish $snapshot_name
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
