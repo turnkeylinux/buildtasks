@@ -39,7 +39,7 @@ done
 
 [ -n "$BT_DEBUG" ] && set -x
 
-export BT=$(dirname `pwd`/$(basename $0))
+export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
