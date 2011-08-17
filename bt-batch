@@ -30,6 +30,6 @@ list=$2
 
 for appname in $(cat $list | grep -v "^#"); do
     info "STARTING: $task $appname"
-    ./$task $appname
+    ./$task --publish $appname
     info "FINISHED: $task $appname"
 done
