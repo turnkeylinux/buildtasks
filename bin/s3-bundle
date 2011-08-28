@@ -18,7 +18,7 @@ Environment::
 
     REGION          - Amazon region ($REGION)
     KERNEL          - Amazon kernel ID ($KERNEL)
-    AWS_USERID      - Amazon user id withouth dashes ($AWS_USERID)
+    AWS_USERID      - Amazon user id without dashes ($AWS_USERID)
     EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
     EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
 EOF

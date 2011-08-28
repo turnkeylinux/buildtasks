@@ -1,30 +1,42 @@
 #!/bin/bash -e
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) appname
+Syntax: $(basename $0) [--publish] appname
 Converts appliance appname (e.g., core) to ec2 ebs backed ami
+
+Options::
+
+    --publish           - if set, image will be made public
 
 Environment::
 
     BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-    BT_PUBLISH          - if set, image will be made public
 
     BT_DEBUG            - turn on debugging
 EOF
 exit 1
 }
 
-if [[ "$#" != "1" ]]; then
-    usage
-fi
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
 
-export BT=$(dirname `pwd`/$(basename $0))
+export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
@@ -60,14 +72,14 @@ esac
 O=$BT_BUILDS/ebs
 mkdir -p $O
 
-appname=$1
-
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
 isofile=turnkey-$appname-$BT_VERSION.iso
 name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
+
+snapshot_name=$($BT/bin/ec2-uniquename $name.ebs)
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
@@ -79,11 +91,13 @@ tklpatch-apply $rootfs $BT/patches/ec2
 
 $BT/bin/aptconf-tag $rootfs ebs
 
-$BT/bin/ebs-bundle $rootfs $name.ebs
-$BT/bin/ebs-register $name.ebs
+$BT/bin/ebs-bundle $rootfs $snapshot_name
+$BT/bin/ebs-register $snapshot_name
 
-# only publish if specifically set
-[ -n "$BT_PUBLISH" ] && $BT/bin/ebs-publish $name.ebs
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    $BT/bin/ebs-publish $snapshot_name
+fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs

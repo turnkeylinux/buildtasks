@@ -6,15 +6,18 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) appname
+Syntax: $(basename $0) [--publish] appname
 Perform maintenance release for appliance appname (e.g., core)
+
+Options::
+
+    --publish           - if set, iso and meta files will be published
 
 Environment::
 
     BT_CUR_VERSION      - current appliance version (e.g., 11.1-lucid-x86)
     BT_NEW_VERSION      - new appliance version (e.g., 11.2-lucid-x86)
 
-    BT_PUBLISH          - if set, iso and meta files will be published
     BT_PUBLISH_IMGS     - rsync destination for release image
     BT_PUBLISH_META     - rsync destination for release meta files
     BT_PUBLISH_PROFILES - rsync destination for release tklbam profile
@@ -32,13 +35,21 @@ EOF
 exit 1
 }
 
-if [[ "$#" != "1" ]]; then
-    usage
-fi
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
 
-export BT=$(dirname `pwd`/$(basename $0))
+export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
@@ -46,15 +57,13 @@ export BT_CONFIG=$BT/config
 O=$BT_BUILDS/iso
 mkdir -p $O
 
-appname=$1
-
 [ -n "$BT_CUR_VERSION" ] || fatal "BT_CUR_VERSION not set"
 [ -n "$BT_NEW_VERSION" ] || fatal "BT_NEW_VERSION not set"
 
 [ -n "$BT_PROFILES" ] || fatal "BT_PROFILES not set"
 export PROFILES_CONF=$BT_PROFILES
 
-if [ -n "$BT_PUBLISH" ]; then
+if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
     [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
@@ -105,8 +114,8 @@ $BT/bin/generate-signature $O/$newname.iso
 ln $O/$newname.iso $BT_ISOS/
 ln $O/$newname.iso.sig $BT_ISOS/
 
-# only publish if specifically set
-if [ -n "$BT_PUBLISH" ]; then
+# publish if specified
+if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=$BT_PUBLISH_IMGS
     $BT/bin/publish-release $O/$newname.iso
 
