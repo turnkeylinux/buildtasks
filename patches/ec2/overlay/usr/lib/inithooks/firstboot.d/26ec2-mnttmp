@@ -1,0 +1,10 @@
+#!/bin/bash -e
+# mount bind /tmp to /mnt/tmp (ephemeral storage)
+
+[ -d /mnt/tmp ] && exit 0
+
+mkdir -p /mnt/tmp
+cp -ar /tmp/* /mnt/tmp/
+echo "/mnt/tmp /tmp bind bind 0 0" >> /etc/fstab
+mount /tmp
+
