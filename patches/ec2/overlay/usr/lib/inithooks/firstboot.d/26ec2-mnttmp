@@ -1,12 +1,17 @@
 #!/bin/bash -e
-# mount bind /tmp to /mnt/tmp (ephemeral storage)
+# mount bind /mnt/tmp (ephemeral storage) on /tmp
 
-[ -d /mnt/tmp ] && exit 0
+is_mounted() {
+    mount | grep -q "^$1 on $2 "
+    return $?
+}
+
+# skip if already mounted
+is_mounted /mnt/tmp /tmp && exit 0
 
 mkdir -p /mnt/tmp
 chmod 777 /mnt/tmp/
 chmod o+t /mnt/tmp/
-cp -ar /tmp/* /mnt/tmp/
-echo "/mnt/tmp /tmp bind bind 0 0" >> /etc/fstab
-mount /tmp
+cp -ar /tmp/* /mnt/tmp/ >/dev/null 2>&1 || true
+mount --bind /mnt/tmp /tmp
 
