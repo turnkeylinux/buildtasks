@@ -29,7 +29,7 @@ echo "UseDNS no" >> /etc/ssh/sshd_config
 ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
 
 # copy ec2-mnttmp in everyboot
-cp /usr/lib/inithooks/firstboot.d/26ec2-mnttmp /usr/lib/inithooks/everyboot.d/26ec2-mnttmp
+cp /usr/lib/inithooks/firstboot.d/27ec2-mnttmp /usr/lib/inithooks/everyboot.d/27ec2-mnttmp
 
 # cleanup
 apt-get clean
