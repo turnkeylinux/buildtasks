@@ -1,10 +1,31 @@
 #!/bin/sh -ex
 
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+# replace generic kernel with optimized virtual
+install linux-virtual || true
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+
+# install vmware-tools
+KERNEL=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-*-virtual')
+KERNEL_VERSION=$(echo $KERNEL | sed "s|linux-image-||")
+install vmware-tools vmware-tools-kmod-$KERNEL_VERSION || true
+
 # configure sshd to permit empty passwords
 sed -i 's/^PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
-
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
 
 # disable udev persistent net generation
 echo -n > /etc/udev/rules.d/70-persistent-net.rules
 echo -n > /lib/udev/rules.d/75-persistent-net-generator.rules
+
+# cleanup
+apt-get clean
+rm -f /boot/*.bak
+rm -f /var/cache/apt/*.bin
+rm -f /var/lib/apt/lists/{archive.*,security.*}

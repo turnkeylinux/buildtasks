@@ -100,12 +100,16 @@ mkdir $rootfs.fs
 mount $looproot $rootfs.fs
 mount $loopboot $rootfs.fs/boot
 
+info "mount binding dev and proc"
+mount -o bind /dev $rootfs.fs/dev
+mount -o bind /proc $rootfs.fs/proc
+
+info "fixing broken package installs"
+chroot $rootfs.fs apt-get -f install
+
 info "installing and configuring grub"
 grubcfg=$rootfs.fs/boot/grub/grub.cfg
 devicemap=$rootfs.fs/boot/grub/device.map
-
-mount -o bind /dev $rootfs.fs/dev
-mount -o bind /proc $rootfs.fs/proc
 
 cat > $devicemap <<EOF
 (hd0)   $loopdev
