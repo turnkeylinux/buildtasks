@@ -48,8 +48,15 @@ if [ "$op" == "restore" ] && [ "$state" == "post" ]; then
     sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
+
+    # java weird bug
+    apt-get -y remove openjdk-6-jre-headless
+    apt-get -y install openjdk-6-jre-headless
     apt-get -y install ec2-api-tools ec2-ami-tools
 
+    # symlink tklbam bug
+    rm -f /usr/local/bin/ovftool
+    ln -s /opt/vmware/ovftool/ovftool /usr/local/bin/ovftool
     /etc/init.d/shellinabox stop || true
     /etc/init.d/webmin stop || true
 fi
