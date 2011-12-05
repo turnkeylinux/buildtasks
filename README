@@ -7,12 +7,12 @@ hub-launch BACKUP_ID --region=us-east-1 --label=BT_USEAST --fqdn=$FQDN
 ssh root@$FQDN
 
 cd /root/buildtasks
-sed -i "/BT_PUBLISH=y/ s/#//" config/build.cfg
-
-bt-maintenance core
-bt-s3 core
-bt-ebs core
+./bt-maintenance [--publish] core
+./bt-s3 core
+./bt-ebs core
 ...
+
+See cloudtasks for batch building
 
 Setting up buildtasks server / backup on EC2 (from scratch)
 ===========================================================
@@ -63,7 +63,7 @@ rsync -avP --no-owner --no-group --progress \
 
 cd private
 rsync -avP --no-owner --no-group --progress \
-    --exclude=.git* \
+    --exclude=.git* --delete \
     -e ssh buildtasks root@$FQDN:/root/
 
 tklbam-backup
