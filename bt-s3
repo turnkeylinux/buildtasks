@@ -46,24 +46,34 @@ export ZONE=$(ec2metadata --availability-zone)
 export REGION=$(echo -n $ZONE | head -c -1)
 case "$REGION" in
     "us-east-1")
-        export KERNEL=$USEAST_KERNEL
-        export BUCKET=$USEAST_BUCKET
+        export KERNEL=$USEAST1_KERNEL
+        export BUCKET=$USEAST1_BUCKET
         export LOCATION="US"
         ;;
     "us-west-1")
-        export KERNEL=$USWEST_KERNEL
-        export BUCKET=$USWEST_BUCKET
+        export KERNEL=$USWEST1_KERNEL
+        export BUCKET=$USWEST1_BUCKET
         export LOCATION="us-west-1"
         ;;
+    "us-west-2")
+        export KERNEL=$USWEST2_KERNEL
+        export BUCKET=$USWEST2_BUCKET
+        export LOCATION="us-west-2"
+        ;;
     "eu-west-1")
-        export KERNEL=$EUWEST_KERNEL
-        export BUCKET=$EUWEST_BUCKET
+        export KERNEL=$EUWEST1_KERNEL
+        export BUCKET=$EUWEST1_BUCKET
         export LOCATION="EU"
         ;;
     "ap-southeast-1")
-        export KERNEL=$APSOUTHEAST_KERNEL
-        export BUCKET=$APSOUTHEAST_BUCKET
+        export KERNEL=$APSOUTHEAST1_KERNEL
+        export BUCKET=$APSOUTHEAST1_BUCKET
         export LOCATION="ap-southeast-1"
+        ;;
+    "ap-northeast-1")
+        export KERNEL=$APNORTHEAST1_KERNEL
+        export BUCKET=$APNORTHEAST1_BUCKET
+        export LOCATION="ap-northeast-1"
         ;;
     *)
         fatal "unrecognized region: $REGION"
