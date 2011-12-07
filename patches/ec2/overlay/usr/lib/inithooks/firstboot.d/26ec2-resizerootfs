@@ -93,7 +93,7 @@ class RootFS:
 
     @property
     def has_supported_filesystem(self):
-        return True if self.filesystem in SUPPORTED_FILESYSTEMS else False
+        return True if self.filesystem in self.SUPPORTED_FILESYSTEMS else False
 
     def resize_filesystem(self):
         fd, devpath = tempfile.mkstemp(dir=self.mountpoint)
