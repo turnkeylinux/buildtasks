@@ -1,0 +1,61 @@
+#!/bin/sh -ex
+
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+# remove packages we don't need (eg. generic kernel)
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+dpkg --purge linux-firmware
+
+# install required packages
+install quota
+
+# remove resolvconf
+rm -rf /var/run/resolvconf
+dpkg --purge resolvconf
+rm -f /etc/resolv.conf*
+touch /etc/resolv.conf
+
+# remove upstart scripts that cause openvz issues
+rm -f /etc/init/acpid.conf
+rm -f /etc/init/console-setup.conf
+rm -f /etc/init/control-alt-delete.conf
+rm -f /etc/init/dmesg.conf
+rm -f /etc/init/hwclock*
+rm -f /etc/init/mountall-*
+rm -f /etc/init/mounted-*
+rm -f /etc/init/network-interface*
+rm -f /etc/init/plymouth*
+rm -f /etc/init/rcS.conf
+rm -f /etc/init/tty*
+rm -f /etc/init/udev*
+rm -f /etc/init/upstart*
+
+update-rc.d -f confconsole disable
+
+# hold packages so they aren't upgraded (causes issues in openvz)
+echo "mountall hold" | dpkg --set-selections
+echo "upstart hold" | dpkg --set-selections
+echo "ifupdown hold" | dpkg --set-selections
+
+# disable sshd dns checks (if resolution fails will prevent logins)
+echo "UseDNS no" >> /etc/ssh/sshd_config
+
+# modprobe doesn't work in openvz
+mv /sbin/modprobe /sbin/modprobe.orig
+ln -s /bin/true /sbin/modprobe
+
+# root password is set outside of container
+chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
+
+# cleanup
+apt-get clean
+rm -f /boot/*.bak
+rm -f /var/cache/apt/*.bin
+rm -f /var/lib/apt/lists/{archive.*,security.*}
+

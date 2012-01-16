@@ -38,7 +38,7 @@ for f in $*; do
     file=$(basename $f)
     appname=$(echo $file |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
     version=$(echo $file |perl -pe \
-        's/-(vmdk|ovf|xen)//g; \
+        's/-(vmdk|ovf|xen|openvz)//g; \
          s/\.sig$//; s/\.(zip|iso|tar\.bz2|tar\.gz|changelog|manifest)$//; \
          s/.*?-(\d.*)/\1/')
 
