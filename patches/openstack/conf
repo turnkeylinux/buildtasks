@@ -1,0 +1,37 @@
+#!/bin/sh -ex
+
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+# support hot-plugging of attached volumes
+echo "acpiphp" >> /etc/modules
+
+# replace generic kernel with optimized virtual
+install linux-virtual ebsmount
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+
+# hold kernel (not used in image, pro-longs sec-updates)
+echo "linux-virtual hold" | dpkg --set-selections
+
+# send inithook output to console (to be fixed in upcoming version)
+sed -i "s|hvc0|ttyS0|g" /usr/lib/inithooks/run
+
+# disable confconsole init script
+update-rc.d -f confconsole disable
+
+# disable sshd dns checks (if resolution fails will prevent logins)
+echo "UseDNS no" >> /etc/ssh/sshd_config
+
+# create symlink to ec2metadata
+ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
+
+# cleanup
+apt-get clean
+rm -f /boot/*.bak
+rm -f /var/cache/apt/*.bin
+rm -f /var/lib/apt/lists/{archive.*,security.*}

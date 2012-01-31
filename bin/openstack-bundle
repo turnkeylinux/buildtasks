@@ -1,0 +1,57 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs
+Bundles rootfs into an openstack tarball
+
+Arguments::
+
+    rootfs          - root filesystem path
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+name=$(echo $rootfs | sed 's/.rootfs//')
+
+info "getting size for loopback"
+rootsize=$(du -s $rootfs | awk '{print $1}')
+loopsize=$[$rootsize + 262144] # 256MB padding
+
+info "creating sparse loopback"
+dd if=/dev/null of=$rootfs.img bs=1 seek=${loopsize}K
+mkfs.ext4 -F -j $rootfs.img
+
+mkdir $rootfs.img.mount
+mount -o loop $rootfs.img $rootfs.img.mount
+
+info "syncing rootfs to loopback"
+rsync -a -t -r -S -I -H $rootfs/ $rootfs.img.mount
+
+info "umount loopback"
+umount -d $rootfs.img.mount
+rmdir $rootfs.img.mount
+
+info "setting up image directory"
+mkdir $name
+mv $rootfs.img $name/$name.img
+cp $rootfs/boot/vmlinuz-* $name/$name-kernel
+cp $rootfs/boot/initrd.img-* $name/$name-initrd
+
+info "creating $name-openstack.tar.gz"
+tar --sparse -zcvf $name-openstack.tar.gz $name
+
+if [ -z "$BT_DEBUG" ]; then
+    info "removing directory"
+    rm -rf $name
+fi
+

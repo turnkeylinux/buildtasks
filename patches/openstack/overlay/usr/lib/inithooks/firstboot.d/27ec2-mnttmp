@@ -1,0 +1,17 @@
+#!/bin/bash -e
+# mount bind /mnt/tmp (ephemeral storage) on /tmp
+
+is_mounted() {
+    mount | grep -q "^$1 on $2 "
+    return $?
+}
+
+# skip if already mounted
+is_mounted /mnt/tmp /tmp && exit 0
+
+mkdir -p /mnt/tmp
+chmod 777 /mnt/tmp/
+chmod o+t /mnt/tmp/
+cp -ar /tmp/* /mnt/tmp/ >/dev/null 2>&1 || true
+mount --bind /mnt/tmp /tmp
+

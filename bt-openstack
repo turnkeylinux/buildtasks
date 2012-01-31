@@ -1,0 +1,81 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [--publish] appname
+Converts appliance appname (e.g., core) to openstack image
+
+Options::
+
+    --publish           - if set, image will be devpay'ed and made public
+
+Environment::
+
+    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/build.cfg
+
+O=$BT_BUILDS/openstack
+mkdir -p $O
+
+[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+
+isofile=turnkey-$appname-$BT_VERSION.iso
+name=turnkey-$appname-$BT_VERSION
+rootfs=$name.rootfs
+cdroot=$name.cdroot
+
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+
+cd $O
+tklpatch-extract-iso $BT_ISOS/$isofile
+
+tklpatch-apply $rootfs $BT/patches/openstack
+
+$BT/bin/aptconf-tag $rootfs openstack
+
+$BT/bin/openstack-bundle $rootfs
+
+$BT/bin/generate-signature $O/$name-openstack.tar.gz
+
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=$BT_PUBLISH_IMGS
+    $BT/bin/publish-release $O/$name-openstack.tar.gz
+
+    export PUBLISH_DEST=$BT_PUBLISH_META
+    $BT/bin/publish-release $O/$name-openstack.tar.gz.sig
+fi
+
+if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    rm -rf $rootfs
+    rm -rf $cdroot
+fi
+
