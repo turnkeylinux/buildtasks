@@ -68,11 +68,11 @@ $BT/bin/generate-signature $O/$name-openstack.tar.gz
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=$BT_PUBLISH_IMGS
-    $BT/bin/publish-release $O/$name-openstack.tar.gz
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openstack/
+    $BT/bin/publish-files $O/$name-openstack.{tar.gz,tar.gz.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$name-openstack.tar.gz.sig
+    export PUBLISH_DEST=${BT_PUBLISH_META}/openstack/
+    $BT/bin/publish-files $O/$name-openstack.tar.gz.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

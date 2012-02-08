@@ -34,5 +34,5 @@ fi
 
 mkdir -p $outdir
 sfproject="http://downloads.sourceforge.net/project/turnkeylinux"
-wget $sfproject/turnkey-$appname/$version/$isofile -O $outdir/$isofile
+wget $sfproject/iso/$isofile -O $outdir/$isofile
 

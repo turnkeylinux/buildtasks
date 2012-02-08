@@ -75,11 +75,11 @@ $BT/bin/generate-signature $O/$name-openvz.tar.gz
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=$BT_PUBLISH_IMGS
-    $BT/bin/publish-release $O/$name-openvz.tar.gz
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openvz/
+    $BT/bin/publish-files $O/$name-openvz.{tar.gz,tar.gz.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$name-openvz.tar.gz.sig
+    export PUBLISH_DEST=${BT_PUBLISH_META}/openvz/
+    $BT/bin/publish-files $O/$name-openvz.tar.gz.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

@@ -88,13 +88,17 @@ $BT/bin/generate-signature $O/$name-ovf.zip
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=$BT_PUBLISH_IMGS
-    $BT/bin/publish-release $O/$name-vmdk.zip
-    $BT/bin/publish-release $O/$name-ovf.zip
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
+    $BT/bin/publish-files $O/$name-vmdk.{zip,zip.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$name-vmdk.zip.sig
-    $BT/bin/publish-release $O/$name-ovf.zip.sig
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
+    $BT/bin/publish-files $O/$name-ovf.{zip,zip.sig}
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/vmdk/
+    $BT/bin/publish-files $O/$name-vmdk.zip.sig
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/ovf/
+    $BT/bin/publish-files $O/$name-ovf.zip.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

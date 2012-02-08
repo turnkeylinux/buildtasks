@@ -116,11 +116,11 @@ ln $O/$newname.iso.sig $BT_ISOS/
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=$BT_PUBLISH_IMGS
-    $BT/bin/publish-release $O/$newname.iso
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
+    $BT/bin/publish-files $O/$newname.{iso,iso.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$newname.{changelog,manifest,iso.sig}
+    export PUBLISH_DEST=${BT_PUBLISH_META}/iso/
+    $BT/bin/publish-files $O/$newname.{changelog,manifest,iso.sig}
 
     if [ -e "$BT_PROFILES/$appname" ]; then
         export PUBLISH_DEST=$BT_PUBLISH_PROFILES

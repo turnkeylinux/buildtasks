@@ -75,11 +75,11 @@ $BT/bin/generate-signature $O/$name-xen.tar.gz
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=$BT_PUBLISH_IMGS
-    $BT/bin/publish-release $O/$name-xen.tar.gz
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/xen/
+    $BT/bin/publish-files $O/$name-xen.{tar.gz,tar.gz.sig}
 
-    export PUBLISH_DEST=$BT_PUBLISH_META
-    $BT/bin/publish-release $O/$name-xen.tar.gz.sig
+    export PUBLISH_DEST=${BT_PUBLISH_META}/xen/
+    $BT/bin/publish-files $O/$name-xen.tar.gz.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
