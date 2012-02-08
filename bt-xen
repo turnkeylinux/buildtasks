@@ -71,15 +71,15 @@ $BT/bin/aptconf-tag $rootfs xen
 
 $BT/bin/xen-bundle $rootfs
 
-$BT/bin/generate-signature $O/$name-xen.tar.gz
+$BT/bin/generate-signature $O/$name-xen.tar.bz2
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/xen/
-    $BT/bin/publish-files $O/$name-xen.{tar.gz,tar.gz.sig}
+    $BT/bin/publish-files $O/$name-xen.{tar.bz2,tar.bz2.sig}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/xen/
-    $BT/bin/publish-files $O/$name-xen.tar.gz.sig
+    $BT/bin/publish-files $O/$name-xen.tar.bz2.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

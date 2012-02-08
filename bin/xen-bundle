@@ -24,7 +24,7 @@ fi
 rootfs=$1
 name=$(echo $rootfs | sed 's/.rootfs//')
 
-info "creating $name-xen.tar.gz"
-tar -C $rootfs -zcf $name-xen.tar.gz .
+info "creating $name-xen.tar.bz2"
+tar -C $rootfs -jcf $name-xen.tar.bz2 .
 
 
