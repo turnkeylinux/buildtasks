@@ -1,0 +1,4 @@
+#!/bin/sh -ex
+
+# redirect inithook output (preseeded headless deployment)
+sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks

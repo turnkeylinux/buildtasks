@@ -18,9 +18,6 @@ dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
 # hold kernel (not used in image, pro-longs sec-updates)
 echo "linux-virtual hold" | dpkg --set-selections
 
-# send inithook output to console (to be fixed in upcoming version)
-sed -i "s|hvc0|ttyS0|g" /usr/lib/inithooks/run
-
 # disable confconsole init script
 update-rc.d -f confconsole disable
 

@@ -53,6 +53,9 @@ ln -s /bin/true /sbin/modprobe
 # root password is set outside of container
 chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
 
+# redirect inithook output (preseeded headless deployment)
+sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
+
 # cleanup
 apt-get clean
 rm -f /boot/*.bak
