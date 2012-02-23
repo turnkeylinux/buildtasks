@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 info() { echo "INFO [$(basename $0)]: $@"; }
@@ -6,7 +6,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 filepath
-Generate GPG signed signature for filepath (e.g., path/to/iso)
+Generate GPG signed and checksums signature for filepath (e.g., path/to/iso)
 
 Arguments::
 
@@ -27,11 +27,46 @@ fi
 
 filepath=$1
 
+[ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
 [ -n "$BT_RELEASE_KEY" ] || fatal "BT_RELEASE_KEY not set"
 
 if ! gpg --list-secret-keys $BT_RELEASE_KEY 2>&1 >/dev/null; then
     gpg --import $BT_CONFIG/$BT_RELEASE_KEY.asc
 fi
 
-gpg -abs -u $BT_RELEASE_KEY --output $filepath.sig $filepath
+info "generating gpg signature"
+gpg -abs -u $BT_RELEASE_KEY --output $filepath.sig.asc $filepath
+
+info "generating md5 checksum"
+MD5SUM=$(md5sum $filepath | cut -d " " -f 1)
+
+info "generating sha1 checksum"
+SHA1SUM=$(sha1sum $filepath | cut -d " " -f 1)
+
+cat > $filepath.sig <<EOF
+This signature file may be used to cryptographically verify file integrity,
+like this::
+
+    $ gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0xA16EB94D
+    $ gpg --list-keys 0xA16EB94D
+    pub   2048R/A16EB94D 2008-08-15 [expires: 2023-08-12]
+    uid   Turnkey Linux Release Key <release@turnkeylinux.com>
+
+    $ gpg --verify $(basename $filepath).sig
+    gpg: Signature made $(date) using RSA key ID A16EB94D
+    gpg: Good signature from "Turnkey Linux Release Key
+
+For your convenience we also include file checksums:
+
+* sha1sum  $SHA1SUM
+* md5sum   $MD5SUM
+
+You can calculate these on your end and compare to check for errors, but
+cryptographic verification is recommended for security reasons.
+
+EOF
+
+info "writing signature file"
+cat $filepath.sig.asc >> $filepath.sig
+rm $filepath.sig.asc
 
