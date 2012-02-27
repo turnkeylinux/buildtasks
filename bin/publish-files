@@ -37,7 +37,9 @@ for f in $*; do ln $f $tmpdir; done
 set +e
 cd $tmpdir
 while true; do
-    rsync -rlDPOv ./ $PUBLISH_DEST && break
+    rsync -rlDPOv \
+        -e "ssh -i $BT_CONFIG/ssh/id_rsa -F $BT_CONFIG/ssh/config" \
+        ./ $PUBLISH_DEST && break
 
     echo "autoresume rsync: sleeping for 5 seconds"
     sleep 5
