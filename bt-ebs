@@ -6,12 +6,13 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish] appname
+Syntax: $(basename $0) [--publish --secupdates] appname
 Converts appliance appname (e.g., core) to ec2 ebs backed ami
 
 Options::
 
     --publish           - if set, image will be made public
+    --secupdates        - if set, security updates will be installed
 
 Environment::
 
@@ -24,15 +25,17 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help )     usage;;
-        --publish)   publish="yes";;
-        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        --help )      usage;;
+        --publish)    publish="yes";;
+        --secupdates) secupdates="yes";;
+        *)            if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
     shift
 done
 
 [ -n "$appname" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
+[ -n "$secupdates" ] || warning "--secupdates was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -104,6 +107,7 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
+[ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
 
 $BT/bin/aptconf-tag $rootfs ebs
 
