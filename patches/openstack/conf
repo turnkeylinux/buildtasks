@@ -31,4 +31,5 @@ ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2me
 apt-get clean
 rm -f /boot/*.bak
 rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{archive.*,security.*}
+rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
+

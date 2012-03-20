@@ -35,4 +35,4 @@ cp /usr/lib/inithooks/firstboot.d/27ec2-mnttmp /usr/lib/inithooks/everyboot.d/27
 apt-get clean
 rm -f /boot/*.bak
 rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{archive.*,security.*}
+rm -f /var/lib/apt/lists/{*_Release*,*_Packages}

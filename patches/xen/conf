@@ -32,4 +32,5 @@ sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 apt-get clean
 rm -f /boot/*.bak
 rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{archive.*,security.*}
+rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
+
