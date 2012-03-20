@@ -32,6 +32,7 @@ fi
 [ -n "$NO_COPY_SSHCONF" ] || cp $BT_CONFIG/ssh/* ~/.ssh/
 
 tmpdir=$(mktemp -d --tmpdir=$(dirname $1))
+chmod 755 $tmpdir
 for f in $*; do ln $f $tmpdir; done
 
 set +e
