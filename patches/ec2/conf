@@ -8,14 +8,18 @@ install() {
         install $@
 }
 
+# link update-grub to update-grub-legacy-ec2
+mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
+ln -s /usr/sbin/update-grub-legacy-ec2 /usr/sbin/update-grub
+
 # install ec2 required packages
-install grub-legacy-ec2 linux-image-ec2 libc6-xen hubclient ebsmount
+install linux-image-xen-686 libc6-xen hubclient ebsmount
 
 # remove packages we don't need (eg. generic kernel)
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-686' | grep -v xen)
 
 # fix grub
-sed -i 's|root=/dev/hda1|root=/dev/sda1|' /boot/grub/menu.lst
+sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst
 sed -i 's| console=hvc0| xencons=hvc0 console=hvc0|' /boot/grub/menu.lst
 update-grub-legacy-ec2
 

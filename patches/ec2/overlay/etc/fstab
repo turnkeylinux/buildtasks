@@ -1,7 +1,7 @@
 # /etc/fstab: static file system information.
-# <file system>        <mount point>   <type>  <options>       <dump>  <pass>
-proc                    /proc           proc    defaults        0       0
-/dev/sda1               /               ext4    defaults        0       0
-/dev/sda2               /mnt            auto    defaults,nobootwait        0       0
-/dev/sda3               none            swap    sw              0       0
+# <file system>        <mount point>   <type>  <options>           <dump>  <pass>
+proc                   /proc           proc    defaults            0       0
+/dev/xvda1             /               ext4    defaults            0       0
+/dev/xvda2             /mnt            auto    defaults,nobootwait 0       0
+/dev/xvda3             none            swap    sw                  0       0
 
