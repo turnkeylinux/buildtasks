@@ -28,4 +28,5 @@ echo -n > /lib/udev/rules.d/75-persistent-net-generator.rules
 apt-get clean
 rm -f /boot/*.bak
 rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{archive.*,security.*}
+rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
+
