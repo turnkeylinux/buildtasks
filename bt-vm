@@ -94,10 +94,8 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
     $BT/bin/publish-files $O/$name-ovf.{zip,zip.sig}
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/vmdk/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$name-vmdk.zip.sig
-
-    export PUBLISH_DEST=${BT_PUBLISH_META}/ovf/
     $BT/bin/publish-files $O/$name-ovf.zip.sig
 fi
 

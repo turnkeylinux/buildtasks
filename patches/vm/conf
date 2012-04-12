@@ -8,14 +8,10 @@ install() {
         install $@
 }
 
-# replace generic kernel with optimized virtual
-install linux-virtual || true
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
-
-# install vmware-tools
-KERNEL=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-*-virtual')
-KERNEL_VERSION=$(echo $KERNEL | sed "s|linux-image-||")
-install vmware-tools vmware-tools-kmod-$KERNEL_VERSION || true
+# install open-vm-tools and modules
+KERNEL_VERSION=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-||')
+install open-vm-tools open-vm-modules-$KERNEL_VERSION
+/etc/init.d/open-vm-tools stop || true
 
 # configure sshd to permit empty passwords
 sed -i 's/^PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config

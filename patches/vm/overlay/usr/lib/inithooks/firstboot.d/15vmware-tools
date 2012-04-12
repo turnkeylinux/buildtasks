@@ -1,3 +1,0 @@
-#!/bin/bash -e
-vmware-config-tools.pl --default
-

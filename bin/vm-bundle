@@ -104,9 +104,6 @@ info "mount binding dev and proc"
 mount -o bind /dev $rootfs.fs/dev
 mount -o bind /proc $rootfs.fs/proc
 
-info "fixing broken package installs"
-chroot $rootfs.fs apt-get -f install
-
 info "installing and configuring grub"
 grubcfg=$rootfs.fs/boot/grub/grub.cfg
 devicemap=$rootfs.fs/boot/grub/device.map
@@ -172,7 +169,7 @@ annotation = "$VM_URL"
 guestinfo.vmware.product.long = "$VM_FULLNAME"
 guestinfo.vmware.product.url = "$VM_URL"
 guestinfo.vmware.product.class = "virtual machine"
-guestOS = "ubuntu"
+guestOS = "debian6"
 priority.grabbed = "normal"
 priority.ungrabbed = "normal"
 usb.present = "TRUE"
@@ -221,7 +218,9 @@ rm $name.vmx $name.vmdk
 cd ../
 zip -r -T $name-ovf.zip $name
 
-info "performing final cleanup"
-rm -rf $name
-rm -f $rootfs.raw
+if [ -z "$BT_DEBUG" ]; then
+    info "performing final cleanup"
+    rm -rf $name
+    rm -f $rootfs.raw
+fi
 
