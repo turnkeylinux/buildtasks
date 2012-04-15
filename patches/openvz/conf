@@ -8,12 +8,15 @@ install() {
         install $@
 }
 
-# remove packages we don't need (eg. generic kernel)
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
-dpkg --purge linux-firmware
-
 # install required packages
 install quota
+
+# remove kernel
+mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
+ln -s /bin/true /usr/sbin/update-grub
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-686')
+rm /usr/sbin/update-grub
+mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
 # remove resolvconf
 rm -rf /var/run/resolvconf
@@ -21,27 +24,13 @@ dpkg --purge resolvconf
 rm -f /etc/resolv.conf*
 touch /etc/resolv.conf
 
-# remove upstart scripts that cause openvz issues
-rm -f /etc/init/acpid.conf
-rm -f /etc/init/console-setup.conf
-rm -f /etc/init/control-alt-delete.conf
-rm -f /etc/init/dmesg.conf
-rm -f /etc/init/hwclock*
-rm -f /etc/init/mountall-*
-rm -f /etc/init/mounted-*
-rm -f /etc/init/network-interface*
-rm -f /etc/init/plymouth*
-rm -f /etc/init/rcS.conf
-rm -f /etc/init/tty*
-rm -f /etc/init/udev*
-rm -f /etc/init/upstart*
+# remove ntp daemon
+dpkg --purge ntp
+
+# disable ttys
+sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
 
 update-rc.d -f confconsole disable
-
-# hold packages so they aren't upgraded (causes issues in openvz)
-echo "mountall hold" | dpkg --set-selections
-echo "upstart hold" | dpkg --set-selections
-echo "ifupdown hold" | dpkg --set-selections
 
 # disable sshd dns checks (if resolution fails will prevent logins)
 echo "UseDNS no" >> /etc/ssh/sshd_config

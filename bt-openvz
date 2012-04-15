@@ -69,17 +69,21 @@ tklpatch-apply $rootfs $BT/patches/openvz
 
 $BT/bin/aptconf-tag $rootfs openvz
 
-$BT/bin/openvz-bundle $rootfs
+# bundle using stupid naming convention
+appversion=$(echo $BT_VERSION | sed "s|-squeeze-x86||")
+stupidname="debian-6-turnkey-${appname}_${appversion}-1_i386"
+info "creating $stupidname.tar.gz"
+tar -C $rootfs -zcf $stupidname.tar.gz .
 
-$BT/bin/generate-signature $O/$name-openvz.tar.gz
+$BT/bin/generate-signature $O/$stupidname.tar.gz
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openvz/
-    $BT/bin/publish-files $O/$name-openvz.{tar.gz,tar.gz.sig}
+    $BT/bin/publish-files $O/$stupidname.{tar.gz,tar.gz.sig}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
-    $BT/bin/publish-files $O/$name-openvz.tar.gz.sig
+    $BT/bin/publish-files $O/$stupidname.tar.gz.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
