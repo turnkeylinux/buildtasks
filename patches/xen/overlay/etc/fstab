@@ -1,3 +1,6 @@
-proc		/proc	proc	defaults			0 0
-/dev/sda1	/	ext4	relatime,errors=remount-ro	0 1
-/dev/sda2	none	swap	sw				0 0
+# /etc/fstab: static file system information.
+# <file system>  <mount point>   <type>  <options>   <dump>  <pass>
+proc             /proc           proc    defaults    0       0
+/dev/xvda1       /               ext4    relatime,errors=remount-ro    0       1
+/dev/xvda2       none            swap    sw          0       0
+
