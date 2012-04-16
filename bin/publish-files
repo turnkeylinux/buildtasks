@@ -16,8 +16,6 @@ Environment::
 
     BT_CONFIG       - buildtasks config directory
     PUBLISH_DEST    - rsync destination (user@fqdn:/path)
-
-    NO_COPY_SSHCONF - if set will not copy ssh client configuration files
 EOF
 exit 1
 }
@@ -29,8 +27,6 @@ fi
 [ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
 [ -n "$PUBLISH_DEST" ] || fatal "PUBLISH_DEST not set"
 
-[ -n "$NO_COPY_SSHCONF" ] || cp $BT_CONFIG/ssh/* ~/.ssh/
-
 tmpdir=$(mktemp -d --tmpdir=$(dirname $1))
 chmod 755 $tmpdir
 for f in $*; do ln $f $tmpdir; done
@@ -38,10 +34,7 @@ for f in $*; do ln $f $tmpdir; done
 set +e
 cd $tmpdir
 while true; do
-    rsync -rlDPOv \
-        -e "ssh -i $BT_CONFIG/ssh/id_rsa -F $BT_CONFIG/ssh/config" \
-        ./ $PUBLISH_DEST && break
-
+    rsync -rlDPOv -e "ssh -i $BT_CONFIG/ssh/id_rsa -F $BT_CONFIG/ssh/config -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" ./ $PUBLISH_DEST && break
     echo "autoresume rsync: sleeping for 5 seconds"
     sleep 5
 done

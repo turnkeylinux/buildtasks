@@ -11,12 +11,18 @@ install() {
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
 
-# replace generic kernel with optimized virtual
-install linux-virtual ebsmount
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-generic')
+# replace kernel, install openstack required packages
+mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
+ln -s /bin/true /usr/sbin/update-grub
+
+install linux-image-xen-686 libc6-xen ebsmount
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-686' | grep -v xen)
+
+rm /usr/sbin/update-grub
+mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
 # hold kernel (not used in image, pro-longs sec-updates)
-echo "linux-virtual hold" | dpkg --set-selections
+echo "linux-image-xen-686 hold" | dpkg --set-selections
 
 # disable confconsole init script
 update-rc.d -f confconsole disable
