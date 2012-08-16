@@ -1,0 +1,18 @@
+#!/bin/bash -e
+# mount bind various directories to ephemeral storage
+
+DIRS="/tmp /var/cache/tklbam"
+
+is_mounted() {
+    mount | grep -q "^$1 on $2 "
+    return $?
+}
+
+for dir in $DIRS; do
+	# skip if already mounted
+	is_mounted /mnt$dir $dir && continue
+	mkdir -p /mnt$dir
+	rsync -aq $dir/ /mnt$dir 
+	mount --bind /mnt$dir $dir
+done
+
