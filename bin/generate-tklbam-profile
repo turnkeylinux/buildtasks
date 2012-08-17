@@ -213,6 +213,8 @@ def main():
     if not isdir(output_dir):
         fatal("'%s' is not a directory" % output_dir)
 
+    path = realpath(path)
+
     if not isdir(path):
         mount = MountISO(path)
         path = mount.rootfs
