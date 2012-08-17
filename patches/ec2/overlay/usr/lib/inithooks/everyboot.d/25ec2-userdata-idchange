@@ -1,0 +1,36 @@
+#!/bin/bash -e
+# process userdata if instance id has changed (ie. snapshot launch)
+
+. /etc/default/inithooks
+
+EC2_METADATA_CACHE=/var/lib/ec2metadata
+
+set_instanceid_fs() {
+    mkdir -p $EC2_METADATA_CACHE
+    echo $1 > $EC2_METADATA_CACHE/instance-id
+}
+
+get_instanceid_fs() {
+    if [ -e $EC2_METADATA_CACHE/instance-id ]; then
+        cat $EC2_METADATA_CACHE/instance-id
+    fi
+}
+
+get_instanceid_md() {
+    ec2metadata --instance-id
+}
+
+INSTANCEID_FS=$(get_instanceid_fs)
+INSTANCEID_MD=$(get_instanceid_md)
+
+if [ "$INSTANCEID_FS" ]; then
+    if [ "$INSTANCEID_FS" != "$INSTANCEID_MD" ]; then
+        set_instanceid_fs $INSTANCEID_MD
+        $INITHOOKS_PATH/firstboot.d/25ec2-userdata
+    fi
+else
+    set_instanceid_fs $INSTANCEID_MD
+fi
+
+exit 0
+
