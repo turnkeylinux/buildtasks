@@ -2,7 +2,7 @@ Usage (from backup)
 ===================
 
 export HUB_APIKEY=.... # smp
-hub-launch BACKUP_ID --region=us-east-1 --label=BT_USEAST --fqdn=$FQDN
+hub-launch BACKUP_ID
 
 ssh root@$FQDN
 
@@ -12,7 +12,7 @@ cd /root/buildtasks
 ./bt-ebs core
 ...
 
-See cloudtasks for batch building
+Note: see cloudtasks for batch building
 
 Setting up buildtasks server / backup on EC2 (from scratch)
 ===========================================================
@@ -31,47 +31,40 @@ sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get -y install tklpatch bzip2 curl qemu parted kpartx zip openjdk-6-jre-headless
-apt-get -y install ec2-api-tools ec2-ami-tools
+apt-get -y install tklpatch bzip2 qemu parted kpartx zip
+apt-get -y install openjdk-6-jre-headless curl libopenssl-ruby ruby
 
 # workaround weird kpartx bug
 modprobe dm-mod
 
+# setup installs
+mkdir -p /root/installs
+cd /root/installs
+wget http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip
+wget http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
+unzip ec2-ami-tools.zip
+unzip ec2-api-tools.zip
+rm ec2-ami-tools.zip
+rm ec2-api-tools.zip
+
+## TODO: ovftool stuff
+
 BT_HOOK=/etc/tklbam/hooks.d/buildtasks
-cat >$BT_HOOK<EOF
+cat >$BT_HOOK<<EOF
 #!/bin/bash -e
 # hooks are always called with two arguments
 op=$1       # backup / restore
 state=$2    # pre / post
 
 if [ "$op" == "restore" ] && [ "$state" == "post" ]; then
-    sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-
-    # java weird bug
-    apt-get -y remove openjdk-6-jre-headless
-    apt-get -y install openjdk-6-jre-headless
-    apt-get -y install ec2-api-tools ec2-ami-tools
-
-    # symlink tklbam bug
-    rm -f /usr/local/bin/ovftool
-    ln -s /opt/vmware/ovftool/ovftool /usr/local/bin/ovftool
     /etc/init.d/shellinabox stop || true
     /etc/init.d/webmin stop || true
 fi
 EOF
 chmod +x $BT_HOOK
 
-cd public
-rsync -avP --no-owner --no-group --progress \
-    --exclude=.git* --exclude-from=tklbam-profiles/.gitignore \
-    -e ssh tklbam-profiles root@$FQDN:/root/
-
-cd private
-rsync -avP --no-owner --no-group --progress \
-    --exclude=.git* --delete \
-    -e ssh buildtasks root@$FQDN:/root/
+echo -/root/buildtasks >> /etc/tklbam/overrides
+echo -/root/tklbam-profiles >> /etc/tklbam/overrides
 
 tklbam-backup
 
