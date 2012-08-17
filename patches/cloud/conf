@@ -1,4 +1,8 @@
 #!/bin/sh -ex
 
+# copy mntbind inithook in everyboot
+INITHOOKS=/usr/lib/inithooks
+cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
+
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
