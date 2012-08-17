@@ -1,0 +1,192 @@
+#!/bin/bash -e
+
+info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )     USAGE=y;;
+        --force)     FORCE="yes";;
+        --clean)     CLEAN="yes";;
+        *)           warning "unrecognized option: $1"; USAGE=y;;
+    esac
+    shift
+done
+
+set ${BUILDS_DIR:=/turnkey/fab/build}
+set ${PROFILES_CONF:=/turnkey/public/tklbam-profiles}
+set ${TKLBAM_LIB_PATH:=/turnkey/public/tklbam}
+set ${BT:=/turnkey/public/buildtasks}
+
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [OPTIONS]
+Generate release files for publishing
+
+Options::
+
+    --help              - display this help
+    --force             - don't ask for confirmation
+    --clean             - remove already generated files
+
+EOF
+env_var
+release_files
+exit 1
+}
+
+env_var() {
+cat<<EOF
+Environment variables::
+
+    BUILDS_DIR          - $BUILDS_DIR
+    PROFILES_CONF       - $PROFILES_CONF
+    TKLBAM_LIB_PATH     - $TKLBAM_LIB_PATH
+    BT                  - $BT
+
+EOF
+}
+
+_exists() { if [ -e $1 ]; then echo "[  skip  ] $1"; else echo "[ create ] $1"; fi }
+release_files() {
+cat<<EOF
+Release files::
+
+    PRODUCT         $(basename `pwd`)
+    RELEASE_KEY     $BT_RELEASE_KEY
+    VERSION         $VERSION
+
+    $( _exists $O/$VERSION.iso )
+    $( _exists $O/$VERSION.iso.sig )
+    $( _exists $O/$VERSION.manifest )
+    $( _exists $O/$VERSION.tklbam )
+    $( _exists $O/$VERSION.changelog )
+    $( _exists $O/$VERSION.spec )
+    $( _exists $O/$VERSION.versions )
+    $( _exists $O/$VERSION.log )
+
+EOF
+}
+
+# check dependencies
+[ `whoami` == 'root' ] && fatal "running as root is not supported"
+which gksudo >/dev/null || fatal "gksudo not in path"
+which turnkey-version >/dev/null || fatal "turnkey-version not in path"
+
+O=$BUILDS_DIR
+mkdir -p $O
+
+export BT=$BT
+export BT_CONFIG=$BT/config
+. $BT/config/common.cfg
+
+export PROFILES_CONF=$PROFILES_CONF
+export TKLBAM_LIB_PATH=$TKLBAM_LIB_PATH
+[ ! -e $PROFILES_CONF ] && fatal "$PROFILES_CONF not found"
+[ ! -e $TKLBAM_LIB_PATH ] && fatal "$TKLBAM_LIB_PATH not found"
+
+[ ! -e changelog ] && fatal "changelog not found"
+[ ! -e build/product.iso ] && fatal "build/product.iso not found"
+[ ! -e build/root.patched ] && fatal "build/root.patched not found"
+[ ! -e build/root.spec ] && fatal "build/root.spec not found"
+[ ! -e build/log ] && warning "build/log not found"
+
+VERSION=$(cat build/root.patched/etc/turnkey_version)
+[ -n "$VERSION" ] || fatal "could not determine version"
+
+# display usage if required (cli)
+[ "$USAGE" == "y" ] && usage
+
+# clean files if set
+if [ -n "$CLEAN" ]; then
+    if [ -z "$FORCE" ]; then REMOVE_OPTS="rfi"; else REMOVE_OPTS="rf"; fi
+    rm -${REMOVE_OPTS} $O/$VERSION.*
+fi
+
+# display release files and request verification if force is not set
+env_var
+release_files
+if [ -z "$FORCE" ]; then
+    echo "Continue (y/N)?"
+    read cont
+    [ ! "$cont" == "y" ] && fatal "Cancelled"
+fi
+
+## generate iso
+if [ -e $O/$VERSION.iso ]; then
+    warning "generating iso (skipped)"
+else
+    info "generating iso"
+    ln build/product.iso $O/$VERSION.iso
+fi
+
+## generate signature
+if [ -e $O/$VERSION.iso.sig ]; then
+    warning "generating signature (skipped)"
+else
+    info "generating signature"
+    $BT/bin/generate-signature $O/$VERSION.iso
+fi
+
+## generate manifest
+if [ -e $O/$VERSION.manifest ]; then
+    warning "generating manifest (skipped)"
+else
+    info "generating manifest"
+    gksudo $BT/bin/generate-manifest build/root.patched > $O/$VERSION.manifest
+fi
+
+## generate tklbam profile
+appname=$(echo $VERSION |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+if [ -e $PROFILES_CONF/$appname ]; then
+    if [ -e $O/$VERSION.tklbam/*.tar.gz ]; then
+        warning "generating tklbam profile (skipped)"
+    else
+        info "generating tklbam profile"
+        mkdir -p $O/$VERSION.tklbam
+        gksudo $BT/bin/generate-tklbam-profile $O/$VERSION.iso $O/$VERSION.tklbam
+    fi
+else
+    warning "generating tklbam profile (skipped - no matching profile)"
+fi
+
+## generate changelog
+if [ -e $O/$VERSION.changelog ]; then
+    warning "generating changelog (skipped)"
+else
+    info "generating changelog"
+    cp changelog $O/$VERSION.changelog
+fi
+
+## generate spec
+if [ -e $O/$VERSION.spec ]; then
+    warning "generating spec (skipped)"
+else
+    info "generating spec"
+    cp build/root.spec $O/$VERSION.spec
+fi
+
+## generate log
+if [ -e $O/$VERSION.log ]; then
+    warning "generating log (skipped)"
+else
+    info "generating log"
+    cp build/log $O/$VERSION.log
+fi
+
+## generate versions
+_version() { echo $(GIT_DIR=$1/.git git rev-parse HEAD) $1 >> $O/$VERSION.versions; }
+if [ -e $O/$VERSION.versions ]; then
+    warning "generating versions (skipped)"
+else
+    info "generating versions"
+    _version `pwd`
+    _version /turnkey/fab/products/bootstrap
+    _version /turnkey/fab/common
+    _version /turnkey/fab/cdroots
+    _version /turnkey/public/buildtasks
+    _version /turnkey/public/fab
+fi
+
