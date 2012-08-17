@@ -4,5 +4,15 @@
 INITHOOKS=/usr/lib/inithooks
 cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
 
+# disable confconsole init script
+update-rc.d -f confconsole disable
+
+# disable sshd dns checks (if resolution fails will prevent logins)
+echo "UseDNS no" >> /etc/ssh/sshd_config
+
+# create symlink to ec2metadata
+ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
+
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
+

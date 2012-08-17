@@ -24,15 +24,6 @@ mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 # hold kernel (not used in image, pro-longs sec-updates)
 echo "linux-image-xen-686 hold" | dpkg --set-selections
 
-# disable confconsole init script
-update-rc.d -f confconsole disable
-
-# disable sshd dns checks (if resolution fails will prevent logins)
-echo "UseDNS no" >> /etc/ssh/sshd_config
-
-# create symlink to ec2metadata
-ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
-
 # cleanup
 apt-get clean
 rm -f /boot/*.bak
