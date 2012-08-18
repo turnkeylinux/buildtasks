@@ -13,6 +13,7 @@ Options::
 
     --publish                  if set, iso and meta files will be published
     --gen-profile              if set, tklbam profile will be generated
+    --replace                  replace ISO being patched in place
 
 Arguments::
 
@@ -41,6 +42,7 @@ exit 1
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )       usage;;
+        --replace)     replace="yes";;
         --publish)     publish="yes";;
         --gen-profile) gen_profile="yes";;
         *)             if [ -n "$appname" ]; then 
@@ -127,10 +129,12 @@ TKLPATCH_ISOLABEL=$appname tklpatch-geniso $cdroot $O/$name.iso
 $BT/bin/generate-signature $O/$name.iso
 
 # hardlink iso and sig to isos (followup builds)
-mkdir -p $BT_ISOS/pre-patch
-mv $BT_ISOS/$isofile $BT_ISOS/$isofile.sig $BT_ISOS/pre-patch/
-ln $O/$name.iso $BT_ISOS/
-ln $O/$name.iso.sig $BT_ISOS/
+if [ -n "$replace" ]; then
+    mkdir -p $BT_ISOS/pre-patch
+    mv $BT_ISOS/$isofile $BT_ISOS/$isofile.sig $BT_ISOS/pre-patch/
+    ln $O/$name.iso $BT_ISOS/
+    ln $O/$name.iso.sig $BT_ISOS/
+fi
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
