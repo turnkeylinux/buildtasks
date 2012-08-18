@@ -6,25 +6,30 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish] [--gen-profile] appname
+Syntax: $(basename $0) [--publish] [--gen-profile] appname [ path/to/bugfix-tklpatch ]
 Perform bugfix release for appliance appname (e.g., core)
 
 Options::
 
-    --publish           - if set, iso and meta files will be published
-    --gen-profile       - if set, tklbam profile will be generated
+    --publish                  if set, iso and meta files will be published
+    --gen-profile              if set, tklbam profile will be generated
+
+Arguments::
+
+    path/to/bugfix-tklpatch    defaults to buildtasks/patches/bugfix-release/$BT_VERSION
+                               this can be a tklpatch or multi tklpatch (multipatch/common + multipatch/$appname)
 
 Environment::
 
-    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
+    BT_VERSION                 appliance version (e.g., 11.2-lucid-x86)
 
-    BT_PUBLISH_IMGS     - rsync destination for release image
-    BT_PUBLISH_META     - rsync destination for release meta files
-    BT_PUBLISH_PROFILES - rsync destination for release tklbam profile
+    BT_PUBLISH_IMGS            rsync destination for release image
+    BT_PUBLISH_META            rsync destination for release meta files
+    BT_PUBLISH_PROFILES        rsync destination for release tklbam profile
 
-    BT_PROFILES         - path containing tklbam profile conf files
+    BT_PROFILES                path containing tklbam profile conf files
 
-    BT_DEBUG            - turn on debugging
+    BT_DEBUG                   turn on debugging
 
 Bugfix patch::
 
@@ -38,7 +43,15 @@ while [ "$1" != "" ]; do
         --help|-h )       usage;;
         --publish)     publish="yes";;
         --gen-profile) gen_profile="yes";;
-        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        *)             if [ -n "$appname" ]; then 
+                            if [ -n "$bugfix_tklpatch" ]; then
+                                usage; 
+                            else
+                                bugfix_tklpatch=$1
+                            fi
+                       else 
+                            appname=$1; 
+                       fi ;;
     esac
     shift
 done
@@ -53,6 +66,9 @@ export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
+
+[ -n "$bugfix_tklpatch" ] || bugfix_tklpatch=$BT/patches/bugfix-releases/$BT_VERSION
+[ -d $bugfix_tklpatch ] || fatal "$bugfix_tklpatch not found"
 
 O=$BT_BUILDS/iso
 mkdir -p $O
@@ -78,9 +94,6 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
-bugfix_patch=$BT/patches/bugfix-releases/$BT_VERSION
-[ -d $bugfix_patch ] || fatal "$bugfix_patch not found"
-
 if [ ! -e "$BT_PROFILES/$appname" ]; then
     warning "$BT_PROFILES/$appname does not exist, skipping profile generation"
 fi
@@ -91,8 +104,13 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
-tklpatch-apply $rootfs $bugfix_patch/common
-[ -d $bugfix_patch/$appname ] && tklpatch-apply $rootfs $bugfix_patch/$appname
+if [ -d $bugfix_tklpatch/common ]; then
+    tklpatch-apply $rootfs $bugfix_tklpatch/common
+else
+    tklpatch-apply $rootfs $bugfix_tklpatch/
+fi
+
+[ -d $bugfix_tklpatch/$appname ] && tklpatch-apply $rootfs $bugfix_tklpatch/$appname
 
 $BT/bin/generate-manifest $rootfs > $O/$name.manifest
 
