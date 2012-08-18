@@ -22,6 +22,7 @@ Arguments::
 
 Environment::
 
+    BT_BUGFIX_BACKUP_BUCKET    bucket to store backups (e.g., s3://eu-bugfix-backup/)
     BT_VERSION                 appliance version (e.g., 11.2-lucid-x86)
 
     BT_PUBLISH_IMGS            rsync destination for release image
@@ -102,6 +103,11 @@ fi
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+
+info "backing up pre-bugfix iso to S3"
+
+s3_backup="$BT_BUGFIX_BACKUP_BUCKET/$(basename $(readlink -f $bugfix_tklpatch))"
+s3cmd put $BT_ISOS/$isofile $s3_backup
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
