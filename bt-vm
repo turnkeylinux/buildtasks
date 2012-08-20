@@ -58,11 +58,13 @@ export VM_URL="http://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
 
 case "$appname" in
-    appengine)        export VM_MEMORY=384 ;;
+    canvas)           export VM_MEMORY=512 ;;
+    gitlab)           export VM_MEMORY=512 ;;
+    jenkins)          export VM_MEMORY=512 ;;
+    clipbucket)       export VM_MEMORY=512 ;;
     moodle)           export VM_MEMORY=384 ;;
-    openbravo)        export VM_MEMORY=384 ;;
     tomcat-apache)    export VM_MEMORY=384 ;;
-    zimbra)           export VM_MEMORY=640 ;;
+    appengine-java)   export VM_MEMORY=384 ;;
     *)                export VM_MEMORY=256 ;;
 esac
 
