@@ -27,7 +27,10 @@ ssh root@$FQDN
 /etc/init.d/shellinabox stop
 /etc/init.d/webmin stop
 
-sed -i "/multiverse/ s/# //g" /etc/apt/sources.list.d/*.list
+apt-get install sysv-rc-conf
+
+sysv-rc-conf shellinabox off
+sysv-rc-conf webmin off
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
