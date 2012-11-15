@@ -4,13 +4,13 @@
 
 # Display ssh fingerprints in console log to allow user verification
 # Display root password just incase user can't use ssh key to login
-echo "#######################################"
-echo "-----  SSH HOST KEY FINGERPRINTS  -----"
+echo
+echo "################################## [ LOGIN DETAILS ] ###################################"
+echo
+echo "                        Random initial root password: $ROOT_PASS"
+echo
 ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub
 ssh-keygen -l -f /etc/ssh/ssh_host_dsa_key.pub
-echo "-----  SSH HOST KEY FINGERPRINTS  -----"
-echo "-----        ROOT PASSWORD        -----"
-echo "$ROOT_PASS"                             
-echo "-----        ROOT PASSWORD        -----"
-echo "#######################################"
-
+echo
+echo "########################################################################################"
+echo
