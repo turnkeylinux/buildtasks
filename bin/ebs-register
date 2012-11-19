@@ -7,7 +7,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 snapshot_name
-Register snapshot as an ebs ami
+Register snapshot as an ebs ami, and share with aws-marketplace if us-east-1
 
 Arguments::
 
@@ -48,4 +48,9 @@ ec2-register \
     --region $REGION --kernel $KERNEL --architecture i386 \
     --name "$snapshot_name" --description "http://www.turnkeylinux.org/$appname" \
     --snapshot $snapshot_id --block-device-mapping "/dev/sda2=ephemeral0"
+
+if [ $REGION == "us-east-1"]; then
+    info "sharing snapshot with aws-marketplace"
+    ec2-modify-snapshot-attribute $snapshot_id -c --add 679593333241
+fi
 
