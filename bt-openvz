@@ -65,6 +65,7 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
+tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/openvz
 
 $BT/bin/aptconf-tag $rootfs openvz
