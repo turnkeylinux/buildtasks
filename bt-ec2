@@ -56,44 +56,13 @@ export BT_CONFIG=$BT/config
 
 export ZONE=$(ec2metadata --availability-zone)
 export REGION=$(echo -n $ZONE | head -c -1)
+export BUCKET=turnkeylinux-$REGION
+export KERNEL=$($BT/bin/ec2-kernel $REGION)
+
+export LOCATION=$REGION
 case "$REGION" in
-    "us-east-1")
-        export KERNEL=$USEAST1_KERNEL
-        export BUCKET=$USEAST1_BUCKET
-        export LOCATION="US"
-        ;;
-    "us-west-1")
-        export KERNEL=$USWEST1_KERNEL
-        export BUCKET=$USWEST1_BUCKET
-        export LOCATION="us-west-1"
-        ;;
-    "us-west-2")
-        export KERNEL=$USWEST2_KERNEL
-        export BUCKET=$USWEST2_BUCKET
-        export LOCATION="us-west-2"
-        ;;
-    "eu-west-1")
-        export KERNEL=$EUWEST1_KERNEL
-        export BUCKET=$EUWEST1_BUCKET
-        export LOCATION="EU"
-        ;;
-    "sa-east-1")
-        export KERNEL=$SAEAST1_KERNEL
-        export BUCKET=$SAEAST1_BUCKET
-        export LOCATION="sa-east-1"
-        ;;
-    "ap-southeast-1")
-        export KERNEL=$APSOUTHEAST1_KERNEL
-        export BUCKET=$APSOUTHEAST1_BUCKET
-        export LOCATION="ap-southeast-1"
-        ;;
-    "ap-northeast-1")
-        export KERNEL=$APNORTHEAST1_KERNEL
-        export BUCKET=$APNORTHEAST1_BUCKET
-        export LOCATION="ap-northeast-1"
-        ;;
-    *)
-        fatal "unrecognized region: $REGION"
+    "us-east-1") export LOCATION="US" ;;
+    "eu-west-1") export LOCATION="EU" ;;
 esac
 
 O=$BT_BUILDS/ec2

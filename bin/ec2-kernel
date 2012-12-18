@@ -1,0 +1,45 @@
+#!/usr/bin/python
+"""
+Displays Amazon Kernel Image (AKI) ID for region
+
+Arguments:
+
+    REGION          Amazon Region
+"""
+import sys
+import getopt
+
+def usage(e=None):
+    if e:
+        print >> sys.stderr, "error: " + str(e)
+
+    print >> sys.stderr, "Syntax: %s REGION" % sys.argv[0]
+    print >> sys.stderr, __doc__.strip()
+    sys.exit(1)
+
+KERNELS = { 
+    'us-east-1': 'aki-407d9529',
+    'us-west-1': 'aki-99a0f1dc',
+    'us-west-2': 'aki-dce26fec',
+    'eu-west-1': 'aki-4deec439',
+    'sa-east-1': 'aki-863ce39b',
+    'ap-southeast-1': 'aki-13d5aa41',
+    'ap-northeast-1': 'aki-d209a2d3',
+}
+
+def main():
+    try:
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help"])
+    except getopt.GetoptError, e:
+        usage(e)
+
+    if len(args) != 1:
+        usage()
+
+    region = args[0]
+
+    print KERNELS[region]
+
+if __name__ == '__main__':
+    main()
+
