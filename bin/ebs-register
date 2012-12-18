@@ -17,6 +17,7 @@ Environment::
 
     REGION          - Amazon region ($REGION)
     KERNEL          - Amazon kernel ID ($KERNEL)
+    ARCHITECTURE    - Architecture ($ARCHITECTURE)
     EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
     EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
 EOF
@@ -29,6 +30,7 @@ fi
 
 [ -n "$REGION" ] || fatal "REGION not set"
 [ -n "$KERNEL" ] || fatal "KERNEL not set"
+[ -n "$ARCHITECTURE" ] || fatal "ARCHITECTURE not set"
 [ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
 [ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
 
@@ -45,7 +47,7 @@ info "registering snapshot ami ($snapshot_name $snapshot_id)"
 
 ec2-register \
     --cert $EC2_CERT --private-key $EC2_PRIVATE_KEY \
-    --region $REGION --kernel $KERNEL --architecture i386 \
+    --region $REGION --kernel $KERNEL --architecture $ARCHITECTURE \
     --name "$snapshot_name" --description "http://www.turnkeylinux.org/$appname" \
     --snapshot $snapshot_id --block-device-mapping "/dev/sda2=ephemeral0"
 
