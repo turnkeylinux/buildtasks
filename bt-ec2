@@ -57,7 +57,8 @@ export BT_CONFIG=$BT/config
 export ZONE=$(ec2metadata --availability-zone)
 export REGION=$(echo -n $ZONE | head -c -1)
 export BUCKET=turnkeylinux-$REGION
-export KERNEL=$($BT/bin/ec2-kernel $REGION)
+export ARCHITECTURE=$(dpkg --print-architecture)
+export KERNEL=$($BT/bin/ec2-kernel $REGION $ARCHITECTURE)
 
 export LOCATION=$REGION
 case "$REGION" in
