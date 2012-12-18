@@ -44,6 +44,8 @@ export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
 
+export ARCHITECTURE=$(dpkg --print-architecture)
+
 O=$BT_BUILDS/openvz
 mkdir -p $O
 
@@ -59,6 +61,10 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
+if $(echo $BT_VERSION | grep -q squeeze); then debianversion="debian-6"; fi
+if $(echo $BT_VERSION | grep -q wheezy); then debianversion="debian-7"; fi
+[ -n "$debianversion" ] || fatal "debianversion could not be determined"
+
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
@@ -71,8 +77,8 @@ tklpatch-apply $rootfs $BT/patches/openvz
 $BT/bin/aptconf-tag $rootfs openvz
 
 # bundle using stupid naming convention
-appversion=$(echo $BT_VERSION | sed "s|-squeeze-x86||")
-stupidname="debian-6-turnkey-${appname}_${appversion}-1_i386"
+appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
+stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${ARCHITECTURE}"
 info "creating $stupidname.tar.gz"
 tar -C $rootfs -zcf $stupidname.tar.gz .
 
