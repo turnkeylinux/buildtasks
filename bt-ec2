@@ -6,15 +6,16 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) < --s3 --ebs > [--publish --secupdates] appname
+Syntax: $(basename $0) < required > [ optional ] appname
 Converts appliance appname (e.g., core) to ec2 s3/ebs backed ami's
 
 Required (one or more must be specified)::
 
     --s3                - build s3 backed ami
     --ebs               - build ebs backed ami
+    --ebs-migrate       - build ebs backed ami and migrate to other regions
 
-Options::
+Optional::
 
     --publish           - if set, image will be made public
     --secupdates        - if set, security updates will be installed
@@ -30,12 +31,13 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )   usage;;
-        --s3)         s3_backed="yes";;
-        --ebs)        ebs_backed="yes";;
-        --publish)    publish="yes";;
-        --secupdates) secupdates="yes";;
-        *)            if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        --help|-h )    usage;;
+        --s3)          s3_backed="yes";;
+        --ebs)         ebs_backed="yes";;
+        --ebs-migrate) ebs_backed="yes"; ebs_migrate="yes";;
+        --publish)     publish="yes";;
+        --secupdates)  secupdates="yes";;
+        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
     shift
 done
@@ -60,6 +62,7 @@ export BUCKET=turnkeylinux-$REGION
 export ARCHITECTURE=$(dpkg --print-architecture)
 export KERNEL=$($BT/bin/ec2-kernel $REGION $ARCHITECTURE)
 
+# only relevant for s3-backed
 export LOCATION=$REGION
 case "$REGION" in
     "us-east-1") export LOCATION="US" ;;
@@ -95,12 +98,23 @@ if [ "$s3_backed" == "yes" ]; then
     [ "$publish" == "yes" ] && $BT/bin/s3-publish $ami_name
 fi
 
-if [ "$ebs_backed" == "ebs" ]; then
+if [ "$ebs_backed" == "yes" ]; then
     snapshot_name=$($BT/bin/ec2-uniquename $name.ebs)
     $BT/bin/aptconf-tag $rootfs ebs
     $BT/bin/ebs-bundle $rootfs $snapshot_name
     $BT/bin/ebs-register $snapshot_name
     [ "$publish" == "yes" ] && $BT/bin/ebs-publish $snapshot_name
+
+    if [ "$ebs_migrate" == "yes" ]; then
+        region_src=$REGION
+        for region_dst in $(echo $ALL_REGIONS | sed "s|$src_region||"); do
+            export REGION=$region_dst
+            export KERNEL=$($BT/bin/ec2-kernel $region_dst $ARCHITECTURE)
+            $BT/bin/ebs-migrate $region_src $region_dst $snapshot_name
+            $BT/bin/ebs-register $snapshot_name
+            [ "$publish" == "yes" ] && $BT/bin/ebs-publish $snapshot_name
+        done
+    fi
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
