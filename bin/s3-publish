@@ -36,9 +36,9 @@ fi
 
 ami_name=$1
 
-info "determining ami id ($ami_name)"
+info "determining ami_id ($ami_name)"
 ami_id=$(ec2-describe-images --region=$REGION --owner=$AWS_USERID --filter name=$ami_name | cut -f 2 | head -n1)
-[ "$ami_id" ] || fatal "could not determine ami id"
+[ "$ami_id" ] || fatal "could not determine ami_id"
 
 info "assigning productcode ($AWS_PRODUCTCODE) to ($ami_name $ami_id)"
 ec2-modify-image-attribute --region=$REGION $ami_id --product-code $AWS_PRODUCTCODE
