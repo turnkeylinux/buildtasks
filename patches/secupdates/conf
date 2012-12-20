@@ -1,11 +1,5 @@
 #!/bin/bash -e
 
-ARCHIVE=$(auto-apt-archive ubuntu)
-LISTDIR=/etc/apt/sources.list.d
-
-cp $LISTDIR/*.list /tmp/
-sed -i "s|http://\(.*\)archive.ubuntu.com/ubuntu|$ARCHIVE|g" $LISTDIR/*.list
-
 for actionfile in /etc/cron-apt/action.d/*; do
     while read aptcmd; do
         aptcmd=$(echo $aptcmd | sed "s|-q||")
@@ -14,7 +8,7 @@ for actionfile in /etc/cron-apt/action.d/*; do
     done < $actionfile
 done
 
-INSTALLED=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-2.6.*')
+INSTALLED=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-3.*')
 CURRENT=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-|linux-image-|')
 for KERNEL in $INSTALLED; do
     [ "$KERNEL" == "$CURRENT" ] && continue
@@ -25,6 +19,4 @@ apt-get clean
 rm -f /boot/*.bak
 rm -f /var/cache/apt/*.bin
 rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
-
-mv /tmp/*.list $LISTDIR/
 

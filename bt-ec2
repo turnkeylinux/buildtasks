@@ -6,12 +6,17 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish --secupdates] appname
-Converts appliance appname (e.g., core) to ec2 s3 backed ami
+Syntax: $(basename $0) < --s3 --ebs > [--publish --secupdates] appname
+Converts appliance appname (e.g., core) to ec2 s3/ebs backed ami's
+
+Required (one or more must be specified)::
+
+    --s3                - build s3 backed ami
+    --ebs               - build ebs backed ami
 
 Options::
 
-    --publish           - if set, image will be devpay'ed and made public
+    --publish           - if set, image will be made public
     --secupdates        - if set, security updates will be installed
 
 Environment::
@@ -25,7 +30,9 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )      usage;;
+        --help|-h )   usage;;
+        --s3)         s3_backed="yes";;
+        --ebs)        ebs_backed="yes";;
         --publish)    publish="yes";;
         --secupdates) secupdates="yes";;
         *)            if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
@@ -34,6 +41,8 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appname" ] || usage
+[[ -n "$s3_backed" || -n "$ebs_backed" ]] || fatal "s3 and/or ebs not specified"
+
 [ -n "$publish" ] || warning "--publish was not specified"
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
 
@@ -47,47 +56,17 @@ export BT_CONFIG=$BT/config
 
 export ZONE=$(ec2metadata --availability-zone)
 export REGION=$(echo -n $ZONE | head -c -1)
+export BUCKET=turnkeylinux-$REGION
+export ARCHITECTURE=$(dpkg --print-architecture)
+export KERNEL=$($BT/bin/ec2-kernel $REGION $ARCHITECTURE)
+
+export LOCATION=$REGION
 case "$REGION" in
-    "us-east-1")
-        export KERNEL=$USEAST1_KERNEL
-        export BUCKET=$USEAST1_BUCKET
-        export LOCATION="US"
-        ;;
-    "us-west-1")
-        export KERNEL=$USWEST1_KERNEL
-        export BUCKET=$USWEST1_BUCKET
-        export LOCATION="us-west-1"
-        ;;
-    "us-west-2")
-        export KERNEL=$USWEST2_KERNEL
-        export BUCKET=$USWEST2_BUCKET
-        export LOCATION="us-west-2"
-        ;;
-    "eu-west-1")
-        export KERNEL=$EUWEST1_KERNEL
-        export BUCKET=$EUWEST1_BUCKET
-        export LOCATION="EU"
-        ;;
-    "sa-east-1")
-        export KERNEL=$SAEAST1_KERNEL
-        export BUCKET=$SAEAST1_BUCKET
-        export LOCATION="sa-east-1"
-        ;;
-    "ap-southeast-1")
-        export KERNEL=$APSOUTHEAST1_KERNEL
-        export BUCKET=$APSOUTHEAST1_BUCKET
-        export LOCATION="ap-southeast-1"
-        ;;
-    "ap-northeast-1")
-        export KERNEL=$APNORTHEAST1_KERNEL
-        export BUCKET=$APNORTHEAST1_BUCKET
-        export LOCATION="ap-northeast-1"
-        ;;
-    *)
-        fatal "unrecognized region: $REGION"
+    "us-east-1") export LOCATION="US" ;;
+    "eu-west-1") export LOCATION="EU" ;;
 esac
 
-O=$BT_BUILDS/s3
+O=$BT_BUILDS/ec2
 mkdir -p $O
 
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
@@ -97,29 +76,35 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
-ami_name=$($BT/bin/ec2-uniquename $name.s3)
-
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
+tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
 
-$BT/bin/aptconf-tag $rootfs s3
+if [ "$s3_backed" == "yes" ]; then
+    ami_name=$($BT/bin/ec2-uniquename $name.s3)
+    $BT/bin/aptconf-tag $rootfs s3
+    $BT/bin/s3-bundle $rootfs $ami_name
+    $BT/bin/s3-register $ami_name.manifest.xml
+    [ "$publish" == "yes" ] && $BT/bin/s3-publish $ami_name
+fi
 
-$BT/bin/s3-bundle $rootfs $ami_name
-$BT/bin/s3-register $ami_name.manifest.xml
-
-# publish if specified
-if [ "$publish" == "yes" ]; then
-    $BT/bin/s3-publish $ami_name
+if [ "$ebs_backed" == "ebs" ]; then
+    snapshot_name=$($BT/bin/ec2-uniquename $name.ebs)
+    $BT/bin/aptconf-tag $rootfs ebs
+    $BT/bin/ebs-bundle $rootfs $snapshot_name
+    $BT/bin/ebs-register $snapshot_name
+    [ "$publish" == "yes" ] && $BT/bin/ebs-publish $snapshot_name
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
 fi
+
