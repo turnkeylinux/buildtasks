@@ -7,7 +7,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 rootfs ami_name
-Bundles rootfs into an s3 ami ready for upload
+Bundles rootfs into an s3 ami and uploads
 
 Arguments::
 
@@ -18,8 +18,11 @@ Environment::
 
     REGION          - Amazon region ($REGION)
     KERNEL          - Amazon kernel ID ($KERNEL)
+    BUCKET          - Bucket to store AMI ($BUCKET)
     ARCHITECTURE    - Architecture ($ARCHITECTURE)
     AWS_USERID      - Amazon user id without dashes ($AWS_USERID)
+    AWS_ACCESSKEY   - Amazon s3 access key ($AWS_ACCESSKEY)
+    AWS_SECRETKEY   - Amazon s3 secret key ($AWS_SECRETKEY)
     EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
     EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
 EOF
@@ -35,10 +38,19 @@ ami_name=$2
 
 [ -n "$REGION" ] || fatal "REGION not set"
 [ -n "$KERNEL" ] || fatal "KERNEL not set"
+[ -n "$BUCKET" ] || fatal "BUCKET not set"
 [ -n "$ARCHITECTURE" ] || fatal "ARCHITECTURE not set"
 [ -n "$AWS_USERID" ] || fatal "AWS_USERID not set"
+[ -n "$AWS_ACCESSKEY" ] || fatal "AWS_ACCESSKEY not set"
+[ -n "$AWS_SECRETKEY" ] || fatal "AWS_SECRETKEY not set"
 [ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
 [ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+case "$REGION" in
+    "us-east-1") export location="US" ;;
+    "eu-west-1") export location="EU" ;;
+    *)           export location=$REGION ;;
+esac
 
 info "creating sparse loopback filesystem"
 dd if=/dev/null of=$rootfs.img bs=1 seek=10G
@@ -62,3 +74,9 @@ ec2-bundle-image \
 
 info "removing loopback"
 rm $rootfs.img
+
+info "uploading bundled ami ($BUCKET/$ami_name.manifest.xml)"
+ec2-upload-bundle --batch --retry \
+    --access-key $AWS_ACCESSKEY --secret-key $AWS_SECRETKEY \
+    --bucket $BUCKET --manifest $ami_name.manifest.xml --location $location
+

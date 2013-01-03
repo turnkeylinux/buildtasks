@@ -1,0 +1,49 @@
+#!/bin/bash -e
+# depends on ec2-ami-tools
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 region_src region_dst snapshot_name
+Copy snapshot from source region to destination region
+
+Arguments::
+
+    region_src      - source region to copy snapshot from
+    region_dst      - destination region to copy snapshot to
+    snapshot_name   - name of snapshot
+
+Environment::
+
+    EC2_CERT        - Amazon X509 certificate path ($EC2_CERT)
+    EC2_PRIVATE_KEY - Amazon X509 private-key path ($EC2_PRIVATE_KEY)
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+[ -f "$EC2_CERT" ] || fatal "EC2_CERT not set or does not exist"
+[ -f "$EC2_PRIVATE_KEY" ] || fatal "EC2_PRIVATE_KEY not set or does not exist"
+
+region_src=$1
+region_dst=$2
+snapshot_name=$3
+
+info "determining source snapshot_id"
+snap_id=$(ec2-describe-snapshots --region $region_src |grep $snapshot_name |cut -f2)
+[ "$snap_id" ] || fatal "could not determine snapshot_id"
+[ "$(echo $snap_id | wc -w)" == "1" ] || fatal "more than one snapshot match"
+
+info "copying $snap_id to $region_dst"
+SNAPSHOTID=$(ec2-copy-snapshot -r $region_src -s $snap_id -d "$snapshot_name")
+while ec2-describe-snapshots --region $region_dst $SNAPSHOTID | grep -q pending
+  do echo -n .; sleep 3; done
+
+info "successfully copied to $SNAPSHOTID"
+
