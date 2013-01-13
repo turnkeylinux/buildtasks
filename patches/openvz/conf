@@ -32,9 +32,6 @@ sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
 
 update-rc.d -f confconsole disable
 
-# disable sshd dns checks (if resolution fails will prevent logins)
-echo "UseDNS no" >> /etc/ssh/sshd_config
-
 # modprobe doesn't work in openvz
 mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
