@@ -39,6 +39,6 @@ while true; do
     sleep 5
 done
 
-cd ../
+cd -
 rm -rf $tmpdir
 
