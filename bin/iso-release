@@ -1,0 +1,54 @@
+#!/bin/bash -e
+
+info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) outdir
+Generate release files for publishing
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help )    usage;;
+        *)          if [ -n "$O" ]; then usage; else O=$1; fi ;;
+    esac
+    shift
+done
+
+[ -e changelog ] || fatal "changelog not found"
+[ -e build/product.iso ] || fatal "build/product.iso not found"
+[ -e build/root.patched ] || fatal "build/root.patched not found"
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+. $BT/config/common.cfg
+
+[ -n "$O" ] || usage
+[ -e "$O" ] || fatal "$O does not exist"
+
+rootfs=build/root.patched
+name=$(cat $rootfs/etc/turnkey_version)
+appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+[ -n "$name" ] || fatal "could not identify name"
+
+[ -e $O/$name.iso ] && fatal "$O/$name.iso already exists"
+[ -e $O/$name.iso.sig ] && fatal "$O/$name.iso.sig already exists"
+[ -e $O/$name.manifest ] && fatal "$O/$name.manifest already exists"
+[ -e $O/$name.changelog ] && fatal "$O/$name.changelog already exists"
+[ -e $O/$name.tklbam ] && fatal "$O/$name.tklbam already exists"
+
+[ -e build/log ] && cp build/log $O/$name.log
+cp changelog $O/$name.changelog
+ln build/product.iso $O/$name.iso
+$BT/bin/generate-signature $O/$name.iso
+$BT/bin/generate-manifest $rootfs > $O/$name.manifest
+if [ -e $BT_PROFILES/$appname ]; then
+    mkdir -p $O/$name.tklbam
+    $BT/bin/generate-tklbam-profile $O/$name.iso $O/$name.tklbam
+fi
+
