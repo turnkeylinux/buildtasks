@@ -1,0 +1,58 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [ --publish ] appname
+Builds appliance appname (e.g., core) ISO
+
+Options::
+
+    --publish               publish iso, release files and tklbam profile
+
+Environment::
+
+    BT_DEBUG                turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        --publish)     publish="yes";;
+        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+[ -e $BT_PRODUCTS/$appname ] || fatal "$BT_PRODUCTS/$appname does not exist"
+cd $BT_PRODUCTS/$appname
+deck -D build/root.tmp || true
+make clean
+time make 2>&1 |tee build/log
+
+mkdir -p $BT_ISOS
+$BT/bin/iso-release $BT_ISOS
+
+if [ "$publish" == "yes" ]; then
+    name=$(cat build/root.patched/etc/turnkey_version)
+    $BT/bin/iso-publish $BT_ISOS/$name.iso
+fi
+
+if [ -z "$BT_DEBUG" ]; then
+    deck -D build/root.tmp
+    make clean
+fi
+
