@@ -1,0 +1,44 @@
+#!/bin/bash -e
+
+info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+
+FILES=$*
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) iso...isoN
+Publish release ISO and related metafiles
+EOF
+exit 1
+}
+
+if [[ "${#FILES}" < "1" ]]; then
+    usage
+fi
+
+export BT=$(dirname (dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+. $BT/config/common.cfg
+
+for f in $FILES; do
+    [ -e $f ] || fatal "$f does not exist"
+
+    O=$(dirname $f)
+    name=$(basename $f | sed 's/.iso//')
+    appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+    version=$(echo $name |perl -pe 's/.*?-(\d.*)/\1/')
+
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
+    $BT/bin/publish-files $O/$name.{iso,iso.sig}
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$version/
+    $BT/bin/publish-files $O/$name.{changelog,manifest,iso.sig}
+
+    if [ -e $O/$name.tklbam/*.tar.gz ]; then
+        export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+        $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
+    fi
+done
+
