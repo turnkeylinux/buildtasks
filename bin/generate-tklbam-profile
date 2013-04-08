@@ -87,7 +87,8 @@ class Profile:
 
     @staticmethod
     def _get_turnkey_version(rootfs):
-        return executil.getoutput("turnkey-version", rootfs)
+        version = file(os.path.join(rootfs, 'etc/turnkey_version'), 'r').read()
+        return version.strip()
 
     @staticmethod
     def _get_codename(turnkey_version):
