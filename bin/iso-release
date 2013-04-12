@@ -49,6 +49,7 @@ $BT/bin/generate-signature $O/$name.iso
 $BT/bin/generate-manifest $rootfs > $O/$name.manifest
 if [ -e $BT_PROFILES/$appname ]; then
     mkdir -p $O/$name.tklbam
+    export PROFILES_CONF=$BT_PROFILES
     $BT/bin/generate-tklbam-profile $O/$name.iso $O/$name.tklbam
 fi
 
