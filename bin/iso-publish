@@ -18,7 +18,7 @@ if [[ "${#FILES}" < "1" ]]; then
     usage
 fi
 
-export BT=$(dirname (dirname $(readlink -f $0)))
+export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
 . $BT/config/common.cfg
 
