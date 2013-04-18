@@ -44,7 +44,7 @@ make clean
 time make 2>&1 |tee build/log
 
 mkdir -p $BT_ISOS
-$BT/bin/iso-release $BT_ISOS
+$BT/bin/iso-release --force $BT_ISOS
 
 if [ "$publish" == "yes" ]; then
     name=$(cat build/root.patched/etc/turnkey_version)

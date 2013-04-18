@@ -8,14 +8,20 @@ usage() {
 cat<<EOF
 Syntax: $(basename $0) outdir
 Generate release files for publishing
+
+Options::
+
+    --force             delete release files in outdir if they exist
+
 EOF
 exit 1
 }
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help )    usage;;
-        *)          if [ -n "$O" ]; then usage; else O=$1; fi ;;
+        --help|-h )  usage;;
+        --force)     force="yes";;
+        *)           if [ -n "$O" ]; then usage; else O=$1; fi ;;
     esac
     shift
 done
@@ -35,6 +41,15 @@ rootfs=build/root.patched
 name=$(cat $rootfs/etc/turnkey_version)
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 [ -n "$name" ] || fatal "could not identify name"
+
+if [ "$force" == "yes" ]; then
+    rm -f $O/$name.iso
+    rm -f $O/$name.iso.sig
+    rm -f $O/$name.manifest
+    rm -f $O/$name.changelog
+    rm -f $O/$name.log
+    rm -rf $O/$name.tklbam
+fi
 
 [ -e $O/$name.iso ] && fatal "$O/$name.iso already exists"
 [ -e $O/$name.iso.sig ] && fatal "$O/$name.iso.sig already exists"
