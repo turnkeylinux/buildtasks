@@ -40,8 +40,9 @@ export BT_CONFIG=$BT/config
 [ -e $BT_PRODUCTS/$appname ] || fatal "$BT_PRODUCTS/$appname does not exist"
 cd $BT_PRODUCTS/$appname
 deck -D build/root.tmp || true
-make clean
-time make 2>&1 |tee build/log
+make clean || true
+make || true
+[ -e build/product.iso ] || fatal "build failed"
 
 mkdir -p $BT_ISOS
 $BT/bin/iso-release --force $BT_ISOS
