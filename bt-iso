@@ -42,7 +42,12 @@ cd $BT_PRODUCTS/$appname
 deck -D build/root.tmp || true
 make clean || true
 make || true
-[ -e build/product.iso ] || fatal "build failed"
+
+if [ ! -e build/product.iso ]; then
+    deck -D build/root.tmp || true
+    make clean || true
+    fatal "build failed..."
+fi
 
 mkdir -p $BT_ISOS
 $BT/bin/iso-release --force $BT_ISOS
