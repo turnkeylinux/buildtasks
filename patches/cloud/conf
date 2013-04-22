@@ -1,5 +1,16 @@
 #!/bin/sh -ex
 
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+# install cloud required packages
+install ec2metadata
+
 # copy mntbind inithook in everyboot
 INITHOOKS=/usr/lib/inithooks
 cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
@@ -7,9 +18,11 @@ cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
 # disable confconsole init script
 update-rc.d -f confconsole disable
 
-# create symlink to ec2metadata
-ln -s /usr/local/lib/python2.6/dist-packages/ec2metadata.py /usr/local/bin/ec2metadata
-
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
+# cleanup
+apt-get clean
+rm -f /boot/*.bak
+rm -f /var/cache/apt/*.bin
+rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
