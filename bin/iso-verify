@@ -16,7 +16,8 @@ Arguments::
 
 Environment::
 
-    BT_RELEASE_KEY  - GPG release key ID
+    BT_CONFIG   - path to buildtasks config directory
+
 EOF
 exit 1
 }
@@ -32,21 +33,19 @@ appname=$3
 isofile=turnkey-$appname-$version.iso
 sigfile=turnkey-$appname-$version.iso.sig
 
-[ -n "$BT_RELEASE_KEY" ] || fatal "BT_RELEASE_KEY not set"
+[ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
 
 if [ -e $isodir/$sigfile ]; then
     info "$sigfile already exists, skipping..."
     exit 0
 fi
 
-if ! gpg --list-keys $BT_RELEASE_KEY 2>&1 >/dev/null; then
-    gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0x$BT_RELEASE_KEY
-fi
-
 src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
 wget $src -O $isodir/$sigfile
 
 if ! gpg --verify $isodir/$sigfile; then
+
+if ! GNUPGHOME=$BT_CONFIG/gnupg gpg --verify $isodir/$sigfile; then
     mv $isodir/$isofile $isodir/$isofile.corrupt
     rm $isodir/$sigfile
     fatal "$isofile verification failed"
