@@ -17,7 +17,7 @@ get_instanceid_fs() {
 }
 
 get_instanceid_md() {
-    ec2metadata --instance-id
+    /usr/bin/ec2metadata --instance-id
 }
 
 INSTANCEID_FS=$(get_instanceid_fs)
