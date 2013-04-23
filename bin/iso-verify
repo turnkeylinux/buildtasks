@@ -41,7 +41,7 @@ if [ -e $isodir/$sigfile ]; then
 fi
 
 src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
-wget $src -O $isodir/$sigfile
+wget --read-timeout=60 --tries=10 $src -O $isodir/$sigfile
 
 if ! gpg --verify $isodir/$sigfile; then
 
