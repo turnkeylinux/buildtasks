@@ -1,0 +1,24 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+CLEANUP='/boot/*.bak /var/log/dpkg.log /var/log/apt/* /var/lib/apt/lists/* /var/cache/apt/archives/*.deb /var/cache/apt/*.bin'
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) rootfs-dir
+Cleans up logs, caches and leftover files in rootfs
+EOF
+exit 1
+}
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+[ -d $rootfs ] || fatal "no such directory: $rootfs"
+
+tklpatch-chroot $rootfs "rm -rf $CLEANUP"
+fuser -k $rootfs || true
+

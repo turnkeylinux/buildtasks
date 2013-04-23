@@ -21,8 +21,3 @@ update-rc.d -f confconsole disable
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
-# cleanup
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}

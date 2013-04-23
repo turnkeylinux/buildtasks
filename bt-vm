@@ -80,6 +80,7 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/vm
+$BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs vm
 

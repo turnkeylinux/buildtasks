@@ -15,8 +15,3 @@ for KERNEL in $INSTALLED; do
     DEBIAN_FRONTEND=noninteractive apt-get -y purge $KERNEL
 done
 
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
-

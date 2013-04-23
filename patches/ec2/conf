@@ -20,8 +20,3 @@ sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst
 sed -i 's| console=hvc0| xencons=hvc0 console=hvc0|' /boot/grub/menu.lst
 update-grub-legacy-ec2
 
-# cleanup
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}

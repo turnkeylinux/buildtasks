@@ -24,9 +24,3 @@ mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 # hold kernel (not used in image, pro-longs sec-updates)
 echo "linux-image-xen-686 hold" | dpkg --set-selections
 
-# cleanup
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
-

@@ -60,6 +60,7 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/openstack
+$BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs openstack
 

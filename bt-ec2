@@ -84,6 +84,7 @@ tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
+$BT/bin/rootfs-cleanup $rootfs
 
 if [ "$s3_backed" == "yes" ]; then
     ami_name=$($BT/bin/ec2-uniquename $name.s3)
