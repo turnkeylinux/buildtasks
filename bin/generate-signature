@@ -14,7 +14,7 @@ Arguments::
 
 Environment::
 
-    BT_CONFIG       - Patch to buildtasks config directory
+    BT_CONFIG       - path to buildtasks config directory
 
 EOF
 exit 1
