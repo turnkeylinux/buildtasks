@@ -1,6 +1,8 @@
 # Copyright (c) 2013 Alon Swartz <alon@turnkeylinux.org>
 
 import os
+import sys
+import logging
 
 import conf
 
@@ -66,6 +68,20 @@ def get_uniquename(region, name):
         name = inc_name(name)
 
     return name
+
+def get_logger(name, level=None):
+    logger = logging.getLogger(name)
+
+    if not logger.handlers:
+        stdout = logging.StreamHandler(sys.stdout)
+        stdout.setFormatter(logging.Formatter(
+            '%(levelname)s [%(name)s]: %(message)s'))
+        logger.addHandler(stdout)
+
+        level = level if level else conf.LOG_LEVEL
+        logger.setLevel(getattr(logging, level))
+
+    return logger
 
 def is_mounted(path):
     mounts = file("/proc/mounts").read()
