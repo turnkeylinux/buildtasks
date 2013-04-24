@@ -28,6 +28,9 @@ def get_zone():
 def get_region():
     return ec2metadata.get('availability-zone')[0:-1]
 
+def get_regions():
+    return conf.KERNELS.keys()
+
 def get_kernel(region, arch):
     return conf.KERNELS[region][arch]
 
