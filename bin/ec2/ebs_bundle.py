@@ -198,8 +198,8 @@ def main():
     except getopt.GetoptError, e:
         usage(e)
 
+    fs = 'ext4'
     size = 10
-    filesystem = 'ext4'
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
