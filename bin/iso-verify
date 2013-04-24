@@ -43,8 +43,6 @@ fi
 src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
 wget --read-timeout=60 --tries=10 $src -O $isodir/$sigfile
 
-if ! gpg --verify $isodir/$sigfile; then
-
 if ! GNUPGHOME=$BT_CONFIG/gnupg gpg --verify $isodir/$sigfile; then
     mv $isodir/$isofile $isodir/$isofile.corrupt
     rm $isodir/$sigfile
