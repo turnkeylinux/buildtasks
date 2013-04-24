@@ -17,6 +17,8 @@ import getopt
 
 import utils
 
+log = utils.get_logger('ebs-share')
+
 def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
@@ -28,8 +30,14 @@ def usage(e=None):
 
 def share_marketplace(snapshot_id, region):
     conn = utils.connect(region)
+
+    log.debug('getting snapshot - %s', snapshot_id)
     snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
+
+    log.debug('sharing with marketplace')
     snapshot.share(user_ids=['679593333241'])
+
+    log.info('shared with marketplace - %s', snapshot_id)
 
 def main():
     try:

@@ -16,6 +16,8 @@ import getopt
 
 import utils
 
+log = utils.get_logger('ebs-copy')
+
 def fatal(e):
     print >> sys.stderr, "error: " + str(e)
     sys.exit(1)
@@ -45,10 +47,14 @@ def copy_image(ami_id, ami_name, ami_region, regions=[]):
         if region == ami_region:
             continue
 
+        log.debug('copying %s (%s) to %s', ami_id, ami_region, region)
+
         conn = utils.connect(region)
         ret = conn.copy_image(ami_region, ami_id, ami_name)
         image = Image(ret.image_id, region)
         images.append(image)
+
+        log.info('pending %s (%s) to %s (%s)', ami_id, ami_region, image.id, region)
 
     return images
 

@@ -24,6 +24,8 @@ import utils
 
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 
+log = utils.get_logger('ebs-register')
+
 class Error(Exception):
     pass
 
@@ -47,6 +49,8 @@ def _parse_name(s):
 
 def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     conn = utils.connect(region)
+
+    log.debug('getting snapshot - %s', snapshot_id)
     snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
 
     size = size if size else snapshot.volume_size
@@ -55,6 +59,7 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     arch = arch if arch else _parse_name(name)[1]
     kernel_id = utils.get_kernel(region, arch)
 
+    log.debug('creating block_device_map')
     rootfs = BlockDeviceType()
     rootfs.delete_on_termination = True
     rootfs.size = size
@@ -67,6 +72,7 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     block_device_map['/dev/sda1'] = rootfs
     block_device_map['/dev/sda2'] = ephemeral
 
+    log.debug('registering image - %s', name)
     ami_id = conn.register_image(
         name=name,
         description=desc,
@@ -75,6 +81,7 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
         root_device_name="/dev/sda1",
         block_device_map=block_device_map)
 
+    log.info('registered image - %s %s %s', ami_id, name, region)
     return ami_id
 
 def main():

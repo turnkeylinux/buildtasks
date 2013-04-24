@@ -17,6 +17,8 @@ import getopt
 
 import utils
 
+log = utils.get_logger('ebs-publish')
+
 def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
@@ -29,11 +31,14 @@ def usage(e=None):
 def share_public(ami_id, region):
     conn = utils.connect(region)
 
+    log.debug('setting image to public - %s', ami_id)
     conn.modify_image_attribute(
         ami_id,
         attribute='launchPermission',
         operation='add',
         groups=['all'])
+
+    log.info('set image to public - %s' % ami_id)
 
 def main():
     try:

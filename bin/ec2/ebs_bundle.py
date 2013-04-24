@@ -22,6 +22,8 @@ import utils
 
 import executil
 
+log = utils.get_logger('ebs-bundle')
+
 def fatal(e):
     print >> sys.stderr, "error: " + str(e)
     sys.exit(1)
@@ -52,8 +54,12 @@ class Snapshot:
         time.sleep(3)
 
     def create(self, volume_id, name):
+        log.debug('creating snapshot - %s %s', volume_id, name)
+
         self.snap = self.conn.create_snapshot(volume_id, name)
         self._wait("completed")
+
+        log.debug('created snapshot - %s', self.snap.id)
 
 class Volume:
     def __init__(self, region=None):
@@ -71,11 +77,16 @@ class Volume:
 
     def create(self, size, zone=None):
         zone = zone if zone else utils.get_zone()
+        log.debug('creating volume - %d %s', size, zone)
+
         self.vol = self.conn.create_volume(size, zone)
         self._wait("available")
+        log.debug('created volume - %s', self.vol.id)
 
     def delete(self):
         if self.vol:
+            log.debug('deleting volume - %s', self.vol.id)
+
             self._wait("available")
             self.vol.delete()
             self.vol = None
@@ -83,16 +94,24 @@ class Volume:
     def attach(self, instance_id, device):
         self.device = device
         if self.vol:
+            log.debug('attaching volume - %s (%s)',
+                      self.device.real_path, self.device.amazon_path)
+
             self.vol.attach(instance_id, self.device.amazon_path)
             while not self.device.exists():
                 time.sleep(1)
 
+            log.debug('attached volume')
+
     def detach(self):
         if self.device:
             if self.device.is_mounted():
+                log.debug('umounting device before detaching volume')
                 self.device.umount()
 
             if self.vol:
+                log.debug('detaching volume')
+
                 self._wait("available")
                 self.vol.detach()
                 self.device = None
@@ -125,13 +144,16 @@ class Device:
         return os.path.exists(self.real_path)
 
     def mount(self, mount_path):
+        log.debug('mounting - %s %s', self.real_path, mount_path)
         utils.mkdir(mount_path)
         executil.system('mount', self.real_path, mount_path)
 
     def umount(self):
+        log.debug('umounting - %s', self.real_path)
         executil.system('umount', '-f', self.real_path)
 
     def mkfs(self, fs):
+        log.debug('mkfs - %s', self.real_path)
         executil.system('mkfs.' + fs, '-F', '-j', self.real_path)
 
     def __del__(self):
@@ -139,28 +161,35 @@ class Device:
             self.umount()
 
 def bundle(rootfs, size=10, filesystem='ext4'):
+    log.debug('getting unique snapshot name')
     app = utils.get_turnkey_version(rootfs)
     snapshot_name = utils.get_uniquename(utils.get_region(), app + '.ebs')
+    log.info('target snapshot - %s ', snapshot_name)
 
+    log.info('creating volume, attaching, formatting and mounting')
     volume = Volume()
     volume.create(size)
 
     device = Device()
     volume.attach(utils.get_instanceid(), device)
+
     device.mkfs(filesystem)
     mount_path = rootfs + '.mount'
     device.mount(mount_path)
 
+    log.info('syncing rootfs to volume')
     utils.rsync(rootfs, mount_path)
 
     device.umount()
     volume.detach()
     os.removedirs(mount_path)
 
+    log.info('creating snapshot from volume')
     snapshot = Snapshot()
     snapshot.create(volume.vol.id, snapshot_name)
     volume.delete()
 
+    log.info("complete - %s %s", snapshot.snap.id, snapshot.snap.description)
     return snapshot.snap.id, snapshot.snap.description
 
 def main():
