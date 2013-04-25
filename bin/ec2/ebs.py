@@ -80,12 +80,10 @@ def main():
     if copy:
         images = copy_image(ami_id, snapshot_name, region, utils.get_regions())
 
-    print "="* 40
     print snapshot_name
-    print "%s - %s" % (ami_id, region)
+    print "  %s - %s" % (ami_id, region)
     for image in images:
-        print "%s - %s" % (image.id, image.region)
-    print "="* 40
+        print "  %s - %s" % (image.id, image.region)
 
 
 if __name__ == "__main__":
