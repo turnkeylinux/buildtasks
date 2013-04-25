@@ -80,34 +80,8 @@ if [ "$backed_ebs" == "yes" ]; then
 fi
 
 if [ "$backed_s3" == "yes" ]; then
-    . $BT_CONFIG/ec2.cfg
-    export ZONE=$(ec2metadata --availability-zone)
-    export REGION=$(echo -n $ZONE | head -c -1)
-    export BUCKET=turnkeylinux-$REGION
-    export ARCHITECTURE=$(dpkg --print-architecture)
-    export KERNEL=$($BT/bin/ec2-kernel $REGION $ARCHITECTURE)
-    [ "$(echo $backed_opts | grep publish)" ] && publish="yes"
-    [ "$(echo $backed_opts | grep copy)" ] && copy="yes"
-
-    ami_name=$($BT/bin/ec2-uniquename $name.s3)
     $BT/bin/aptconf-tag $rootfs s3
-    $BT/bin/s3-bundle $rootfs $ami_name
-    $BT/bin/s3-register $ami_name
-    [ "$publish" == "yes" ] && $BT/bin/s3-publish $ami_name
-
-    if [ "$copy" == "yes" ]; then
-        region_src=$REGION
-        bucket_src=turnkeylinux-$REGION
-        for region_dst in $(echo $ALL_REGIONS | sed "s|$src_region||"); do
-            export REGION=$region_dst
-            export BUCKET=turnkeylinux-$REGION
-            export KERNEL=$($BT/bin/ec2-kernel $region_dst $ARCHITECTURE)
-            $BT/bin/s3-migrate $region_src $region_dst $ami_name
-            $BT/bin/s3-register $ami_name
-            [ "$publish" == "yes" ] && $BT/bin/s3-publish $ami_name
-        done
-        export REGION=$region_src
-    fi
+    $BT/bin/ec2/s3.py $backed_opts $rootfs
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
