@@ -16,6 +16,7 @@ import sys
 import getopt
 
 import utils
+import botohacks
 
 log = utils.get_logger('s3-publish')
 
@@ -29,7 +30,7 @@ def usage(e=None):
     sys.exit(1)
 
 def share_public(ami_id, region):
-    conn = utils.connect(region)
+    conn = botohacks.connect(region)
 
     log.debug('setting product code - %s', ami_id)
     conn.modify_image_attribute(

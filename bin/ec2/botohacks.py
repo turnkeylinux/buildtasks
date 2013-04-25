@@ -40,6 +40,8 @@ class _EC2Connection(EC2Connection):
         if groups:
             self.build_list_params(params, groups, 'UserGroup')
         if product_codes:
+            params.pop('Attribute')
+            params.pop('OperationType')
             self.build_list_params(params, product_codes, 'ProductCode')
         return self.get_status('ModifyImageAttribute', params, verb='POST')
 
