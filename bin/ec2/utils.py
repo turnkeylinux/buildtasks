@@ -1,5 +1,6 @@
 # Copyright (c) 2013 Alon Swartz <alon@turnkeylinux.org>
 
+import re
 import os
 import sys
 import logging
@@ -96,4 +97,16 @@ def mkdir(path):
 
 def rsync(rootfs, dest):
     executil.system('rsync -a -t -r -S -I -H %s/ %s' % (rootfs, dest))
+
+def parse_imagename(s):
+    parsed = {}
+    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*).(ebs|s3.*)", s)
+    if m:
+        parsed['appname'] = m.groups()[0]
+        parsed['version'] = m.groups()[1]
+        parsed['distro'] = m.groups()[2]
+        parsed['architecture'] = m.groups()[3]
+        parsed['url'] = 'http://www.turnkeylinux.org/' + parsed['appname']
+
+    return parsed
 

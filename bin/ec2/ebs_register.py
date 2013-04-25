@@ -16,7 +16,6 @@ Options:
     --arch=         Image architecture (default: enumerated from name)
 
 """
-import re
 import sys
 import getopt
 
@@ -38,15 +37,6 @@ def usage(e=None):
 
     sys.exit(1)
 
-def _parse_name(s):
-    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*)", s.split('.ebs')[0])
-    if m:
-        desc = "http://www.turnkeylinux.org/" + m.groups()[0]
-        arch = m.groups()[3]
-        return (desc, arch)
-
-    raise Error("could not correctly parse: " % s)
-
 def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     conn = utils.connect(region)
 
@@ -55,8 +45,8 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
 
     size = size if size else snapshot.volume_size
     name = name if name else snapshot.description
-    desc = desc if desc else _parse_name(name)[0]
-    arch = arch if arch else _parse_name(name)[1]
+    desc = desc if desc else utils.parse_imagename(name)['url']
+    arch = arch if arch else utils.parse_imagename(name)['architecture']
     kernel_id = utils.get_kernel(region, arch)
 
     log.debug('creating block_device_map')
