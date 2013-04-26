@@ -22,6 +22,8 @@ import utils
 
 import executil
 
+from boto.exception import EC2ResponseError
+
 log = utils.get_logger('ebs-bundle')
 
 def fatal(e):
@@ -83,12 +85,26 @@ class Volume:
         self._wait("available")
         log.debug('created volume - %s', self.vol.id)
 
-    def delete(self):
+    def delete(self, max_attempts=5):
         if self.vol:
-            log.debug('deleting volume - %s', self.vol.id)
+            attempt = 0
+            while True:
+                attempt += 1
+                log.debug('deleting volume %s (attempt %d)', self.vol.id, attempt)
+                self._wait("available")
+                try:
+                    self.vol.delete()
+                    break
+                except EC2ResponseError, e:
+                    error_code = e.errors[0][0]
+                    log.debug('delete failed %s - %s)', self.vol.id, error_code)
+                    if not error_code == "Client.VolumeInUse":
+                        raise
 
-            self._wait("available")
-            self.vol.delete()
+                    if max_attempts == attempt:
+                        log.debug('all delete attempts failed - %s)', self.vol.id)
+                        raise
+
             self.vol = None
 
     def attach(self, instance_id, device):
@@ -118,7 +134,7 @@ class Volume:
 
     def __del__(self):
         self.detach()
-        self.delete()
+        self.delete(max_attempts=1)
 
 class Device:
     def __init__(self):
