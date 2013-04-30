@@ -47,7 +47,9 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     name = name if name else snapshot.description
     desc = desc if desc else utils.parse_imagename(name)['url']
     arch = arch if arch else utils.parse_imagename(name)['architecture']
+
     kernel_id = utils.get_kernel(region, arch)
+    arch_ec2 = "x86_64" if arch == "amd64" else arch
 
     log.debug('creating block_device_map')
     rootfs = BlockDeviceType()
@@ -66,7 +68,7 @@ def register(snapshot_id, region, size=None, arch=None, name=None, desc=None):
     ami_id = conn.register_image(
         name=name,
         description=desc,
-        architecture=arch,
+        architecture=arch_ec2,
         kernel_id=kernel_id,
         root_device_name="/dev/sda1",
         block_device_map=block_device_map)
