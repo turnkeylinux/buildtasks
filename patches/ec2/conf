@@ -1,5 +1,7 @@
 #!/bin/sh -ex
 
+fatal() { echo "FATAL: $@" 1>&2; exit 1; }
+
 install() {
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get -y \
@@ -8,20 +10,33 @@ install() {
         install $@
 }
 
-# install ec2 required packages
-install hubclient ebsmount
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    "i386")
+        PACKAGES="linux-image-xen-686 libc6-xen";
+        PURGE_RE="linux-image-*686";
+        ;;
+    "amd64")
+        PACKAGES="linux-image-xen-amd64";
+        PURGE_RE="linux-image-*amd64";
+        ;;
+    *)
+        fatal "non-supported architecture: $ARCH";
+        ;;
+esac
 
 # link update-grub to update-grub-legacy-ec2
 mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
 ln -s /usr/sbin/update-grub-legacy-ec2 /usr/sbin/update-grub
+
+# install ec2 required packages
+install $PACKAGES hubclient ebsmount
+
+# remove packages we don't need (eg. generic kernel)
+dpkg --purge $(dpkg-query --showformat='${Package}\n' -W $PURGE_RE | grep -v xen)
 
 # fix grub
 sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst
 sed -i 's| console=hvc0| xencons=hvc0 console=hvc0|' /boot/grub/menu.lst
 update-grub-legacy-ec2
 
-# cleanup
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}

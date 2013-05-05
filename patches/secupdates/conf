@@ -8,15 +8,10 @@ for actionfile in /etc/cron-apt/action.d/*; do
     done < $actionfile
 done
 
-INSTALLED=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-3.*')
+INSTALLED=$(dpkg-query --showformat='${Package}\n' -W 'linux-image-2.6.*')
 CURRENT=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-|linux-image-|')
 for KERNEL in $INSTALLED; do
     [ "$KERNEL" == "$CURRENT" ] && continue
     DEBIAN_FRONTEND=noninteractive apt-get -y purge $KERNEL
 done
-
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
 

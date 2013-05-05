@@ -6,21 +6,10 @@ warning() { echo "WARNING [$(basename $0)]: $@"; }
 
 FILES=$*
 
-set ${BT:=/turnkey/public/buildtasks}
-
 usage() {
 cat<<EOF
 Syntax: $(basename $0) iso...isoN
-Publish release
-
-Options::
-
-    --help              - display this help
-
-Environment variables::
-
-    BT                  - $BT
-
+Publish release ISO and related metafiles
 EOF
 exit 1
 }
@@ -29,17 +18,9 @@ if [[ "${#FILES}" < "1" ]]; then
     usage
 fi
 
-# check dependencies
-[ `whoami` == 'root' ] && fatal "running as root is not supported"
-
-export BT=$BT
+export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
 . $BT/config/common.cfg
-
-# display usage if required (cli)
-[ "$USAGE" == "y" ] && usage
-
-export NO_COPY_SSHCONF=y
 
 for f in $FILES; do
     [ -e $f ] || fatal "$f does not exist"
@@ -60,3 +41,4 @@ for f in $FILES; do
         $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
     fi
 done
+

@@ -20,9 +20,3 @@ sed -i 's/^PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_conf
 echo -n > /etc/udev/rules.d/70-persistent-net.rules
 echo -n > /lib/udev/rules.d/75-persistent-net-generator.rules
 
-# cleanup
-apt-get clean
-rm -f /boot/*.bak
-rm -f /var/cache/apt/*.bin
-rm -f /var/lib/apt/lists/{*_Release*,*_Packages}
-
