@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 install() {
     apt-get update
@@ -8,15 +8,34 @@ install() {
         install $@
 }
 
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    "i386")
+        OLD_META_KERNEL="linux-image-686";
+        NEW_META_KERNEL="linux-image-xen-686";
+        NEW_PACKAGES="libc6-xen";
+        ;;
+    "amd64")
+        OLD_META_KERNEL="linux-image-amd64";
+        NEW_META_KERNEL="linux-image-xen-amd64";
+        ;;
+    *)
+        fatal "non-supported architecture: $ARCH";
+        ;;
+esac
+OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
+
 # link update-grub to update-grub-legacy-ec2
 mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
 ln -s /usr/sbin/update-grub-legacy-ec2 /usr/sbin/update-grub
 
-# install required packages
-install linux-image-xen-686 libc6-xen
+install $NEW_META_KERNEL $NEW_PACKAGES
 
-# remove packages we don't need (eg. generic kernel)
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-686' | grep -v xen)
+debconf-set-selections << EOF
+$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
+EOF
+DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 
 # fix grub
 sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst

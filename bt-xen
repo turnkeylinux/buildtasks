@@ -71,7 +71,8 @@ $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs xen
 
-$BT/bin/xen-bundle $rootfs
+info "creating $name-xen.tar.bz2"
+tar -C $rootfs -jcf $name-xen.tar.bz2 .
 
 $BT/bin/generate-signature $O/$name-xen.tar.bz2
 
