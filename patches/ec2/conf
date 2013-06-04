@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 fatal() { echo "FATAL: $@" 1>&2; exit 1; }
 
@@ -13,27 +13,33 @@ install() {
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in
     "i386")
-        PACKAGES="linux-image-xen-686 libc6-xen";
-        PURGE_RE="linux-image-*686";
+        OLD_META_KERNEL="linux-image-686";
+        NEW_META_KERNEL="linux-image-xen-686";
+        NEW_PACKAGES="libc6-xen hubclient ebsmount";
         ;;
     "amd64")
-        PACKAGES="linux-image-xen-amd64";
-        PURGE_RE="linux-image-*amd64";
+        OLD_META_KERNEL="linux-image-amd64";
+        NEW_META_KERNEL="linux-image-xen-amd64";
+        NEW_PACKAGES="hubclient ebsmount";
         ;;
     *)
         fatal "non-supported architecture: $ARCH";
         ;;
 esac
+OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
 
 # link update-grub to update-grub-legacy-ec2
 mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
 ln -s /usr/sbin/update-grub-legacy-ec2 /usr/sbin/update-grub
 
-# install ec2 required packages
-install $PACKAGES hubclient ebsmount
+install $NEW_META_KERNEL $NEW_PACKAGES
 
-# remove packages we don't need (eg. generic kernel)
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W $PURGE_RE | grep -v xen)
+debconf-set-selections << EOF
+$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
+EOF
+DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
+
 
 # fix grub
 sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst
