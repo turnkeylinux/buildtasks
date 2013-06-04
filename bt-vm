@@ -15,11 +15,6 @@ Options::
 
 Environment::
 
-    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-
-    BT_PUBLISH_IMGS     - rsync destination for release image
-    BT_PUBLISH_META     - rsync destination for release meta files
-
     BT_DEBUG            - turn on debugging
 EOF
 exit 1
@@ -27,7 +22,7 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )     usage;;
+        --help|-h )  usage;;
         --publish)   publish="yes";;
         *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
@@ -67,6 +62,13 @@ case "$appname" in
     appengine-java)   export VM_MEMORY=384 ;;
     *)                export VM_MEMORY=256 ;;
 esac
+
+if $(echo $BT_VERSION | grep -q squeeze-i386); then guestos="debian6"; fi
+if $(echo $BT_VERSION | grep -q squeeze-amd64); then guestos="debian6-64"; fi
+if $(echo $BT_VERSION | grep -q wheezy-i386); then guestos="debian7"; fi
+if $(echo $BT_VERSION | grep -q wheezy-amd64); then guestos="debian7-64"; fi
+[ -n "$guestos" ] || fatal "guestos could not be determined"
+export VM_GUESTOS="$guestos"
 
 isofile=turnkey-$appname-$BT_VERSION.iso
 name=turnkey-$appname-$BT_VERSION

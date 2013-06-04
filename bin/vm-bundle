@@ -18,6 +18,8 @@ Environment::
     VM_URL        - Product URL ($VM_URL)
     VM_MEMORY     - Amount of memory - integer ($VM_MEMORY)
     VM_FULLNAME   - Display name of image ($VM_FULLNAME)
+    VM_GUESTOS    - Guest OS of image ($VM_GUESTOS)
+
 EOF
 exit 1
 }
@@ -32,6 +34,7 @@ name=$(echo $rootfs | sed 's/.rootfs//')
 [ -n "$VM_URL" ] || fatal "VM_URL not set"
 [ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
 [ -n "$VM_FULLNAME" ] || fatal "VM_FULLNAME not set"
+[ -n "$VM_GUESTOS" ] || fatal "VM_GUESTOS not set"
 
 # image size consts.
 VM_SIZE="20GB"
@@ -169,7 +172,7 @@ annotation = "$VM_URL"
 guestinfo.vmware.product.long = "$VM_FULLNAME"
 guestinfo.vmware.product.url = "$VM_URL"
 guestinfo.vmware.product.class = "virtual machine"
-guestOS = "debian6"
+guestOS = "$VM_GUESTOS"
 priority.grabbed = "normal"
 priority.ungrabbed = "normal"
 usb.present = "TRUE"
