@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 install() {
     apt-get update
@@ -12,9 +12,29 @@ install() {
 install quota
 
 # remove kernel
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    "i386")
+        OLD_META_KERNEL="linux-image-686";
+        ;;
+    "amd64")
+        OLD_META_KERNEL="linux-image-amd64";
+        ;;
+    *)
+        fatal "non-supported architecture: $ARCH";
+        ;;
+esac
+OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
+
 mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
 ln -s /bin/true /usr/sbin/update-grub
-dpkg --purge $(dpkg-query --showformat='${Package}\n' -W '*-686')
+
+debconf-set-selections << EOF
+$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
+EOF
+DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
+
 rm /usr/sbin/update-grub
 mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
@@ -27,8 +47,9 @@ touch /etc/resolv.conf
 # remove ntp daemon
 dpkg --purge ntp
 
-# disable ttys
+# disable ttys, enable openvz_console
 sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
+echo "1:2345:respawn:/sbin/getty 38400 tty1" >> /etc/inittab
 
 update-rc.d -f confconsole disable
 

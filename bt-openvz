@@ -15,11 +15,6 @@ Options::
 
 Environment::
 
-    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-
-    BT_PUBLISH_IMGS     - rsync destination for release image
-    BT_PUBLISH_META     - rsync destination for release meta files
-
     BT_DEBUG            - turn on debugging
 EOF
 exit 1
@@ -27,7 +22,7 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )     usage;;
+        --help|-h )  usage;;
         --publish)   publish="yes";;
         *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
