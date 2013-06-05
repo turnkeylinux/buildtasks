@@ -22,10 +22,17 @@ fi
 
 rootfs=$1
 name=$(echo $rootfs | sed 's/.rootfs//')
+appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+
+case "$appname" in
+    canvas)           loopsize_padding=524288 ;;
+    appengine-python) loopsize_padding=524288 ;;
+    *)                loopsize_padding=262144 ;;
+esac
 
 info "getting size for loopback"
 rootsize=$(du -s $rootfs | awk '{print $1}')
-loopsize=$[$rootsize + 262144] # 256MB padding
+loopsize=$[$rootsize + $loopsize_padding]
 
 info "creating sparse loopback"
 dd if=/dev/null of=$rootfs.img bs=1 seek=${loopsize}K
