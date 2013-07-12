@@ -37,8 +37,15 @@ export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 
-[ -e $BT_PRODUCTS/$appname ] || fatal "$BT_PRODUCTS/$appname does not exist"
-cd $BT_PRODUCTS/$appname
+if [ ! -e $BT_PRODUCTS/$appname ]; then
+    cd $BT_PRODUCTS
+    git clone https://github.com/turnkeylinux-apps/$appname.git
+    cd $BT_PRODUCTS/$appname
+else
+    cd $BT_PRODUCTS/$appname
+    git pull
+fi
+
 deck -D build/root.tmp || true
 make clean || true
 make || true
