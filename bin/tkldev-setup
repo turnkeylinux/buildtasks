@@ -1,0 +1,63 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0)
+Setup/update system ready for bt-iso
+
+Environment::
+
+    BT_DEBUG                turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        *)             usage;;
+    esac
+    shift
+done
+
+[ -n "$BT_DEBUG" ] && set -x
+
+info "setting up bootstrap..."
+ARCH=$(dpkg --print-architecture)
+CODENAME=$(lsb_release -s -c)
+SOURCEFORGE="http://downloads.sourceforge.net/project/turnkeylinux"
+
+if [ ! -e /turnkey/fab/bootstraps/$CODENAME]; then
+    cd /turnkey/fab/bootstraps
+    wget $SOURCEFORGE/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz
+    wget $SOURCEFORGE/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz.sig
+
+    gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0xA16EB94D
+    gpg --verify bootstrap-$CODENAME-$ARCH.tar.gz.sig
+
+    mkdir $CODENAME
+    tar -zxf bootstrap-$CODENAME-$ARCH.tar.gz -C $CODENAME
+fi
+
+info "setting up cdroots..."
+if [ ! -e /turnkey/fab/cdroots ]; then
+    cd /turnkey/fab
+    git clone https://github.com/turnkeylinux/cdroots.git
+else
+    cd /turnkey/fab/cdroots
+    git pull
+fi
+
+info "setting up common..."
+if [ ! -e /turnkey/fab/common ]; then
+    cd /turnkey/fab
+    git clone https://github.com/turnkeylinux/common.git
+else
+    cd /turnkey/fab/common
+    git pull
+fi
+
