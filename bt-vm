@@ -57,6 +57,7 @@ case "$appname" in
     gitlab)           export VM_MEMORY=512 ;;
     jenkins)          export VM_MEMORY=512 ;;
     clipbucket)       export VM_MEMORY=512 ;;
+    tkldev)           export VM_MEMORY=512 ;;
     moodle)           export VM_MEMORY=384 ;;
     tomcat-apache)    export VM_MEMORY=384 ;;
     appengine-java)   export VM_MEMORY=384 ;;
