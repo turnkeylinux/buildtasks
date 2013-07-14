@@ -61,3 +61,12 @@ else
     git pull
 fi
 
+info "setting up core..."
+if [ ! -e /turnkey/fab/products/core ]; then
+    cd /turnkey/fab/products
+    git clone https://github.com/turnkeylinux-apps/core.git
+else
+    cd /turnkey/fab/products/core
+    git pull
+fi
+
