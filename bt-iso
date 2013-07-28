@@ -51,8 +51,8 @@ make clean || true
 make || true
 
 if [ ! -e build/product.iso ]; then
-    deck -D build/root.tmp || true
-    make clean || true
+    deck -D build/root.tmp >/dev/null 2>&1 || true
+    make clean >/dev/null 2>&1 || true
     fatal "build failed..."
 fi
 
