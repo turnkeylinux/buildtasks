@@ -36,7 +36,7 @@ ARCH=$(dpkg --print-architecture)
 CODENAME=$(lsb_release -s -c)
 SOURCEFORGE="http://downloads.sourceforge.net/project/turnkeylinux"
 
-if [ ! -e /turnkey/fab/bootstraps/$CODENAME]; then
+if [ ! -e /turnkey/fab/bootstraps/$CODENAME ]; then
     cd /turnkey/fab/bootstraps
     wget $SOURCEFORGE/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz
     wget $SOURCEFORGE/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz.sig
