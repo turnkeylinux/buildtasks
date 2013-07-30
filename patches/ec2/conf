@@ -18,3 +18,6 @@ chmod +x /etc/grub.d/40_custom
 update-grub
 ln -sf /boot/grub/grub.cfg /boot/grub/menu.lst
 
+# make sure images are world readable
+chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
+
