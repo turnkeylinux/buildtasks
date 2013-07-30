@@ -26,11 +26,6 @@ done
 
 [ -n "$BT_DEBUG" ] && set -x
 
-info "temp cleanup for current masters..."
-rm -rf /turnkey/fab/cdroots
-rm -rf /turnkey/fab/common
-rm -rf /turnkey/fab/products/*
-
 info "setting up bootstrap..."
 ARCH=$(dpkg --print-architecture)
 CODENAME=$(lsb_release -s -c)
