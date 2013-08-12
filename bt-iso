@@ -36,6 +36,7 @@ done
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
+. $BT_CONFIG/build.cfg
 
 if [ ! -e $BT_PRODUCTS/$appname ]; then
     cd $BT_PRODUCTS
@@ -51,8 +52,8 @@ make clean || true
 make || true
 
 if [ ! -e build/product.iso ]; then
-    deck -D build/root.tmp || true
-    make clean || true
+    deck -D build/root.tmp >/dev/null 2>&1 || true
+    make clean >/dev/null 2>&1 || true
     fatal "build failed..."
 fi
 
