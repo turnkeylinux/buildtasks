@@ -52,8 +52,10 @@ make clean || true
 make || true
 
 if [ ! -e build/product.iso ]; then
-    deck -D build/root.tmp >/dev/null 2>&1 || true
-    make clean >/dev/null 2>&1 || true
+    if [ -z "$BT_DEBUG" ]; then
+        deck -D build/root.tmp >/dev/null 2>&1 || true
+        make clean >/dev/null 2>&1 || true
+    fi
     fatal "build failed..."
 fi
 
