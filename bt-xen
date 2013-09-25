@@ -66,7 +66,11 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/headless
+
+mount -o bind /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/xen
+umount $rootfs/dev
+
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs xen

@@ -1,46 +1,10 @@
 #!/bin/bash -ex
 
-install() {
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get -y \
-        -o DPkg::Options::=--force-confdef \
-        -o DPkg::Options::=--force-confold \
-        install $@
-}
-
-ARCH=$(dpkg --print-architecture)
-case "$ARCH" in
-    "i386")
-        OLD_META_KERNEL="linux-image-686";
-        NEW_META_KERNEL="linux-image-xen-686";
-        NEW_PACKAGES="libc6-xen";
-        ;;
-    "amd64")
-        OLD_META_KERNEL="linux-image-amd64";
-        NEW_META_KERNEL="linux-image-xen-amd64";
-        ;;
-    *)
-        fatal "non-supported architecture: $ARCH";
-        ;;
-esac
-OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
-OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
-
-# link update-grub to update-grub-legacy-ec2
-mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
-ln -s /usr/sbin/update-grub-legacy-ec2 /usr/sbin/update-grub
-
-install $NEW_META_KERNEL $NEW_PACKAGES
-
-debconf-set-selections << EOF
-$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
-EOF
-DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
-
-# fix grub
-sed -i 's|root=/dev/hda1|root=/dev/xvda1|' /boot/grub/menu.lst
-sed -i 's| console=hvc0| xencons=hvc0 console=hvc0|' /boot/grub/menu.lst
-update-grub-legacy-ec2
+# grub tweaks
+chmod -x /etc/grub.d/*
+chmod +x /etc/grub.d/40_custom
+update-grub
+ln -sf /boot/grub/grub.cfg /boot/grub/menu.lst
 
 # disable confconsole init script
 update-rc.d -f confconsole disable
