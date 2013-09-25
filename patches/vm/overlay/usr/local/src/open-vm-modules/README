@@ -1,0 +1,26 @@
+Notes on creating open-vm-modules tarballs
+==========================================
+
+- install vmplayer
+
+- repeat the following for each architecture:
+
+    - install core in vmplayer (set NAT)
+
+    - install required packages
+        apt-get update
+        apt-get install linux-headers-[amd64|686-pae]
+        apt-get install open-vm-tools open-vm-dkms
+
+    - change networking and connect
+        - set HOST, udhcp eth0
+
+    - create tarball
+        KERNEL_VERSION=$(ls -l /vmlinuz |awk '{print $11}' |sed 's|boot/vmlinuz-||')
+        cd /lib/modules/$KERNEL_VERSION/updates/dkms
+        tar -zcf /root/$KERNEL_VERSION.tar.gz *.ko
+
+    - copy tarball to buildtasks vm patch
+        cd buildtasks/patches/vm/overlay/usr/local/src/open-vm-modules
+        scp root@ipaddress:/root/*.tar.gz .
+

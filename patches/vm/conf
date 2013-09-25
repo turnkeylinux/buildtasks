@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 install() {
     apt-get update
@@ -9,9 +9,16 @@ install() {
 }
 
 # install open-vm-tools and modules
-KERNEL_VERSION=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-||')
-install open-vm-tools open-vm-modules-$KERNEL_VERSION
+install open-vm-tools
 /etc/init.d/open-vm-tools stop || true
+
+KERNEL_VERSION=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-||')
+MODULES_SRC=/usr/local/src/open-vm-modules/$KERNEL_VERSION.tar.gz
+MODULES_DST=/lib/modules/$KERNEL_VERSION/kernel/drivers/misc/
+tar -zxf $MODULES_SRC -C $MODULES_DST
+rm -rf $(dirname $MODULES_SRC)
+depmod -a $KERNEL_VERSION
+update-initramfs -u
 
 # disable udev persistent net generation
 echo -n > /etc/udev/rules.d/70-persistent-net.rules
