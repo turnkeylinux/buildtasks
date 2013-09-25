@@ -8,44 +8,26 @@ install() {
         install $@
 }
 
+# install useful packages
+install ebsmount
+
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
 
-# replace kernel, install openstack required packages
+# hold kernel (not used in image, pro-longs sec-updates)
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in
     "i386")
-        OLD_META_KERNEL="linux-image-686";
-        NEW_META_KERNEL="linux-image-xen-686";
-        NEW_PACKAGES="libc6-xen ebsmount";
+        META_KERNEL="linux-image-686";
         ;;
     "amd64")
-        OLD_META_KERNEL="linux-image-amd64";
-        NEW_META_KERNEL="linux-image-xen-amd64";
-        NEW_PACKAGES="ebsmount";
+        META_KERNEL="linux-image-amd64";
         ;;
     *)
         fatal "non-supported architecture: $ARCH";
         ;;
 esac
-OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
-OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
-
-mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
-ln -s /bin/true /usr/sbin/update-grub
-
-install $NEW_META_KERNEL $NEW_PACKAGES
-
-debconf-set-selections << EOF
-$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
-EOF
-DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
-
-rm /usr/sbin/update-grub
-mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
-
-# hold new kernel (not used in image, pro-longs sec-updates)
-NEW_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
-echo "$NEW_KERNEL hold" | dpkg --set-selections
-echo "$NEW_META_KERNEL hold" | dpkg --set-selections
+KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+echo "$KERNEL hold" | dpkg --set-selections
+echo "$META_KERNEL hold" | dpkg --set-selections
 
