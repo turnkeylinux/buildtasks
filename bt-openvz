@@ -33,6 +33,18 @@ done
 [ -n "$appname" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
 
+# install pfff
+if ! $(which pfff >/dev/null); then
+    apt-get install cmake
+    git clone https://github.com/livenson/pfff.git /usr/local/src/pfff
+    mkdir /usr/local/src/pfff/build
+    cd /usr/local/src/pfff/build
+    cmake ..
+    make
+    make tests
+    make install
+fi
+
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
