@@ -1,0 +1,99 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 openvz-tarball
+Prints opennode ovf to stdout
+
+Arguments::
+
+    openvz-tarball    - path to openvz image tarball
+
+Environment::
+
+    ON_MEMORY         - minimum ram required - float GB ($ON_MEMORY)
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+openvz_tarball=$1
+[ -e $openvz_tarball ] || fatal "$openvz_tarball does not exist"
+[ -n "$ON_MEMORY" ] || fatal "ON_MEMORY not set"
+
+openvz_tarball_info=$(gzip -l $openvz_tarball | tail -n 1)
+ON_SIZE=$(echo $openvz_tarball_info | cut -d " " -f 1)
+ON_SIZE_UNCOMPRESSED=$(echo $openvz_tarball_info | cut -d " " -f 2)
+
+ON_NAME=$(basename $openvz_tarball | sed "s|.tar.gz||")
+
+cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<Envelope ovf:version="1.0.0b" xml:lang="en-US" xmlns="http://schemas.dmtf.org/ovf/envelope/1" xmlns:ovf="http://schemas.dmtf.org/ovf/envelope/1" xmlns:ovfstr="http://schema.dmtf.org/ovf/strings/1" xmlns:rasd="http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData" xmlns:vssd="http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_VirtualSystemSettingData" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schemas.dmtf.org/ovf/envelope/1 ../ovf-envelope.xsd">
+	<VirtualSystem ovf:id="$ON_NAME">
+		<Info>OpenVZ OpenNode template</Info>
+		<OperatingSystemSection ovf:id="operating_system">
+			<Info>Operating system type deployed in a template</Info>
+			<Description>debian</Description>
+		</OperatingSystemSection>
+		<VirtualHardwareSection ovf:id="virtual_hadrware">
+			<Info>Virtual hardware requirements for a virtual machine</Info>
+			<System>
+				<vssd:ElementName>Virtual Hardware Family</vssd:ElementName>
+				<vssd:InstanceID>0</vssd:InstanceID>
+				<vssd:VirtualSystemType>openvz</vssd:VirtualSystemType>
+			</System>
+			<Item ovf:bound="normal">
+				<rasd:Caption>1 virtual CPU</rasd:Caption>
+				<rasd:Description>Number of virtual CPUs</rasd:Description>
+				<rasd:ElementName>1 virtual CPU</rasd:ElementName>
+				<rasd:InstanceID>1</rasd:InstanceID>
+				<rasd:ResourceType>3</rasd:ResourceType>
+				<rasd:VirtualQuantity>1</rasd:VirtualQuantity>
+			</Item>
+			<Item ovf:bound="min">
+				<rasd:Caption>1 virtual CPU</rasd:Caption>
+				<rasd:Description>Number of virtual CPUs</rasd:Description>
+				<rasd:ElementName>1 virtual CPU</rasd:ElementName>
+				<rasd:InstanceID>2</rasd:InstanceID>
+				<rasd:ResourceType>3</rasd:ResourceType>
+				<rasd:VirtualQuantity>1</rasd:VirtualQuantity>
+			</Item>
+			<Item ovf:bound="normal">
+				<rasd:AllocationUnits>GigaBytes</rasd:AllocationUnits>
+				<rasd:Caption>0.5 GB of memory</rasd:Caption>
+				<rasd:Description>Memory Size</rasd:Description>
+				<rasd:ElementName>0.5 GB of memory</rasd:ElementName>
+				<rasd:InstanceID>3</rasd:InstanceID>
+				<rasd:ResourceType>4</rasd:ResourceType>
+				<rasd:VirtualQuantity>0.5</rasd:VirtualQuantity>
+			</Item>
+			<Item ovf:bound="min">
+				<rasd:AllocationUnits>GigaBytes</rasd:AllocationUnits>
+				<rasd:Caption>$ON_MEMORY GB of memory</rasd:Caption>
+				<rasd:Description>Memory Size</rasd:Description>
+				<rasd:ElementName>$ON_MEMORY GB of memory</rasd:ElementName>
+				<rasd:InstanceID>4</rasd:InstanceID>
+				<rasd:ResourceType>4</rasd:ResourceType>
+				<rasd:VirtualQuantity>$ON_MEMORY</rasd:VirtualQuantity>
+			</Item>
+		</VirtualHardwareSection>
+	</VirtualSystem>
+	<!--Reference of all external files-->
+	<References>
+		<File ovf:compression="gz" ovf:href="$ON_NAME.tar.gz" ovf:id="diskfile1" ovf:size="$ON_SIZE"/>
+	</References>
+	<DiskSection>
+		<Info>OpenVZ CT template disks</Info>
+		<Disk ovf:capacity="10737418240.0" ovf:diskId="vmdisk1" ovf:fileRef="diskfile1" ovf:format="tar.gz" ovf:populatedSize="$ON_SIZE_UNCOMPRESSED"/>
+	</DiskSection>
+</Envelope>
+EOF
+

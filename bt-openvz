@@ -1,4 +1,5 @@
 #!/bin/bash -e
+# depends: https://github.com/livenson/pfff.git
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 warning() { echo "WARNING [$(basename $0)]: $@"; }
@@ -51,6 +52,18 @@ if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
 fi
 
+case "$appname" in
+    canvas)           export ON_MEMORY=0.50 ;;
+    gitlab)           export ON_MEMORY=0.50 ;;
+    jenkins)          export ON_MEMORY=0.50 ;;
+    clipbucket)       export ON_MEMORY=0.50 ;;
+    tkldev)           export ON_MEMORY=0.50 ;;
+    moodle)           export ON_MEMORY=0.33 ;;
+    tomcat-apache)    export ON_MEMORY=0.33 ;;
+    appengine-java)   export ON_MEMORY=0.33 ;;
+    *)                export ON_MEMORY=0.25 ;;
+esac
+
 isofile=turnkey-$appname-$BT_VERSION.iso
 name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
@@ -72,13 +85,20 @@ $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs openvz
 
-# bundle using stupid naming convention
+# bundle openvz tarball using stupid naming convention
 appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
 stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${ARCHITECTURE}"
 info "creating $stupidname.tar.gz"
 tar -C $rootfs -zcf $stupidname.tar.gz .
 
 $BT/bin/generate-signature $O/$stupidname.tar.gz
+
+# generate opennode ovf and bundle
+$BT/bin/generate-opennode-ovf $O/$stupidname.tar.gz > $stupidname.ovf
+tar -cf $stupidname.tar $stupidname.ovf $stupidname.tar.gz
+
+$BT/bin/generate-signature $O/$stupidname.tar
+pfff -k 6996807 -B $stupidname.tar > $stupidname.tar.pfff
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -87,6 +107,12 @@ if [ "$publish" == "yes" ]; then
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$stupidname.tar.gz.sig
+
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/opennode/
+    $BT/bin/publish-files $O/$stupidname.{tar,tar.sig,tar.pfff}
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
+    $BT/bin/publish-files $O/$stupidname.{tar.sig,tar.pfff}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
