@@ -107,10 +107,10 @@ $BT/bin/generate-signature $O/$stupidname.tar.gz
 
 # generate opennode ovf and bundle
 $BT/bin/generate-opennode-ovf $O/$stupidname.tar.gz > $stupidname.ovf
-tar -cf $stupidname.tar $stupidname.ovf $stupidname.tar.gz
+tar -cf $stupidname.ova $stupidname.ovf $stupidname.tar.gz
 
-$BT/bin/generate-signature $O/$stupidname.tar
-pfff -k 6996807 -B $stupidname.tar > $stupidname.tar.pfff
+$BT/bin/generate-signature $O/$stupidname.ova
+pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -121,10 +121,10 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$stupidname.tar.gz.sig
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/opennode/
-    $BT/bin/publish-files $O/$stupidname.{tar,tar.sig,tar.pfff}
+    $BT/bin/publish-files $O/$stupidname.{ova,ova.sig,ova.pfff}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
-    $BT/bin/publish-files $O/$stupidname.{tar.sig,tar.pfff}
+    $BT/bin/publish-files $O/$stupidname.ova.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
