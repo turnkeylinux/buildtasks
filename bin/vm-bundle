@@ -114,7 +114,7 @@ devicemap=$rootfs.fs/boot/grub/device.map
 
 cat > $devicemap <<EOF
 (hd0)   $loopdev
-(hd0,1) /dev/mapper/$(basename $loopdev)p1
+(hd0,1) $loopboot
 EOF
 
 chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
