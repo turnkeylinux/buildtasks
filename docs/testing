@@ -1,0 +1,122 @@
+vmdk (vmplayer)
+===============
+
+- unzip archive
+- vmplayer image.vmx
+
+ovf (virtualbox)
+================
+
+- unzip archive
+- open virtualbox
+- file, import appliance
+
+openvz (virtualbox proxmox)
+===========================
+
+- start proxmox
+- appliance templates > local
+    - choose file and upload
+- virtual machines > create >
+    template: new appliance
+    hostname: core
+    mem/swap: 256
+    password
+    ipaddress: something available on network (venet)
+    dns domain: local
+- virtual machines
+    - click on vm just created (last)
+    - click start
+    - wait until booted (tip: see the boot log)
+
+openstack (virtualbox stackops)
+===============================
+
+references:
+    2012/Week34
+    2013/Week23
+    http://www.turnkeylinux.org/blog/announcing-openstack-builds
+
+/etc/init.d/ntp stop
+ntpdate pool.ntp.org
+/etc/init.d/ntp start
+
+. /var/lib/stackops/setenv.sh
+export OS_AUTH_STRATEGY=keystone
+export GLANCE_TOKEN=$(grep admin_token /etc/glance/glance-api.conf | awk '{print $3}')
+
+cd /var/lib/nova/bin
+./nova-manage service list
+
+    service nova-XXX start
+
+# cd /tmp
+# tar -zxf turnkey-core-12.1-squeeze-amd64-openstack.tar.gz
+# ls turnkey-core-12.1-squeeze-amd64
+    turnkey-core-12.1-squeeze-amd64-initrd
+    turnkey-core-12.1-squeeze-amd64-kernel
+    turnkey-core-12.1-squeeze-amd64.img
+
+# IMG=turnkey-core-12.1-squeeze-amd64
+
+# glance add -A $GLANCE_TOKEN \
+    is_public=true \
+    container_format=ari \
+    disk_format=ari \
+    name="$IMG-initrd" \
+    < /tmp/$IMG/$IMG-initrd
+
+Added new image with ID: 24
+
+# RAMDISK_ID=24
+
+# glance add -A $GLANCE_TOKEN \
+    is_public=true \
+    container_format=aki \
+    disk_format=aki \
+    name="$IMG-kernel" \
+    < /tmp/$IMG/$IMG-kernel
+
+Added new image with ID: 25
+
+# KERNEL_ID=25
+
+# glance add -A $GLANCE_TOKEN \
+    is_public=true \
+    container_format=ami \
+    disk_format=ami \
+    ramdisk_id=$RAMDISK_ID \
+    kernel_id=$KERNEL_ID \
+    name="$IMG" \
+    < /tmp/$IMG/$IMG.img
+
+Added new image with ID: 26
+
+# glance -A $GLANCE_TOKEN index
+
+ID  Name                                Disk Format  Container Format  Size
+--  ----------------------------------  -----------  ----------------  ---------
+26  turnkey-core-12.1-squeeze-amd6      ami          ami               682672128
+25  turnkey-core-12.1-squeeze-amd6      aki          aki               2482528
+24  turnkey-core-12.1-squeeze-amd6      ari          ari               9816258
+
+# euca-describe-images
+
+IMAGE   ami-0000001a    None (turnkey-core-12.1-squeeze-amd64)          available       public                  machine aki-00000019    ari-00000018
+IMAGE   aki-00000019    None (turnkey-core-12.1-squeeze-amd64-kernel)          available        public                  kernel
+IMAGE   ari-00000018    None (turnkey-core-12.1-squeeze-amd64-initrd)          available        public                  ramdisk
+
+# euca-run-instances -k demo -t t1.micro ami-0000001a
+
+# euca-describe-instances
+RESERVATION     r-7wi0xgaq      2       default
+INSTANCE        i-00000011      ami-0000001a    1.0.0.2 1.0.0.2 pending demo   0t1.micro        2013-06-04T08:48:45Z    nova    aki-00000019    ari-00000018
+
+# euca-get-console-output i-00000011
+
+takes a while to boot, be patient
+
+# ssh -i /root/creds/demo.pem root@1.0.0.2
+
+# euca-terminate-instances i-00000011
+
