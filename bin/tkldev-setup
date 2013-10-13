@@ -31,6 +31,11 @@ ARCH=$(dpkg --print-architecture)
 CODENAME=$(lsb_release -s -c)
 SOURCEFORGE="http://downloads.sourceforge.net/project/turnkeylinux"
 
+# hack: force downloading of the latest bootstrap
+rm -rf /turnkey/fab/bootstraps/$CODENAME
+rm -f /turnkey/fab/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz
+rm -f /turnkey/fab/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.sig
+
 if [ ! -e /turnkey/fab/bootstraps/$CODENAME ]; then
     cd /turnkey/fab/bootstraps
     wget $SOURCEFORGE/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz
