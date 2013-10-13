@@ -43,25 +43,6 @@ if [ ! -e /turnkey/fab/bootstraps/$CODENAME ]; then
     tar -zxf bootstrap-$CODENAME-$ARCH.tar.gz -C $CODENAME
 fi
 
-info "updating bootstrap..."
-cd /turnkey/fab/bootstraps
-
-cat >$CODENAME/etc/apt/sources.list.d/sources.list<<EOF
-deb http://cdn.debian.net/debian $CODENAME main
-deb http://security.debian.org/ $CODENAME/updates main
-EOF
-
-cat >$CODENAME/etc/resolv.conf<<EOF
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-EOF
-
-fab-chroot $CODENAME "apt-get update"
-fab-chroot $CODENAME "DEBIAN_FRONTEND=noninteractive apt-get -y upgrade"
-
-rm $CODENAME/etc/apt/sources.list.d/sources.list
-rm $CODENAME/etc/resolv.conf
-
 info "setting up cdroots..."
 if [ ! -e /turnkey/fab/cdroots ]; then
     cd /turnkey/fab
