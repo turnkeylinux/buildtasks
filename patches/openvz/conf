@@ -46,7 +46,7 @@ rm -f /etc/resolv.conf*
 touch /etc/resolv.conf
 
 # remove ntp daemon
-dpkg --purge ntp
+dpkg --purge ntp || true
 
 # disable ttys, enable openvz_console
 sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
