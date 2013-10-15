@@ -34,7 +34,7 @@ for f in $FILES; do
     $BT/bin/publish-files $O/$name.{iso,iso.sig}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$version/
-    $BT/bin/publish-files $O/$name.{changelog,manifest,iso.sig}
+    $BT/bin/publish-files $O/$name.{spec,log,changelog,manifest,iso.sig}
 
     if [ -e $O/$name.tklbam/*.tar.gz ]; then
         export PUBLISH_DEST=$BT_PUBLISH_PROFILES
