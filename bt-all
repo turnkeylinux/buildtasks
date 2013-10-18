@@ -1,0 +1,34 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) appname
+Wrapper script for all build targets
+
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+
+BT=$(dirname $(readlink -f $0))
+
+$BT/bt-iso --publish $appname
+$BT/bt-ec2 --publish --copy $appname
+$BT/bt-vm --publish $appname
+$BT/bt-openvz --publish $appname
+$BT/bt-openstack --publish $appname
+$BT/bt-xen --publish $appname
+
