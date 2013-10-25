@@ -33,9 +33,9 @@ done
 [ -n "$appname" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
 
-# install pfff
+# install pfff (will be removed once build masters updated)
 if ! $(which pfff >/dev/null); then
-    apt-get install cmake
+    apt-get -y install cmake
     git clone https://github.com/livenson/pfff.git /usr/local/src/pfff
     mkdir /usr/local/src/pfff/build
     cd /usr/local/src/pfff/build
