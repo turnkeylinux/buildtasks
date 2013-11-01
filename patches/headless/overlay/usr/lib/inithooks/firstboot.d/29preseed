@@ -1,11 +1,6 @@
 #!/bin/bash -e
 # generic preseeding of inithooks.conf if it doesn't exist
 
-# activate the initfence if it hasn't been explicitly turned off
-if ! [ -e $INITHOOKS_CONF ] || ! grep -i -q "INITFENCE=SKIP" $INITHOOKS_CONF; then
-    chmod +x /usr/lib/inithooks/firstboot.d/30turnkey-init-firstlogin
-fi
-
 [ -e $INITHOOKS_CONF ] && exit 0
 
 MASTERPASS=$(mcookie | cut --bytes 1-8)
@@ -19,4 +14,6 @@ export APP_DOMAIN=DEFAULT
 export HUB_APIKEY=SKIP
 export SEC_UPDATES=FORCE
 EOF
+
+chmod +x /usr/lib/inithooks/firstboot.d/30turnkey-init-firstlogin
 
