@@ -1,6 +1,13 @@
 #!/bin/bash -ex
 
 # grub tweaks
+cur=$(grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub | sed "s/.*=\"\(.*\)\"/\1/")
+new=$(echo "$cur xencons=hvc0 console=hvc0" | sed "s/^ *//g")
+sed -i "/GRUB_CMDLINE_LINUX_DEFAULT=/ s/=.*/=\"$new\"/" /etc/default/grub
+
+sed -i "/GRUB_HIDDEN_TIMEOUT=/ s/=.*/=true/" /etc/default/grub
+sed -i "/GRUB_TIMEOUT=/ s/=.*/=0/" /etc/default/grub
+
 chmod -x /etc/grub.d/*
 chmod +x /etc/grub.d/40_custom
 update-grub
