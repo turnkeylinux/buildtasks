@@ -36,7 +36,7 @@ done
 
 if ! which lxc >/dev/null; then
     info "installing lxc and xz-utils"
-    apt-get install lxc xz-utils
+    DEBIAN_FRONTEND=noninteractive apt-get -y install lxc xz-utils
 fi
 
 if ! grep -qs /sys/fs/cgroup /etc/fstab; then
