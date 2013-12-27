@@ -54,6 +54,7 @@ fi
 
 if [ ! -e /var/lib/docker ]; then
     info "mount binding /var/lib/docker to ephemeral storage"
+    mkdir -p /var/lib/docker
     mkdir -p /mnt/var/lib/docker
     mount --bind /mnt/var/lib/docker /var/lib/docker
 fi
