@@ -1,0 +1,49 @@
+#!/bin/bash -ex
+
+# remove kernel
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    "i386")
+        OLD_META_KERNEL="linux-image-686";
+        ;;
+    "amd64")
+        OLD_META_KERNEL="linux-image-amd64";
+        ;;
+    *)
+        fatal "non-supported architecture: $ARCH";
+        ;;
+esac
+OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
+
+mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
+ln -s /bin/true /usr/sbin/update-grub
+
+debconf-set-selections << EOF
+$OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
+EOF
+DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
+
+rm /usr/sbin/update-grub
+mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
+
+# remove resolvconf
+rm -rf /var/run/resolvconf
+dpkg --purge resolvconf
+rm -f /etc/resolv.conf*
+touch /etc/resolv.conf
+
+# remove ntp daemon
+dpkg --purge ntp || true
+
+# disable confconsole
+update-rc.d -f confconsole disable
+
+# disable fgconsole (inithooks related until fixed)
+mv /bin/fgconsole /bin/fgconsole.orig
+ln -s /bin/false /bin/fgconsole
+
+# modprobe doesn't work in docker
+mv /sbin/modprobe /sbin/modprobe.orig
+ln -s /bin/true /sbin/modprobe
+
