@@ -1,0 +1,56 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs dockername [port...portN]
+Bundles rootfs into an docker image
+
+Arguments::
+
+    rootfs          - root filesystem path
+    dockername      - name of docker image
+    port...portN    - ports to expose
+
+Environment
+
+    BT_DOCKER_NAME  - used in maintainer field
+    BT_DOCKER_MAIL  - used in maintainer field
+EOF
+exit 1
+}
+
+if [[ "$#" < "2" ]]; then
+    usage
+fi
+
+rootfs=$1; shift
+dockername=$1; shift
+ports=$@
+name=$(echo $rootfs | sed 's/.rootfs//')
+
+[ -n "$BT_DOCKER_NAME" ] || fatal "BT_DOCKER_NAME not set"
+[ -n "$BT_DOCKER_MAIL" ] || fatal "BT_DOCKER_MAIL not set"
+
+info "importing rootfs as docker image"
+tar --numeric-owner -C $rootfs -c . | docker import - $dockername
+
+info "generating Dockerfile"
+mkdir $name.docker
+cat > $name.docker/Dockerfile <<EOF
+FROM $dockername
+MAINTAINER $BT_DOCKER_NAME <$BT_DOCKER_MAIL>
+CMD ["/usr/sbin/start.sh"]
+EXPOSE $ports
+EOF
+
+info "building new docker image"
+docker build -t $dockername $name.docker
+
+if [ -z "$BT_DEBUG" ]; then
+    info "removing directory"
+    rm -rf $name.docker
+fi
+
