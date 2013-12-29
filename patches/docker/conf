@@ -47,3 +47,14 @@ ln -s /bin/false /bin/fgconsole
 mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
 
+# mongodb temp workaround
+#  prealloc files do not contain data, but are rather simply
+#  preallocated files that are ready to use that are truly preallocated
+#  by the file system (i.e. they are not "sparse"). It is thus safe to
+#  remove them, but if you restart mongod with journaling, it will
+#  create them again if they are missing.*
+
+[ -e /var/lib/mongodb/journal ] && rm -f /var/lib/mongodb/journal/prealloc.*
+
+exit 0
+
