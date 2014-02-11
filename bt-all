@@ -24,6 +24,7 @@ done
 [ -n "$appname" ] || usage
 
 BT=$(dirname $(readlink -f $0))
+ARCH=$(dpkg --print-architecture)
 
 $BT/bt-iso --publish $appname
 $BT/bt-ec2 --publish --copy $appname
@@ -31,4 +32,7 @@ $BT/bt-vm --publish $appname
 $BT/bt-openvz --publish $appname
 $BT/bt-openstack --publish $appname
 $BT/bt-xen --publish $appname
+[ "$ARCH" == "amd64" ] && $BT/bt-docker --publish $appname
+
+exit 0
 

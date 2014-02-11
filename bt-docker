@@ -1,0 +1,105 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [--publish] appname
+Converts appliance appname (e.g., core) to docker
+
+Options::
+
+    --publish           - if set, image will be uploaded to docker index
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
+
+arch=$(dpkg --print-architecture)
+[ "$arch" == "amd64" ] || fatal "only amd64 is supported"
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/docker.cfg
+. $BT_CONFIG/build.cfg
+
+O=$BT_BUILDS/docker
+mkdir -p $O
+
+[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+[ -n "$BT_DOCKER_NAME" ] || fatal "BT_DOCKER_NAME not set"
+[ -n "$BT_DOCKER_USER" ] || fatal "BT_DOCKER_USER not set"
+[ -n "$BT_DOCKER_PASS" ] || fatal "BT_DOCKER_PASS not set"
+[ -n "$BT_DOCKER_MAIL" ] || fatal "BT_DOCKER_MAIL not set"
+
+# hack for cloudtasks issues with pre command
+if [ ! -e /root/docker-setup.done ]; then
+    /turnkey/buildtasks/bin/docker-setup
+    touch /root/docker-setup.done
+fi
+
+# make sure docker daemon is running
+if ! pidof docker >/dev/null; then
+    info "docker daemon not running, starting it"
+    docker -d &
+fi
+
+ports=$(grep "^$appname:" $BT_CONFIG/docker.ports | sed "s|^$appname: ||")
+[ -n "$ports" ] || fatal "no ports defined for $appname"
+
+isofile=turnkey-$appname-$BT_VERSION.iso
+name=turnkey-$appname-$BT_VERSION
+rootfs=$name.rootfs
+cdroot=$name.cdroot
+
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+
+cd $O
+tklpatch-extract-iso $BT_ISOS/$isofile
+
+tklpatch-apply $rootfs $BT/patches/headless
+tklpatch-apply $rootfs $BT/patches/docker
+$BT/bin/rootfs-cleanup $rootfs
+
+$BT/bin/aptconf-tag $rootfs docker
+
+# create docker image
+appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
+dockername=$BT_DOCKER_USER/${appname}-${appversion}
+$BT/bin/docker-bundle $rootfs $dockername $ports
+
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    while true; do
+        docker push $dockername && break
+        echo "autoresume push: sleeping for 5 seconds"
+        sleep 5
+    done
+fi
+
+if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    rm -rf $rootfs
+    rm -rf $cdroot
+fi
+

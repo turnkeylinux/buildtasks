@@ -1,0 +1,78 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0)
+Setup/update system ready for bt-docker
+
+Environment::
+
+    BT_DEBUG                turn on debugging
+
+    BT_DOCKER_USER          used in dockercfg
+    BT_DOCKER_PASS          used in dockercfg
+    BT_DOCKER_MAIL          used in dockercfg
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        *)             usage;;
+    esac
+    shift
+done
+
+[ -n "$BT_DOCKER_USER" ] || fatal "BT_DOCKER_USER not set"
+[ -n "$BT_DOCKER_PASS" ] || fatal "BT_DOCKER_PASS not set"
+[ -n "$BT_DOCKER_MAIL" ] || fatal "BT_DOCKER_MAIL not set"
+
+[ -n "$BT_DEBUG" ] && set -x
+
+if ! which lxc >/dev/null; then
+    info "installing lxc and xz-utils"
+    DEBIAN_FRONTEND=noninteractive apt-get -y install lxc xz-utils
+fi
+
+if ! grep -qs /sys/fs/cgroup /etc/fstab; then
+    info "setting up cgroups"
+    echo "none /sys/fs/cgroup cgroup defaults 0 0" >> /etc/fstab
+    mount /sys/fs/cgroup
+fi
+
+if [ ! -e /usr/local/bin/docker ]; then
+    info "downloading docker..."
+    DOCKER=https://get.docker.io/builds/Linux/x86_64/docker-latest
+    wget $DOCKER -O /usr/local/bin/docker
+    chmod +x /usr/local/bin/docker
+fi
+
+if [ ! -e /var/lib/docker ]; then
+    info "mount binding /var/lib/docker to ephemeral storage"
+    mkdir -p /var/lib/docker
+    mkdir -p /mnt/var/lib/docker
+    mount --bind /mnt/var/lib/docker /var/lib/docker
+fi
+
+if [ ! -e /root/.dockercfg ]; then
+    info "creating docker auth config"
+    cat >/root/.dockercfg<<EOF
+{
+     "https://index.docker.io/v1/": {
+             "auth": "$(echo -n $BT_DOCKER_USER:$BT_DOCKER_PASS | base64)",
+             "email": "$BT_DOCKER_MAIL"
+     }
+}
+EOF
+fi
+
+if ! pidof docker >/dev/null; then
+    info "starting docker daemon"
+    docker -d &
+fi
+
