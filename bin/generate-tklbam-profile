@@ -31,6 +31,8 @@ import getopt
 
 import re
 
+import shutil
+
 from StringIO import StringIO
 import executil
 
@@ -160,11 +162,16 @@ class Profile:
         packages.sort()
         return packages
 
+
     def __init__(self, rootfs, path_profiles_conf):
         version = self._get_turnkey_version(rootfs)
         codename = self._get_codename(version)
 
         paths = ProfilePaths(TempDir())
+
+        path_hooks = join(path_profiles_conf, "hooks", codename)
+        if isdir(path_hooks):
+            shutil.copytree(path_hooks, join(paths.path, "hooks.d"))
 
         dc = self._get_dirindex_conf(path_profiles_conf, codename)
         file(paths.dirindex_conf, "w").write(dc)
@@ -175,6 +182,7 @@ class Profile:
         packages = self._get_packages(rootfs)
         file(paths.packages, "w").writelines([ package + "\n"
                                                for package in packages ])
+
 
         self.version = version
         self.paths = paths
