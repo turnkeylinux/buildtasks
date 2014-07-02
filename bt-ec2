@@ -73,9 +73,10 @@ tklpatch-apply $rootfs $BT/patches/cloud
 
 mount -o bind /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/ec2
-umount $rootfs/dev
 
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
+umount $rootfs/dev
+
 $BT/bin/rootfs-cleanup $rootfs
 
 if [ "$backed_ebs" == "yes" ]; then
