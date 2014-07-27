@@ -33,6 +33,6 @@ if [ -e $outdir/$isofile ]; then
 fi
 
 mkdir -p $outdir
-sfproject="http://downloads.sourceforge.net/project/turnkeylinux"
-wget --read-timeout=60 --tries=10 $sfproject/iso/$isofile -O $outdir/$isofile
+images="http://mirror.turnkeylinux.org/turnkeylinux/images"
+wget --read-timeout=60 --tries=10 $images/iso/$isofile -O $outdir/$isofile
 
