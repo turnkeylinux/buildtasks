@@ -1,5 +1,14 @@
 #!/usr/bin/env python
-# Copyright (c) 2013 Alon Swartz <alon@turnkeylinux.org>
+# Author: Alon Swartz <alon@turnkeylinux.org>
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
 """
 Create Amazon EC2 EBS-backed AMI from rootfs
 

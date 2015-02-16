@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (c) 2008 Alon Swartz <alon@turnkeylinux.org> - all rights reserved
+# Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
 import ec2metadata
