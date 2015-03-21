@@ -1,0 +1,4 @@
+SHELLINABOX_DAEMON_START=1
+SHELLINABOX_PORT=12319
+SHELLINABOX_GROUP=certssl
+SHELLINABOX_ARGS="--no-beep --disable-ssl --localhost-only"
