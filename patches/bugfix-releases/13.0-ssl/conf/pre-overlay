@@ -100,3 +100,12 @@ ssl_ciphers 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA
 ssl_prefer_server_ciphers   on;
 EOF
 fi
+
+
+if [ -f /usr/lib/inithooks/bin/canvas.py ]; then
+
+    echo -e '# Backports repository\ndeb http://ftp.debian.org/debian wheezy-backports main' >> /etc/apt/sources.list.d/wheezy-backports.list
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y install -t wheezy-backports redis-server
+
+fi
