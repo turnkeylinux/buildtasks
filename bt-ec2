@@ -82,8 +82,10 @@ tklpatch-apply $rootfs $BT/patches/cloud
 
 mount -o bind /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/ec2
+tklpatch-apply $rootfs $BT/patches/bugfix-releases/13.0-ssl/
 
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
+
 umount -l $rootfs/dev
 
 $BT/bin/rootfs-cleanup $rootfs
