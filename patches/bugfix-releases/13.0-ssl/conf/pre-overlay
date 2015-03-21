@@ -8,8 +8,8 @@ if [ -d /etc/apache2 ]; then
 
     # remove any app-specific SSL protocol configurations
 
-    sed -i '/SSLCipherSuite/d' $(rgrep SSLCipherSuite /etc | sed 's/:.*//')
-    sed -i '/SSLProtocol/d' $(rgrep SSLProtocol /etc | sed 's/:.*//')
+    sed -i '/SSLCipherSuite/d' $(rgrep SSLCipherSuite /etc | sed 's/:.*//') || true
+    sed -i '/SSLProtocol/d' $(rgrep SSLProtocol /etc | sed 's/:.*//') || true
 
     # global SSL protocol configuration
     cat > /etc/apache2/mods-available/ssl.conf << 'EOF'
