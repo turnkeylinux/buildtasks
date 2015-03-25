@@ -1,6 +1,14 @@
 #!/bin/bash -e
 
-DEBIAN_FRONTEND=noninteractive apt-get -y install stunnel4
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+install stunnel4
 
 ## Apache SSL protocol configuration
     
