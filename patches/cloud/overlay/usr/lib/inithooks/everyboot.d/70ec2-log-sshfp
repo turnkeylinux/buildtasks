@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Display ssh fingerprints in console log to allow user verification
+echo
+echo "############################# [ SSH FINGERPRINTS ] ###############################"
+echo
+
+for hostkey in /etc/ssh/ssh_host_*.pub; 
+    do ssh-keygen -l -f $hostkey; 
+done
+
+echo
+echo "##################################################################################"
+echo
