@@ -78,6 +78,8 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 function _cleanup() {
+    $BT/bin/rootfs-cleanup $rootfs
+
 	umount -l $rootfs/dev || true
 	umount -l $rootfs/proc || true
 
@@ -98,8 +100,6 @@ tklpatch-apply $rootfs $BT/patches/ec2
 tklpatch-apply $rootfs $BT/patches/bugfix-releases/13.0-ssl/
 
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
-
-$BT/bin/rootfs-cleanup $rootfs
 
 if [ "$backed_ebs" == "yes" ]; then
     $BT/bin/aptconf-tag $rootfs ebs
