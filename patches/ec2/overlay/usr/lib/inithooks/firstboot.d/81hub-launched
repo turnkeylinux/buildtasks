@@ -15,7 +15,8 @@ BOOTED_SCRIPT=/etc/rc.local.d/90hubstatus-booted
 
 cat>$BOOTED_SCRIPT<<'EOF'
 #!/bin/bash
-hubclient-status booted "$(/usr/lib/inithooks/everyboot.d/70ec2-log-sshfp | grep :)"
+hubclient-status booted 
+hubclient-status sshfp "$(/usr/lib/inithooks/everyboot.d/70ec2-log-sshfp | grep :)"
 rm -f $0
 EOF
 
