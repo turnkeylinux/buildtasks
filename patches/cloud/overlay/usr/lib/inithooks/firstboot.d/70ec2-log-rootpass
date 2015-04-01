@@ -7,5 +7,9 @@ echo
 echo "################################## [ LOGIN DETAILS ] ###################################"
 echo
 echo "                        Random initial root password: $ROOT_PASS"
-echo "########################################################################################"
 echo
+echo "########################################################################################"
+
+## print ssh hostkey fingerprints now, otherwise they only show up after security updates are installed
+echo
+/usr/lib/inithooks/everyboot.d/70ec2-log-sshfp
