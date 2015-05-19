@@ -108,3 +108,4 @@ fi
 if [ "$backed_s3" == "yes" ]; then
     $BT/bin/aptconf-tag $rootfs s3
     $BT/bin/ec2/s3.py $backed_opts $rootfs
+fi
