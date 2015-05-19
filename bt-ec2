@@ -81,13 +81,13 @@ function _cleanup() {
     umount -l $rootfs/dev || true
     umount -l $rootfs/proc || true
 
-    if ! (mount | grep -q $(basename $rootfs)); then
+    if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
         rm -rf $rootfs
         rm -rf $cdroot
     fi
 }
 
-[ -z "$BT_DEBUG" ] && trap _cleanup INT TERM EXIT
+trap _cleanup INT TERM EXIT
 
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
