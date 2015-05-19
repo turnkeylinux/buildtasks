@@ -80,13 +80,13 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 function _cleanup() {
     $BT/bin/rootfs-cleanup $rootfs
 
-	umount -l $rootfs/dev || true
-	umount -l $rootfs/proc || true
+    umount -l $rootfs/dev || true
+    umount -l $rootfs/proc || true
 
-	if ! (mount | grep -q $(basename $rootfs)); then
-	    rm -rf $rootfs
-	    rm -rf $cdroot
-	fi
+    if ! (mount | grep -q $(basename $rootfs)); then
+        rm -rf $rootfs
+        rm -rf $cdroot
+    fi
 }
 
 [ -z "$BT_DEBUG" ] && trap _cleanup INT TERM EXIT
