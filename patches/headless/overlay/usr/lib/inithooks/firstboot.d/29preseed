@@ -15,5 +15,5 @@ export HUB_APIKEY=SKIP
 export SEC_UPDATES=FORCE
 EOF
 
-chmod +x /usr/lib/inithooks/firstboot.d/30turnkey-init-firstlogin
+chmod +x /usr/lib/inithooks/firstboot.d/30turnkey-init-fence
 
