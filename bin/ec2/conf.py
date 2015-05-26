@@ -1,13 +1,15 @@
 LOG_LEVEL = 'DEBUG'
 
 KERNELS = {
-    # http://go.alonswartz.org/aws-kernels (pv-grub-hd0_1.03)
-    'us-east-1': {'amd64': 'aki-88aa75e1', 'i386': 'aki-b6aa75df'},
-    'us-west-1': {'amd64': 'aki-f77e26b2', 'i386': 'aki-f57e26b0'},
-    'us-west-2': {'amd64': 'aki-fc37bacc', 'i386': 'aki-fa37baca'},
-    'eu-west-1': {'amd64': 'aki-71665e05', 'i386': 'aki-75665e01'},
-    'sa-east-1': {'amd64': 'aki-c48f51d9', 'i386': 'aki-ca8f51d7'},
-    'ap-southeast-1': {'amd64': 'aki-fe1354ac', 'i386': 'aki-f81354aa'},
-    'ap-southeast-2': {'amd64': 'aki-31990e0b', 'i386': 'aki-33990e09'},
-    'ap-northeast-1': {'amd64': 'aki-44992845', 'i386': 'aki-42992843'},
+    # http://go.alonswartz.org/aws-kernels (pv-grub-hd0_1.04)
+    'us-east-1': {'amd64': 'aki-919dcaf8', 'i386': 'aki-8f9dcae6'},
+    'us-west-1': {'amd64': 'aki-880531cd', 'i386': 'aki-8e0531cb'},
+    'us-west-2': {'amd64': 'aki-fc8f11cc', 'i386': 'aki-f08f11c0'},
+    'sa-east-1': {'amd64': 'aki-5553f448', 'i386': 'aki-5b53f446'},
+    'eu-west-1': {'amd64': 'aki-52a34525', 'i386': 'aki-68a3451f'},
+    'eu-central-1': {'amd64': 'aki-184c7a05', 'i386': 'aki-3e4c7a23'},
+    'ap-southeast-1': {'amd64': 'aki-503e7402', 'i386': 'aki-ae3973fc'},
+    'ap-southeast-2': {'amd64': 'aki-c362fff9', 'i386': 'aki-cd62fff7'},
+    'ap-northeast-1': {'amd64': 'aki-176bf516', 'i386': 'aki-136bf512'},
 }
+
