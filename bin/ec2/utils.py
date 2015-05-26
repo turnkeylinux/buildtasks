@@ -1,8 +1,8 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -25,8 +25,9 @@ def connect(region=None):
     region = region if region else get_region()
     return connect_to_region(
         region,
-        aws_access_key_id=conf.SMP_ACCESSKEY,
-        aws_secret_access_key=conf.SMP_SECRETKEY)
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        security_token=os.environ.get('AWS_SESSION_TOKEN', None))
 
 def get_turnkey_version(rootfs):
     return file(os.path.join(rootfs, "etc/turnkey_version")).read().strip()
