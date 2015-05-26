@@ -12,6 +12,7 @@
 import re
 import os
 import sys
+import time
 import logging
 
 import conf
@@ -48,37 +49,7 @@ def get_kernel(region, arch):
     return conf.KERNELS[region][arch]
 
 def get_uniquename(region, name):
-    def get_imagenames(region):
-        conn = connect(region)
-        images = conn.get_all_images(owners=[conf.SMP_USERID])
-
-        return set(map(lambda image: image.name, images))
-
-    def get_snapshotnames(region):
-        conn = connect(region)
-        snapshots = conn.get_all_snapshots(owner=conf.SMP_USERID)
-
-        return set(map(lambda snapshot: snapshot.description, snapshots))
-
-    def inc_name(name):
-        try:
-            name, version = name.split('_')
-            version = int(version) + 1
-        except ValueError:
-            version = 2
-
-        return "_".join([name, str(version)])
-
-    if name.endswith('.ebs'):
-        names = get_snapshotnames(region)
-
-    if name.endswith('.s3'):
-        names = get_imagenames(region)
-
-    while name in names:
-        name = inc_name(name)
-
-    return name
+    return "_".join([name, str(int(time.time()))])
 
 def get_logger(name, level=None):
     logger = logging.getLogger(name)
