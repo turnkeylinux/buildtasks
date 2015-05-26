@@ -93,7 +93,9 @@ def main():
 
     images = []
     if copy:
-        images = copy_image(ami_id, snapshot_name, region, utils.get_regions())
+        regions = utils.get_all_regions()
+        regions.remove(region)
+        images = copy_image(ami_id, snapshot_name, region, regions)
 
     print snapshot_name
     print "  %s - %s" % (ami_id, region)

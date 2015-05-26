@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -53,9 +53,6 @@ class Image:
 def copy_image(ami_id, ami_name, ami_region, regions=[]):
     images = []
     for region in regions:
-        if region == ami_region:
-            continue
-
         log.debug('copying %s (%s) to %s', ami_id, ami_region, region)
 
         conn = utils.connect(region)
@@ -85,7 +82,8 @@ def main():
     regions = args[3:]
 
     if 'all' in regions:
-        regions = utils.get_regions()
+        regions = utils.get_all_regions()
+        regions.remove(ami_region)
 
     images = copy_image(ami_id, ami_name, ami_region, regions)
     for image in images:
