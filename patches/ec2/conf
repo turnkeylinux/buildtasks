@@ -10,7 +10,7 @@ install() {
         install $@
 }
 
-install hubclient ebsmount
+install hubclient ebsmount sudo
 
 # grub tweaks
 cur=$(grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub | sed "s/.*=\"\(.*\)\"/\1/")

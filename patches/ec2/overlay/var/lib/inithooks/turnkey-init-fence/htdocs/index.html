@@ -2,42 +2,54 @@
 <head>
   <title>Initialization required</title>
   <link href="/style.css" rel="stylesheet" type="text/css">
+  <script type="text/javascript">username="root";</script>
 </head>
 
 <body>
   <h1>Please initialize this system...</h1>
 
   <p>Welcome to TurnKey! You need to initialize this system first before you
-  can use it. To do that you'll need to log into the root account. The
-  <i>turnkey-init</i> initialization program will start automatically:</p>
+  can use it. To do that you'll need to log into the 
+  <script type="text/javascript">document.write("<i>"+username+"</i>")</script>
+  account. The <i>turnkey-init</i> initialization program will start
+  automatically:</p>
 
-  <img src="/turnkey-init.png" />
+  <script type="text/javascript">
+    document.write("<img src='/turnkey-init-" + username + ".png' />")
+  </script>
 
-  <h2>How do I log into the root account?</h2>
+  <h2>How do I log into the <script type="text/javascript">document.write(username)</script> account?</h2>
 
   You can authenticate in one of two ways:
   <ol>
     <li><b>Without a password, using your SSH key-pair</b>: If you've
     correctly configured an <a href="http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/AccessingInstances.html">AWS SSH key-pair</a>,
-    you'll be able to log into the root account without having to enter a
-    password using your SSH client (e.g., Putty on Windows).</li>
+    you'll be able to log into the 
+    <script type="text/javascript">document.write(username)</script>
+    account without having to enter a password using your SSH client (e.g.,
+    Putty on Windows).</li>
 
-    <li><b>With a password</b>: For security reasons the root password is
-    initially set to a random value. To find the initial random root password,
-    right click the instance in the AWS Management console, select "Get System
-    Log":</li>
+    <li><b>With a password</b>: For security reasons the 
+    <script type="text/javascript">document.write(username)</script>
+    password is initially set to a random value. To find the initial random
+    <script type="text/javascript">document.write(username)</script>
+    password, right click the instance in the AWS Management console, select
+    "Get System Log":</li>
   </ol>
 
   <img src="/ec2-console.png" />
 
   <p>Then scroll down until you see <i>LOGIN DETAILS</i> in the log:</p>
 
-  <img src="/system-log.png" />
+  <script type="text/javascript">
+    document.write("<img src='/system-log-" + username + ".png' />")
+  </script>
 
   <h2>Can I log in without SSH?</h2>
 
-  <p>Yes. Get the random root password as explained above and then point your
-  browser at this machine's 
+  <p>Yes. Get the random
+  <script type="text/javascript">document.write(username)</script>
+  password as explained above and then point your browser at this machine's 
   <script type="text/javascript">
     document.write("<a href='https://" + document.domain + ":12320/'>webshell</a>")
   </script>

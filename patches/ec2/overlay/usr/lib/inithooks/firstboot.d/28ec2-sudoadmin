@@ -1,0 +1,8 @@
+#!/bin/bash -e
+
+# exit if server is registered with hub
+grep -q SERVERID= /var/lib/hubclient/server.conf >/dev/null 2>&1 && exit 0
+
+# non-hub launch, enable turnkey-sudoadmin
+sed -i "s/^SUDOADMIN=.*/SUDOADMIN=true/" /etc/default/inithooks
+
