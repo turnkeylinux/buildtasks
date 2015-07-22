@@ -1,0 +1,42 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0
+Test signature generation, signing and verification
+EOF
+exit 1
+}
+
+export BT_BIN=$(dirname $(dirname $(readlink -f $0)))/bin
+
+info "test1: should pass"
+t=$(tempfile)
+echo "foo" > $t
+$BT_BIN/generate-signature $t
+$BT_BIN/signature-sign $t.sig
+$BT_BIN/signature-verify $t $t.sig
+rm $t $t.sig
+
+info "test2: should fail (gpg)"
+t=$(tempfile)
+echo "foo" > $t
+$BT_BIN/generate-signature $t
+$BT_BIN/signature-sign $t.sig
+sed -i "s/Turnkey/TurnKey/" $t.sig
+$BT_BIN/signature-verify $t $t.sig && fatal "should have failed (gpg)"
+rm $t $t.sig
+
+info "test3: should fail (checksum)"
+t=$(tempfile)
+echo "foo" > $t
+$BT_BIN/generate-signature $t
+$BT_BIN/signature-sign $t.sig
+echo "foo" >> $t
+$BT_BIN/signature-verify $t $t.sig && fatal "should have failed (checksum)"
+rm $t $t.sig
+
+info "all tests passed"
