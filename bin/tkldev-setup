@@ -34,6 +34,7 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$BT_DEBUG" ] && set -x
+export BT=$(dirname $(dirname $(readlink -f $0)))
 
 info "setting up bootstrap..."
 ARCH=$(dpkg --print-architecture)
@@ -50,8 +51,9 @@ if [ ! -e /turnkey/fab/bootstraps/$CODENAME ]; then
     wget $IMAGES/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz
     wget $IMAGES/bootstrap/bootstrap-$CODENAME-$ARCH.tar.gz.sig
 
-    gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0xA16EB94D
-    gpg --verify bootstrap-$CODENAME-$ARCH.tar.gz.sig
+    $BT/bin/signature-verify \
+        bootstrap-$CODENAME-$ARCH.tar.gz \
+        bootstrap-$CODENAME-$ARCH.tar.gz.sig
 
     mkdir $CODENAME
     tar -zxf bootstrap-$CODENAME-$ARCH.tar.gz -C $CODENAME

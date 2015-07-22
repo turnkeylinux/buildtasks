@@ -25,7 +25,7 @@ Arguments::
 
 Environment::
 
-    BT_CONFIG   - path to buildtasks config directory
+    BT_GPGKEY   - gpg key id used to sign the signature file
 
 EOF
 exit 1
@@ -35,26 +35,28 @@ if [[ "$#" != "3" ]]; then
     usage
 fi
 
+export BT=$(dirname $(dirname $(readlink -f $0)))
+[ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+
 isodir=$1
 version=$2
 appname=$3
 
 isofile=turnkey-$appname-$version.iso
 sigfile=turnkey-$appname-$version.iso.sig
+sigpath=$isodir/$sigfile
 
-[ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
-
-if [ -e $isodir/$sigfile ]; then
+if [ ! -e $sigpath ]; then
+    src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
+    wget --read-timeout=60 --tries=10 $src -O $sigpath
+else
     info "$sigfile already exists, skipping..."
     exit 0
 fi
 
-src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
-wget --read-timeout=60 --tries=10 $src -O $isodir/$sigfile
-
-if ! GNUPGHOME=$BT_CONFIG/gnupg gpg --verify $isodir/$sigfile; then
+if ! $BT/bin/signature-verify $isodir/$isofile $sigpath; then
     mv $isodir/$isofile $isodir/$isofile.corrupt
-    rm $isodir/$sigfile
-    fatal "$isofile verification failed"
+    rm $sigpath
+    fatal "$sigfile verification failed"
 fi
 
