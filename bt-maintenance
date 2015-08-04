@@ -27,9 +27,9 @@ Environment::
     BT_CUR_VERSION      - current appliance version (e.g., 11.1-lucid-x86)
     BT_NEW_VERSION      - new appliance version (e.g., 11.2-lucid-x86)
 
-    BT_PUBLISH_IMGS     - rsync destination for release image
-    BT_PUBLISH_META     - rsync destination for release meta files
-    BT_PUBLISH_PROFILES - rsync destination for release tklbam profile
+    BT_PUBLISH_IMGS     - publish destination for release image
+    BT_PUBLISH_META     - publish destination for release meta files
+    BT_PUBLISH_PROFILES - publish destination for release tklbam profile
 
     BT_PROFILES         - path containing tklbam profile conf files
 

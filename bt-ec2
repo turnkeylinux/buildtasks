@@ -60,7 +60,7 @@ export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
-. $BT_CONFIG/ec2.cfg
+. $BT_CONFIG/aws.cfg
 
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
