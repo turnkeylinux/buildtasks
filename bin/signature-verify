@@ -38,7 +38,7 @@ isopath=$1
 sigpath=$2
 
 if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-    gpg --keyserver hkp://pgp.mit.edu --recv-keys 0x$BT_GPGKEY
+    gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0x$BT_GPGKEY
 fi
 
 
