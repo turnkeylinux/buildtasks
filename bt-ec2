@@ -16,11 +16,10 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to ec2 ami's
+Converts appliance appname (e.g., core) to ec2 ebs-backed ami's
 
 Options::
 
-    --backed=(s3|ebs)   - if not set, both s3 and ebs will be built
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public
     --secupdates        - if set, security updates will be installed
@@ -36,8 +35,6 @@ backed_opts=""
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )    usage;;
-        --backed=s3)   backed_s3="yes";;
-        --backed=ebs)  backed_ebs="yes";;
         --copy)        backed_opts+="--copy ";;
         --publish)     backed_opts+="--publish ";;
         --secupdates)  secupdates="yes";;
@@ -48,11 +45,6 @@ done
 
 [ -n "$appname" ] || usage
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
-
-if [ -z "${backed_s3}${backed_ebs}" ]; then
-    backed_s3="yes"
-    backed_ebs="yes"
-fi
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -101,12 +93,6 @@ tklpatch-apply $rootfs $BT/patches/ec2
 umount -l $rootfs/dev
 $BT/bin/rootfs-cleanup $rootfs
 
-if [ "$backed_ebs" == "yes" ]; then
-    $BT/bin/aptconf-tag $rootfs ebs
-    $BT/bin/ec2/ebs.py $backed_opts $rootfs
-fi
+$BT/bin/aptconf-tag $rootfs ebs
+$BT/bin/ec2/ebs.py $backed_opts $rootfs
 
-if [ "$backed_s3" == "yes" ]; then
-    $BT/bin/aptconf-tag $rootfs s3
-    $BT/bin/ec2/s3.py $backed_opts $rootfs
-fi
