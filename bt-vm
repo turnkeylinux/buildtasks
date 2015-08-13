@@ -104,10 +104,10 @@ $BT/bin/generate-signature $O/$name-ovf.zip
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
-    $BT/bin/publish-files $O/$name-vmdk.{zip,zip.sig}
+    $BT/bin/publish-files $O/$name-vmdk.zip
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
-    $BT/bin/publish-files $O/$name-ovf.{zip,zip.sig}
+    $BT/bin/publish-files $O/$name-ovf.zip
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$name-vmdk.zip.sig

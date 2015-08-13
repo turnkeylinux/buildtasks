@@ -78,7 +78,7 @@ $BT/bin/generate-signature $O/$name-openstack.tar.gz
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openstack/
-    $BT/bin/publish-files $O/$name-openstack.{tar.gz,tar.gz.sig}
+    $BT/bin/publish-files $O/$name-openstack.tar.gz
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$name-openstack.tar.gz.sig

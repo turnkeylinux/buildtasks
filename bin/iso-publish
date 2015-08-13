@@ -40,7 +40,7 @@ for f in $FILES; do
     version=$(echo $name |perl -pe 's/.*?-(\d.*)/\1/')
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
-    $BT/bin/publish-files $O/$name.{iso,iso.sig}
+    $BT/bin/publish-files $O/$name.iso
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$version/
     $BT/bin/publish-files $O/$name.{changelog,manifest,iso.sig}

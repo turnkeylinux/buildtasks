@@ -154,7 +154,7 @@ fi
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
-    $BT/bin/publish-files $O/$name.{iso,iso.sig}
+    $BT/bin/publish-files $O/$name.iso
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$name.{manifest,iso.sig}

@@ -92,7 +92,7 @@ $BT/bin/generate-signature $O/$name-xen.tar.bz2
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/xen/
-    $BT/bin/publish-files $O/$name-xen.{tar.bz2,tar.bz2.sig}
+    $BT/bin/publish-files $O/$name-xen.tar.bz2
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
     $BT/bin/publish-files $O/$name-xen.tar.bz2.sig
