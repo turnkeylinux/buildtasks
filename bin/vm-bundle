@@ -113,9 +113,9 @@ mount $looproot $rootfs.fs
 mount $loopboot $rootfs.fs/boot
 
 info "mount binding dev and proc"
-mount -o bind /dev $rootfs.fs/dev
-mount -o bind /sys $rootfs.fs/sys
-mount -o bind /proc $rootfs.fs/proc
+mount --bind --make-rslave /dev $rootfs.fs/dev
+mount --bind --make-rslave /dev $rootfs.fs/sys
+mount --bind --make-rslave /dev $rootfs.fs/proc
 
 info "installing and configuring grub"
 grubcfg=$rootfs.fs/boot/grub/grub.cfg
