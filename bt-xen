@@ -94,7 +94,7 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/xen/
     $BT/bin/publish-files $O/$name-xen.tar.bz2
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name-xen.tar.bz2.sig
 fi
 

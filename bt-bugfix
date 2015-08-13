@@ -156,7 +156,7 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
     $BT/bin/publish-files $O/$name.iso
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name.{manifest,iso.sig}
 
     if [ "$gen_profile" == "yes" ]; then

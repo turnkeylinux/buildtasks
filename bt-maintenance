@@ -128,7 +128,7 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
     $BT/bin/publish-files $O/$newname.iso
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_NEW_VERSION/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$newname.{changelog,manifest,iso.sig}
 
     if [ -e "$BT_PROFILES/$appname" ]; then

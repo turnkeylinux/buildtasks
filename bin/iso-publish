@@ -42,7 +42,7 @@ for f in $FILES; do
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
     $BT/bin/publish-files $O/$name.iso
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$version/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name.{changelog,manifest,iso.sig}
 
     if [ -e $O/$name.tklbam/*.tar.gz ]; then
