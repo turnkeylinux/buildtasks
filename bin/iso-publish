@@ -46,7 +46,7 @@ for f in $FILES; do
     $BT/bin/publish-files $O/$name.{changelog,manifest,iso.sig}
 
     if [ -e $O/$name.tklbam/*.tar.gz ]; then
-        export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+        export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
         $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
     fi
 done

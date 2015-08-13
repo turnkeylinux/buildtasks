@@ -161,7 +161,7 @@ if [ "$publish" == "yes" ]; then
 
     if [ "$gen_profile" == "yes" ]; then
         if [ -e "$BT_PROFILES/$appname" ]; then
-            export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+            export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
             $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
         fi
     fi

@@ -132,7 +132,7 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$newname.{changelog,manifest,iso.sig}
 
     if [ -e "$BT_PROFILES/$appname" ]; then
-        export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+        export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
         $BT/bin/publish-files $O/$newname.tklbam/*.tar.gz
     fi
 fi
