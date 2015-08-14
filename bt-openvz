@@ -92,6 +92,7 @@ cdroot=$name.cdroot
 
 if $(echo $BT_VERSION | grep -q squeeze); then debianversion="debian-6"; fi
 if $(echo $BT_VERSION | grep -q wheezy); then debianversion="debian-7"; fi
+if $(echo $BT_VERSION | grep -q jessie); then debianversion="debian-8"; fi
 [ -n "$debianversion" ] || fatal "debianversion could not be determined"
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
