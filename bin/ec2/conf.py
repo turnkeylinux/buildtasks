@@ -7,7 +7,6 @@ KERNELS = {
     'us-west-2': {'amd64': 'aki-fc8f11cc', 'i386': 'aki-f08f11c0'},
     'sa-east-1': {'amd64': 'aki-5553f448', 'i386': 'aki-5b53f446'},
     'eu-west-1': {'amd64': 'aki-52a34525', 'i386': 'aki-68a3451f'},
-    'eu-central-1': {'amd64': 'aki-184c7a05', 'i386': 'aki-3e4c7a23'},
     'ap-southeast-1': {'amd64': 'aki-503e7402', 'i386': 'aki-ae3973fc'},
     'ap-southeast-2': {'amd64': 'aki-c362fff9', 'i386': 'aki-cd62fff7'},
     'ap-northeast-1': {'amd64': 'aki-176bf516', 'i386': 'aki-136bf512'},
