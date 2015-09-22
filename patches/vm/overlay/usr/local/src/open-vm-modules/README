@@ -10,7 +10,7 @@ Notes on creating open-vm-modules tarballs
     - install required packages
         apt-get update
         apt-get install linux-headers-[amd64|686-pae]
-        apt-get install open-vm-tools open-vm-dkms
+        apt-get install open-vm-tools open-vm-tools-dkms
 
     - change networking and connect
         - set HOST, udhcp eth0
