@@ -58,9 +58,6 @@ VM_PARTED_LVM_SWAP="512MB"
 #VM_PARTED_LVM_ROOT="800MB"
 #VM_PARTED_LVM_SWAP="50MB"
 
-# workaround weird kpartx bug
-modprobe dm-mod
-
 VG=turnkey
 [ -e /dev/$VG ] && VG=turnkeyvm
 [ -e /dev/$VG ] && fatal "VG exists: $VG"
@@ -76,7 +73,7 @@ parted --script -- $rootfs.raw set 2 LVM on
 
 info "setting up loop device and LVM"
 loopdev=$(losetup --show -f $rootfs.raw)
-kpartx -a $loopdev
+kpartx -as $loopdev
 
 pvcreate /dev/mapper/$(basename $loopdev)p2
 vgcreate $VG /dev/mapper/$(basename $loopdev)p2
