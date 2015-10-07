@@ -98,7 +98,7 @@ $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs vm
 
-$BT/bin/vm-bundle $rootfs
+$BT/bin/vm-bundle $O/$rootfs
 
 $BT/bin/generate-signature $O/$name-vmdk.zip
 $BT/bin/generate-signature $O/$name-ovf.zip
