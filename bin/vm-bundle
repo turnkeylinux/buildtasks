@@ -38,7 +38,7 @@ if [[ "$#" != "1" ]]; then
 fi
 
 rootfs=$1
-name=$(echo $rootfs | sed 's/.rootfs//')
+name=$(basename $rootfs .rootfs)
 
 [ -n "$VM_URL" ] || fatal "VM_URL not set"
 [ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
