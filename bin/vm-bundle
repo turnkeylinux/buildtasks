@@ -127,18 +127,13 @@ grub-install --force --modules='part_msdos ext2 search_fs_uuid' --grub-mkdevicem
 
 info "tweaking grub settings"
 
-UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
-cat > $devicemap <<EOF
-(sd0)   /dev/sda
-(sd0)   UUID=$UUID
-EOF
-
-sed -i "s|root='(hd0,1)'|root=(sd0,1)|g" $grubcfg
-sed -i "/loopback/d" $grubcfg
-sed -i "/set root=(loop/d" $grubcfg
+sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1/dev/mapper/$VG-root ro dolvm|" $grubcfg
 
 info "creating fstab"
 fstab="$rootfs.fs/etc/fstab"
+
+UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
+
 echo -e "proc\t\t\t/proc\tproc\tnodev,noexec,nosuid\t0\t0" > $fstab
 echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" >> $fstab
 echo -e "UUID=$UUID\t/boot\text2\tdefaults\t0\t2" >> $fstab
