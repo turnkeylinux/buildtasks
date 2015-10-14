@@ -101,7 +101,7 @@ $BT/bin/aptconf-tag $rootfs vm
 $BT/bin/vm-bundle $O/$rootfs
 
 $BT/bin/generate-signature $O/$name-vmdk.zip
-$BT/bin/generate-signature $O/$name-ovf.zip
+$BT/bin/generate-signature $O/$name.ova
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -109,11 +109,11 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$name-vmdk.zip
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
-    $BT/bin/publish-files $O/$name-ovf.zip
+    $BT/bin/publish-files $O/$name.ova
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name-vmdk.zip.sig
-    $BT/bin/publish-files $O/$name-ovf.zip.sig
+    $BT/bin/publish-files $O/$name.ova.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

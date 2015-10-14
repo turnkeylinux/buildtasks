@@ -218,12 +218,24 @@ chmod 644 $name/$name.vmx
 info "generating vmdk zip"
 zip -r -T $name-vmdk.zip $name
 
-info "creating ovf and generate zip"
+info "generating ovf"
 cd $name
 ovftool $name.vmx $name.ovf
 rm $name.vmx $name.vmdk
+
+info "tweaking ovf & generating ova"
+# fix vm name (otherwise defaults to "vm" in VBox)
+sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf
+
+# fix OSType: 102 = "other64" (1 = other)
+sed -i "/OperatingSystemSection ovf:id/ s|\"1\".*|\"102\">|" $name.ovf
+
+# update SHA of fixed ovf
+SHA=$(openssl sha1 $name.ovf)
+sed -i "s|.*$name.ovf.*|$SHA|" $name.mf
+
+ovftool $name.ovf ../$name.ova
 cd ../
-zip -r -T $name-ovf.zip $name
 
 if [ -z "$BT_DEBUG" ]; then
     info "performing final cleanup"
