@@ -123,11 +123,12 @@ cat > $devicemap <<EOF
 EOF
 
 chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
-grub-install --force --modules='part_msdos ext2 search_fs_uuid' --grub-mkdevicemap=$devicemap --root-directory=$rootfs.fs $loopdev
+grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.fs $loopdev
 
 info "tweaking grub settings"
-
 sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1/dev/mapper/$VG-root ro dolvm|" $grubcfg
+#remove temp grub/device.map 
+rm -f $devicemap
 
 info "creating fstab"
 fstab="$rootfs.fs/etc/fstab"
