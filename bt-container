@@ -110,14 +110,22 @@ $BT/bin/aptconf-tag $rootfs proxmox
 # bundle proxmox tarball using stupid naming convention
 appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
 stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${ARCHITECTURE}"
-info "creating $stupidname.tar.gz"
+info "creating Proxmox container build ($stupidname.tar.gz)"
 tar -C $rootfs -zcf $stupidname.tar.gz .
 
 $BT/bin/generate-signature $O/$stupidname.tar.gz
 
+info "creating OpenNode container build ($stupidname.ova)"
+$BT/bin/aptconf-tag $rootfs opennode
+
+mkdir opennode-temp
+tar -C $rootfs -zcf opennode-temp/$stupidname.tar.gz .
+
 # generate opennode ovf and bundle
-$BT/bin/generate-opennode-ovf $O/$stupidname.tar.gz > $stupidname.ovf
-tar -cf $stupidname.ova $stupidname.ovf $stupidname.tar.gz
+cd opennode-temp
+$BT/bin/generate-opennode-ovf $O/opennode-temp/$stupidname.tar.gz > $stupidname.ovf
+tar -cf ../$stupidname.ova $stupidname.ovf $stupidname.tar.gz
+cd ..
 
 $BT/bin/generate-signature $O/$stupidname.ova
 pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
@@ -137,5 +145,6 @@ fi
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
+    rm -rf opennode-temp
 fi
 
