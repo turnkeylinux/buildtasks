@@ -17,7 +17,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [--publish] appname
-Converts appliance appname (e.g., core) to openvz
+Converts appliance appname (e.g., core) to container template
 
 Options::
 
@@ -63,7 +63,7 @@ export BT_CONFIG=$BT/config
 
 export ARCHITECTURE=$(dpkg --print-architecture)
 
-O=$BT_BUILDS/openvz
+O=$BT_BUILDS/container
 mkdir -p $O
 
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
@@ -102,12 +102,12 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/headless
-tklpatch-apply $rootfs $BT/patches/openvz
+tklpatch-apply $rootfs $BT/patches/container
 $BT/bin/rootfs-cleanup $rootfs
 
-$BT/bin/aptconf-tag $rootfs openvz
+$BT/bin/aptconf-tag $rootfs proxmox
 
-# bundle openvz tarball using stupid naming convention
+# bundle proxmox tarball using stupid naming convention
 appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
 stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${ARCHITECTURE}"
 info "creating $stupidname.tar.gz"
@@ -124,7 +124,7 @@ pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
-    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openvz/
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/proxmox/
     $BT/bin/publish-files $O/$stupidname.tar.gz
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/opennode/
