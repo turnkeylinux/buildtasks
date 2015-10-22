@@ -1,0 +1,3 @@
+# set terminal to default to xterm
+# fixes weird stuff in Proxmox WebUI console window
+TERM=xterm
