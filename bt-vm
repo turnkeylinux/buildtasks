@@ -108,7 +108,7 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
     $BT/bin/publish-files $O/$name-vmdk.zip
 
-    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ova/
     $BT/bin/publish-files $O/$name.ova
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
