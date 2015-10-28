@@ -142,7 +142,7 @@ echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
 
 info "umounting the jumble..."
 umount $rootfs.fs/proc
-umount $rootfs.fs/sys
+grep $rootfs.fs/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
 umount $rootfs.fs/dev
 umount $rootfs.fs/boot
 umount $rootfs.fs/
