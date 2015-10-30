@@ -10,7 +10,7 @@ install() {
 }
 
 # install required packages
-install quota
+install quota sysvinit systemd-shim
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
