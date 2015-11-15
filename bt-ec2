@@ -20,6 +20,7 @@ Converts appliance appname (e.g., core) to ec2 ebs-backed ami's
 
 Options::
 
+    --pv                - if set, image will be prepared for PV virtualization
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public
     --secupdates        - if set, security updates will be installed
@@ -37,6 +38,7 @@ while [ "$1" != "" ]; do
         --help|-h )    usage;;
         --copy)        backed_opts+="--copy ";;
         --publish)     backed_opts+="--publish ";;
+        --pv)          backed_opts+="--pv "; pv="yes";;
         --secupdates)  secupdates="yes";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
@@ -82,12 +84,13 @@ function _cleanup() {
 
 trap _cleanup INT TERM EXIT
 
+mount --bind --make-rslave /dev $rootfs/dev
+
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
-
-mount --bind --make-rslave /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/ec2
 
+[ "$pv" == "yes" ] && tklpatch-apply $rootfs $BT/patches/ec2-pv
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
 
 umount -l $rootfs/dev
