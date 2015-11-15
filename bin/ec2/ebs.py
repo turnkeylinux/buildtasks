@@ -20,7 +20,7 @@ Options:
 
     --pv            Create PV-ready AMI instead of HVM
     --copy          Copy created AMI to all other regions
-    --publish       Make AMI's public
+    --publish       Make AMIs public
 
 Environment:
 
