@@ -16,7 +16,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to ec2 ebs-backed ami's
+Converts appliance appname (e.g., core) to EC2 EBS-backed AMIs
 
 Options::
 
