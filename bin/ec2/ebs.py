@@ -18,8 +18,9 @@ Arguments:
 
 Options:
 
+    --pv            Create PV-ready AMI instead of HVM
     --copy          Copy created AMI to all other regions
-    --publish       Make AMI's public
+    --publish       Make AMIs public
 
 Environment:
 
@@ -58,16 +59,20 @@ def usage(e=None):
 def main():
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h",
-            ["help", "copy", "publish"])
+            ["help", "pv", "copy", "publish"])
     except getopt.GetoptError, e:
         usage(e)
 
 
+    virt = 'hvm'
     copy = False
     publish = False
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
+
+        if opt == "--pv":
+            virt = 'paravirtual'
 
         if opt == "--copy":
             copy = True
@@ -84,8 +89,8 @@ def main():
 
     region = utils.get_region()
 
-    snapshot_id, snapshot_name = bundle(rootfs)
-    ami_id = register(snapshot_id, region)
+    snapshot_id, snapshot_name = bundle(rootfs, virt)
+    ami_id = register(snapshot_id, region, virt=virt)
 
     if publish:
         share_public(ami_id, region)

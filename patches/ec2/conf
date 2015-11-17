@@ -1,7 +1,5 @@
 #!/bin/bash -ex
 
-fatal() { echo "FATAL: $@" 1>&2; exit 1; }
-
 install() {
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get -y \
@@ -13,17 +11,11 @@ install() {
 install hubclient ebsmount sudo
 
 # grub tweaks
-cur=$(grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub | sed "s/.*=\"\(.*\)\"/\1/")
-new=$(echo "$cur xencons=hvc0 console=hvc0" | sed "s/^ *//g")
-sed -i "/GRUB_CMDLINE_LINUX_DEFAULT=/ s/=.*/=\"$new\"/" /etc/default/grub
-
-sed -i "/GRUB_HIDDEN_TIMEOUT=/ s/=.*/=true/" /etc/default/grub
-sed -i "/GRUB_TIMEOUT=/ s/=.*/=0/" /etc/default/grub
-
-chmod -x /etc/grub.d/*
-chmod +x /etc/grub.d/40_custom
-update-grub
-ln -sf /boot/grub/grub.cfg /boot/grub/menu.lst
+DEFAULT=/etc/default/grub
+sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT=.*\)"$/\1 xencons=ttyS0 console=ttyS0"/' $DEFAULT
+sed -i 's/^\(GRUB_HIDDEN_TIMEOUT_QUIET=\).*$/\1true/;' $DEFAULT
+sed -i 's/^\(GRUB_TIMEOUT=\).*$/\1"0"/;' $DEFAULT
+sed -i 's/^#\(GRUB_DISABLE_RECOVERY\)/\1/;' $DEFAULT
 
 # make sure images are world readable
 chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
