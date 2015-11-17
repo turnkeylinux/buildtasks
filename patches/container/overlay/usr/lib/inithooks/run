@@ -10,9 +10,11 @@ if [ "$(echo $REDIRECT_OUTPUT | tr [A-Z] [a-z] )" = "true" ]; then
     touch $LOGFILE; chmod 640 $LOGFILE
     TTY=$(cat /sys/devices/virtual/tty/tty0/active)
     [ -z $TTY ] && TTY=console
-    echo "-------------------------------------------------" > /dev/$TTY
-    echo "Regenerating keys and installing security updates" > /dev/$TTY
-    echo "-------------------------------------------------" > /dev/$TTY
+    if [ "$RUN_FIRSTBOOT" = "true" ]; then
+        echo "-------------------------------------------------" > /dev/$TTY
+        echo "Regenerating keys and installing security updates" > /dev/$TTY
+        echo "-------------------------------------------------" > /dev/$TTY
+    fi
     echo "Redirecting output to $LOGFILE"
     exec > >(tee $LOGFILE|logger -t inithooks -s 2>/dev/$TTY) 2>&1
     
