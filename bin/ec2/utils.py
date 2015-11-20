@@ -12,7 +12,6 @@
 import re
 import os
 import sys
-import time
 import logging
 
 import conf
@@ -48,9 +47,6 @@ def get_all_regions():
 def get_kernel(region, arch):
     return conf.KERNELS[region][arch]
 
-def get_uniquename(region, name):
-    return "_".join([name, str(int(time.time()))])
-
 def get_logger(name, level=None):
     logger = logging.getLogger(name)
 
@@ -81,12 +77,13 @@ def rsync(rootfs, dest):
 
 def parse_imagename(s):
     parsed = {}
-    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*).(ebs|s3.*)", s)
+    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*).(.*)_(.*)", s)
     if m:
         parsed['appname'] = m.groups()[0]
         parsed['version'] = m.groups()[1]
         parsed['distro'] = m.groups()[2]
-        parsed['architecture'] = m.groups()[3]
+        parsed['arch'] = m.groups()[3]
+        parsed['virt'] = m.groups()[4]
         parsed['url'] = 'http://www.turnkeylinux.org/' + parsed['appname']
 
     return parsed

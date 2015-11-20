@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -18,9 +18,9 @@ Arguments:
 
 Options:
 
+    --virt=hvm|pvm  Virtualization type (default: hvm)
     --size=         Size of snapshot (default: 10)
     --fs=           File system of snapshot (default: ext4)
-    --pv            Bundle a PV-virtualized image
 
 """
 import os
@@ -196,7 +196,7 @@ class Device:
 def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
     log.debug('getting unique snapshot name')
     app = utils.get_turnkey_version(rootfs)
-    snapshot_name = utils.get_uniquename(utils.get_region(), app + '.ebs')
+    snapshot_name = "%s.%s_%s" % (app, virt, str(int(time.time())))
     log.info('target snapshot - %s ', snapshot_name)
 
     log.info('creating volume, attaching, formatting and mounting')
@@ -223,7 +223,9 @@ def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
         for i in submounts:
             executil.system('mount', '--bind', i, mount_path + i)
 
-        for i in [['grub-install', device.root_path], ['update-grub'], ['update-initramfs', '-u']]:
+        for i in [ ['grub-install', device.root_path],
+                   ['update-grub'],
+                   ['update-initramfs', '-u'] ]:
             executil.system('chroot', mount_path, *i)
 
         for i in submounts:
@@ -245,25 +247,28 @@ def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
 
 def main():
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help", "size=", "fs=", "pv"])
+        l_opts = ["help", "virt=", "size=", "fs="]
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
-    fs = 'ext4'
-    size = 10
-    virt = 'hvm'
+    kwargs = {
+        'filesystem': 'ext4',
+        'virt': 'hvm',
+        'size': 10,
+    }
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
 
+        if opt == "--virt":
+            kwargs['virt'] = val
+
         if opt == "--size":
-            size = int(val)
+            kwargs['size'] = int(val)
 
         if opt == "--fs":
-            fs = val
-
-        if opt == "--pv":
-            virt = 'paravirtual'
+            kwargs['filesystem'] = val
 
     if len(args) != 1:
         usage("incorrect number of arguments")
@@ -272,7 +277,11 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
-    snapshot_id, snapshot_name = bundle(rootfs, virt=virt, size=size, filesystem=fs)
+    if not kwargs['virt'] in ('hvm', 'pvm'):
+        fatal("virtualization type not supported: %s" % kwargs['virt'])
+
+    snapshot_id, snapshot_name = bundle(rootfs, **kwargs)
+
     print "%s %s" % (snapshot_id, snapshot_name)
 
 if __name__ == "__main__":
