@@ -16,13 +16,15 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to ec2 ebs-backed ami's
+Converts appliance appname (e.g., core) to EC2 EBS-backed AMIs
 
 Options::
 
+    --virt=hvm|pvm      - build image for virtualization type (default: hvm)
+    --secupdates        - install security updates before building image
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public
-    --secupdates        - if set, security updates will be installed
+    --marketplace       - if set, image will be shared for marketplace
 
 Environment::
 
@@ -31,17 +33,27 @@ EOF
 exit 1
 }
 
+virt="hvm"
 backed_opts=""
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )    usage;;
+        --help|-h)     usage;;
+        --virt=hvm)    virt="hvm";;
+        --virt=pvm)    virt="pvm";;
         --copy)        backed_opts+="--copy ";;
         --publish)     backed_opts+="--publish ";;
+        --marketplace) backed_opts+="--marketplace ";;
         --secupdates)  secupdates="yes";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
     shift
 done
+
+case $virt in
+    hvm)    backed_opts+="--virt=hvm ";;
+    pvm)    backed_opts+="--virt=pvm ";;
+    *)      fatal "virtualization type not supported: $virt";;
+esac
 
 [ -n "$appname" ] || usage
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
@@ -82,16 +94,21 @@ function _cleanup() {
 
 trap _cleanup INT TERM EXIT
 
+mount --bind --make-rslave /dev $rootfs/dev
+
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
+tklpatch-apply $rootfs $BT/patches/ec2/common
 
-mount --bind --make-rslave /dev $rootfs/dev
-tklpatch-apply $rootfs $BT/patches/ec2
+case $virt in
+    hvm)    tklpatch-apply $rootfs $BT/patches/ec2/hvm;;
+    pvm)    tklpatch-apply $rootfs $BT/patches/ec2/pvm;;
+esac
 
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
 
 umount -l $rootfs/dev
 $BT/bin/rootfs-cleanup $rootfs
 
-$BT/bin/aptconf-tag $rootfs ebs
+$BT/bin/aptconf-tag $rootfs $virt
 $BT/bin/ec2/ebs.py $backed_opts $rootfs

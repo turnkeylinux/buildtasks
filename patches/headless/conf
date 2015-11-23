@@ -1,0 +1,9 @@
+#!/bin/bash -ex
+# Author: Anton Pyrogovskyi <anton@turnkeylinux.org> (c) 2015
+
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get -y \
+    -o DPkg::Options::=--force-confdef \
+    -o DPkg::Options::=--force-confold \
+    install dtach
+

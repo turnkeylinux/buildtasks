@@ -1,0 +1,22 @@
+#!/bin/bash -ex
+
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+install hubclient ebsmount sudo
+
+# grub tweaks
+DEFAULT=/etc/default/grub
+sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT=.*\)"$/\1 xencons=ttyS0 console=ttyS0"/' $DEFAULT
+sed -i 's/^\(GRUB_HIDDEN_TIMEOUT_QUIET=\).*$/\1true/;' $DEFAULT
+sed -i 's/^\(GRUB_TIMEOUT=\).*$/\1"0"/;' $DEFAULT
+sed -i 's/^#\(GRUB_DISABLE_RECOVERY\)/\1/;' $DEFAULT
+
+# make sure images are world readable
+chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
+

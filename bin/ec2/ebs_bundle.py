@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -18,6 +18,7 @@ Arguments:
 
 Options:
 
+    --virt=hvm|pvm  Virtualization type (default: hvm)
     --size=         Size of snapshot (default: 10)
     --fs=           File system of snapshot (default: ext4)
 
@@ -152,6 +153,7 @@ class Device:
             raise Error("no free devices available...")
 
         self.amazon_path = '/dev/sd' + self.real_path[-1]
+        self.root_path = None
 
     @staticmethod
     def _get_freedevice():
@@ -181,14 +183,20 @@ class Device:
         log.debug('mkfs - %s', self.real_path)
         executil.system('mkfs.' + fs, '-F', '-j', self.real_path)
 
+    def mkpart(self):
+        executil.system('parted', self.real_path, '--script', 'unit mib mklabel gpt mkpart primary 1 3 name 1 grub set 1 bios_grub on mkpart primary ext4 3 -1 name 2 rootfs quit')
+        executil.system('partprobe', self.real_path)
+        self.root_path = self.real_path
+        self.real_path = self.real_path + '2'
+
     def __del__(self):
         if self.is_mounted():
             self.umount()
 
-def bundle(rootfs, size=10, filesystem='ext4'):
+def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
     log.debug('getting unique snapshot name')
     app = utils.get_turnkey_version(rootfs)
-    snapshot_name = utils.get_uniquename(utils.get_region(), app + '.ebs')
+    snapshot_name = "%s.%s_%s" % (app, virt, str(int(time.time())))
     log.info('target snapshot - %s ', snapshot_name)
 
     log.info('creating volume, attaching, formatting and mounting')
@@ -198,12 +206,30 @@ def bundle(rootfs, size=10, filesystem='ext4'):
     device = Device()
     volume.attach(utils.get_instanceid(), device)
 
+    if virt == 'hvm':
+        log.info('creating first partition')
+        device.mkpart()
+
     device.mkfs(filesystem)
     mount_path = rootfs + '.mount'
     device.mount(mount_path)
 
     log.info('syncing rootfs to volume')
     utils.rsync(rootfs, mount_path)
+
+    if virt == 'hvm':
+        log.debug('installing GRUB on volume')
+        submounts = ['/sys', '/proc', '/dev']
+        for i in submounts:
+            executil.system('mount', '--bind', i, mount_path + i)
+
+        for i in [ ['grub-install', device.root_path],
+                   ['update-grub'],
+                   ['update-initramfs', '-u'] ]:
+            executil.system('chroot', mount_path, *i)
+
+        for i in submounts:
+            executil.system('umount', mount_path + i)
 
     device.umount()
     volume.detach()
@@ -212,6 +238,8 @@ def bundle(rootfs, size=10, filesystem='ext4'):
     log.info('creating snapshot from volume')
     snapshot = Snapshot()
     snapshot.create(volume.vol.id, snapshot_name)
+
+    volume._wait("available")
     volume.delete()
 
     log.info("complete - %s %s", snapshot.snap.id, snapshot.snap.description)
@@ -219,21 +247,28 @@ def bundle(rootfs, size=10, filesystem='ext4'):
 
 def main():
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help", "size=", "fs="])
+        l_opts = ["help", "virt=", "size=", "fs="]
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
-    fs = 'ext4'
-    size = 10
+    kwargs = {
+        'filesystem': 'ext4',
+        'virt': 'hvm',
+        'size': 10,
+    }
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
 
+        if opt == "--virt":
+            kwargs['virt'] = val
+
         if opt == "--size":
-            size = int(val)
+            kwargs['size'] = int(val)
 
         if opt == "--fs":
-            fs = val
+            kwargs['filesystem'] = val
 
     if len(args) != 1:
         usage("incorrect number of arguments")
@@ -242,7 +277,11 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
-    snapshot_id, snapshot_name = bundle(rootfs, size=size, filesystem=fs)
+    if not kwargs['virt'] in ('hvm', 'pvm'):
+        fatal("virtualization type not supported: %s" % kwargs['virt'])
+
+    snapshot_id, snapshot_name = bundle(rootfs, **kwargs)
+
     print "%s %s" % (snapshot_id, snapshot_name)
 
 if __name__ == "__main__":

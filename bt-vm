@@ -62,15 +62,15 @@ export VM_URL="http://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
 
 case "$appname" in
-    canvas)           export VM_MEMORY=512 ;;
-    gitlab)           export VM_MEMORY=512 ;;
-    jenkins)          export VM_MEMORY=512 ;;
-    clipbucket)       export VM_MEMORY=512 ;;
-    tkldev)           export VM_MEMORY=512 ;;
-    moodle)           export VM_MEMORY=384 ;;
-    tomcat-apache)    export VM_MEMORY=384 ;;
-    appengine-java)   export VM_MEMORY=384 ;;
-    *)                export VM_MEMORY=256 ;;
+    canvas)           export VM_MEMORY=1024 ;;
+    gitlab)           export VM_MEMORY=1024 ;;
+    jenkins)          export VM_MEMORY=1024 ;;
+    odoo)             export VM_MEMORY=1024 ;;
+    tkldev)           export VM_MEMORY=768 ;;
+    moodle)           export VM_MEMORY=768 ;;
+    tomcat-apache)    export VM_MEMORY=768 ;;
+    appengine-java)   export VM_MEMORY=768 ;;
+    *)                export VM_MEMORY=512 ;;
 esac
 
 if $(echo $BT_VERSION | grep -q squeeze-i386); then guestos="debian6"; fi
@@ -98,22 +98,22 @@ $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs vm
 
-$BT/bin/vm-bundle $rootfs
+$BT/bin/vm-bundle $O/$rootfs
 
 $BT/bin/generate-signature $O/$name-vmdk.zip
-$BT/bin/generate-signature $O/$name-ovf.zip
+$BT/bin/generate-signature $O/$name.ova
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
     $BT/bin/publish-files $O/$name-vmdk.zip
 
-    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ovf/
-    $BT/bin/publish-files $O/$name-ovf.zip
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ova/
+    $BT/bin/publish-files $O/$name.ova
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name-vmdk.zip.sig
-    $BT/bin/publish-files $O/$name-ovf.zip.sig
+    $BT/bin/publish-files $O/$name.ova.sig
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

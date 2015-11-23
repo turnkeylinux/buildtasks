@@ -38,7 +38,7 @@ if [[ "$#" != "1" ]]; then
 fi
 
 rootfs=$1
-name=$(echo $rootfs | sed 's/.rootfs//')
+name=$(basename $rootfs .rootfs)
 
 [ -n "$VM_URL" ] || fatal "VM_URL not set"
 [ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
@@ -58,9 +58,6 @@ VM_PARTED_LVM_SWAP="512MB"
 #VM_PARTED_LVM_ROOT="800MB"
 #VM_PARTED_LVM_SWAP="50MB"
 
-# workaround weird kpartx bug
-modprobe dm-mod
-
 VG=turnkey
 [ -e /dev/$VG ] && VG=turnkeyvm
 [ -e /dev/$VG ] && fatal "VG exists: $VG"
@@ -76,7 +73,7 @@ parted --script -- $rootfs.raw set 2 LVM on
 
 info "setting up loop device and LVM"
 loopdev=$(losetup --show -f $rootfs.raw)
-kpartx -a $loopdev
+kpartx -as $loopdev
 
 pvcreate /dev/mapper/$(basename $loopdev)p2
 vgcreate $VG /dev/mapper/$(basename $loopdev)p2
@@ -113,9 +110,9 @@ mount $looproot $rootfs.fs
 mount $loopboot $rootfs.fs/boot
 
 info "mount binding dev and proc"
-mount --bind --make-rslave /dev $rootfs.fs/dev
-mount --bind --make-rslave /dev $rootfs.fs/sys
-mount --bind --make-rslave /dev $rootfs.fs/proc
+mount --rbind --make-rslave /dev $rootfs.fs/dev
+mount --rbind --make-rslave /sys $rootfs.fs/sys
+mount --rbind --make-rslave /proc $rootfs.fs/proc
 
 info "installing and configuring grub"
 grubcfg=$rootfs.fs/boot/grub/grub.cfg
@@ -123,25 +120,21 @@ devicemap=$rootfs.fs/boot/grub/device.map
 
 cat > $devicemap <<EOF
 (hd0)   $loopdev
-(hd0,1) $loopboot
 EOF
 
 chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
-grub-install --force --grub-mkdevicemap=$devicemap --root-directory=$rootfs.fs $loopdev
+grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.fs $loopdev
 
 info "tweaking grub settings"
-UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
-cat > $devicemap <<EOF
-(sd0)   /dev/sda
-(sd0)   UUID=$UUID
-EOF
-
-sed -i "s|root='(hd0,1)'|root=(sd0,1)|g" $grubcfg
-sed -i "/loopback/d" $grubcfg
-sed -i "/set root=(loop/d" $grubcfg
+sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1/dev/mapper/$VG-root ro dolvm|" $grubcfg
+#remove temp grub/device.map 
+rm -f $devicemap
 
 info "creating fstab"
 fstab="$rootfs.fs/etc/fstab"
+
+UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
+
 echo -e "proc\t\t\t/proc\tproc\tnodev,noexec,nosuid\t0\t0" > $fstab
 echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" >> $fstab
 echo -e "UUID=$UUID\t/boot\text2\tdefaults\t0\t2" >> $fstab
@@ -149,7 +142,7 @@ echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
 
 info "umounting the jumble..."
 umount $rootfs.fs/proc
-umount $rootfs.fs/sys
+grep $rootfs.fs/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
 umount $rootfs.fs/dev
 umount $rootfs.fs/boot
 umount $rootfs.fs/
@@ -225,12 +218,24 @@ chmod 644 $name/$name.vmx
 info "generating vmdk zip"
 zip -r -T $name-vmdk.zip $name
 
-info "creating ovf and generate zip"
+info "generating ovf"
 cd $name
 ovftool $name.vmx $name.ovf
 rm $name.vmx $name.vmdk
+
+info "tweaking ovf & generating ova"
+# fix vm name (otherwise defaults to "vm" in VBox)
+sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf
+
+# fix OSType: 102 = "other64" (1 = other)
+sed -i "/OperatingSystemSection ovf:id/ s|\"1\".*|\"102\">|" $name.ovf
+
+# update SHA of fixed ovf
+SHA=$(openssl sha1 $name.ovf)
+sed -i "s|.*$name.ovf.*|$SHA|" $name.mf
+
+ovftool $name.ovf ../$name.ova
 cd ../
-zip -r -T $name-ovf.zip $name
 
 if [ -z "$BT_DEBUG" ]; then
     info "performing final cleanup"

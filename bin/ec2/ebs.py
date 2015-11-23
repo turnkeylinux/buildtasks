@@ -18,8 +18,10 @@ Arguments:
 
 Options:
 
+    --virt=hvm|pvm  Create AMI for virtualization type (default: hvm)
     --copy          Copy created AMI to all other regions
-    --publish       Make AMI's public
+    --publish       Set AMI launch permission to public
+    --marketplace   Share snapshot with AWS marketplace userid
 
 Environment:
 
@@ -57,23 +59,31 @@ def usage(e=None):
 
 def main():
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "h",
-            ["help", "copy", "publish"])
+        l_opts = ["help", "copy", "publish", "marketplace", "virt="]
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
 
+    virt = 'hvm'
     copy = False
     publish = False
+    marketplace = False
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
+
+        if opt == "--virt":
+            virt = val
 
         if opt == "--copy":
             copy = True
 
         if opt == "--publish":
             publish = True
+
+        if opt == "--marketplace":
+            marketplace = True
 
     if len(args) != 1:
         usage("incorrect number of arguments")
@@ -82,13 +92,18 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
+    if not virt in ('hvm', 'pvm'):
+        fatal("virtualization type not supported: %s" % virt)
+
     region = utils.get_region()
 
-    snapshot_id, snapshot_name = bundle(rootfs)
-    ami_id = register(snapshot_id, region)
+    snapshot_id, snapshot_name = bundle(rootfs, virt=virt)
+    ami_id = register(snapshot_id, region, virt=virt)
 
     if publish:
         share_public(ami_id, region)
+
+    if marketplace:
         share_marketplace(snapshot_id, region)
 
     images = []
