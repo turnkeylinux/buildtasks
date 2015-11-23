@@ -1,7 +1,0 @@
-#!/bin/bash -ex
-
-chmod -x /etc/grub.d/*
-chmod +x /etc/grub.d/40_custom
-update-grub
-ln -sf /boot/grub/grub.cfg /boot/grub/menu.lst
-
