@@ -1,0 +1,57 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 isofile sigfile
+Verify GPG signature and checksum
+
+Arguments::
+
+    isofile         - path to iso file
+    sigfile         - path to sig file
+
+Environment::
+
+    BT_GPGKEY       - gpg key id used to sign the signature file
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "2" ]]; then
+    usage
+fi
+
+isopath=$1
+sigpath=$2
+
+if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
+    gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0x$BT_GPGKEY
+fi
+
+
+info "verifying gpg signature"
+if ! gpg --verify $sigpath; then
+    fatal "$sigpath gpg verification failed"
+fi
+
+info "verifying checksum"
+sum1=$(sha1sum $isopath | cut -d " " -f 1)
+sum2=$(grep -A 1 sha1sum $sigpath | tail -n 1 | sed "s/^ *//")
+if [ ! "$sum1" == "$sum2" ]; then
+    fatal "$isopath checksum verification failed"
+fi
+
+info "verified successfully"

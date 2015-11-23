@@ -16,11 +16,10 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to ec2 ami's
+Converts appliance appname (e.g., core) to ec2 ebs-backed ami's
 
 Options::
 
-    --backed=(s3|ebs)   - if not set, both s3 and ebs will be built
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public
     --secupdates        - if set, security updates will be installed
@@ -36,8 +35,6 @@ backed_opts=""
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )    usage;;
-        --backed=s3)   backed_s3="yes";;
-        --backed=ebs)  backed_ebs="yes";;
         --copy)        backed_opts+="--copy ";;
         --publish)     backed_opts+="--publish ";;
         --secupdates)  secupdates="yes";;
@@ -49,17 +46,13 @@ done
 [ -n "$appname" ] || usage
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
 
-if [ -z "${backed_s3}${backed_ebs}" ]; then
-    backed_s3="yes"
-    backed_ebs="yes"
-fi
-
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/build.cfg
+. $BT_CONFIG/aws.cfg
 
 [ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
@@ -78,35 +71,27 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 function _cleanup() {
-    $BT/bin/rootfs-cleanup $rootfs
+    umount -l $rootfs/dev || true
+    umount -l $rootfs/proc || true
 
-	umount -l $rootfs/dev || true
-	umount -l $rootfs/proc || true
-
-	if ! (mount | grep -q $(basename $rootfs)); then
-	    rm -rf $rootfs
-	    rm -rf $cdroot
-	fi
+    if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+        rm -rf $rootfs
+        rm -rf $cdroot
+    fi
 }
 
-[ -z "$BT_DEBUG" ] && trap _cleanup INT TERM EXIT
+trap _cleanup INT TERM EXIT
 
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 
-mount -o bind /dev $rootfs/dev
-
+mount --bind --make-rslave /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/ec2
-tklpatch-apply $rootfs $BT/patches/bugfix-releases/13.0-ssl/
 
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
 
-if [ "$backed_ebs" == "yes" ]; then
-    $BT/bin/aptconf-tag $rootfs ebs
-    $BT/bin/ec2/ebs.py $backed_opts $rootfs
-fi
+umount -l $rootfs/dev
+$BT/bin/rootfs-cleanup $rootfs
 
-if [ "$backed_s3" == "yes" ]; then
-    $BT/bin/aptconf-tag $rootfs s3
-    $BT/bin/ec2/s3.py $backed_opts $rootfs
-fi
+$BT/bin/aptconf-tag $rootfs ebs
+$BT/bin/ec2/ebs.py $backed_opts $rootfs

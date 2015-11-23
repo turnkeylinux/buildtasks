@@ -1,0 +1,66 @@
+Setup notes for TurnKey TKLDev
+==============================
+
+setup and dependencies
+----------------------
+
+buildtasks ::
+
+    GH=https://github.com
+    git clone $GH/turnkeylinux/buildtasks /turnkey/buildtasks
+
+    apt-get install tklpatch python-pip
+    pip install awscli
+
+bt-iso ::
+
+    git clone $GH/turnkeylinux/tklbam-profiles /turnkey/tklbam-profiles
+    tkldev-setup
+
+bt-ec2 ::
+
+    apt-get install ec2metadata
+    pip install boto
+
+bt-vm ::
+
+    # vmware ovftool
+    apt-get install qemu parted kpartx grub-pc zip
+
+bt-openvz ::
+
+    apt-get install cmake
+
+bt-xen ::
+
+    apt-get install bzip2
+
+config files
+------------
+
+buildtasks/config/build.cfg ::
+
+    VERSION=14.0
+    CODENAME=$(lsb_release -s -c)
+    ARCH=$(dpkg --print-architecture)
+
+    #export VERSION_TAG=rcX
+    export BT_VERSION=${VERSION}${VERSION_TAG}-${CODENAME}-${ARCH}
+
+buildtasks/config/common.cfg ::
+
+    export BT_PUBLISH_IMGS="s3://BUCKET/images"
+    export BT_PUBLISH_META="s3://BUCKET/metadata"
+    export BT_PUBLISH_PROFILES="s3://BUCKET/profiles"
+    export BT_GPGKEY=A16EB94D
+    export BT_ISOS=/mnt/isos
+    export BT_BUILDS=/mnt/builds
+    export BT_PROFILES=/turnkey/tklbam-profiles
+    export BT_PRODUCTS=/turnkey/fab/products
+
+buildtasks/config/aws.cfg ::
+
+    export AWS_ACCESS_KEY_ID="..."
+    export AWS_SECRET_ACCESS_KEY="..."
+    export AWS_SESSION_TOKEN="..."
+

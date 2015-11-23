@@ -1,23 +1,9 @@
 #!/bin/bash -e
 
-SERVER_CONF=/var/lib/hubclient/server.conf
+# if registered with hub, add hub tag
+if grep SERVERID= /var/lib/hubclient/server.conf -q -s; then
+    sed -i "s|turnkey-\(.*\))|turnkey-\1 hub)|" /etc/apt/apt.conf.d/01turnkey
+fi
 
-# check if server is registered with hub
-[ -e $SERVER_CONF ] || exit 0
-grep SERVERID= $SERVER_CONF -q || exit 0
+exit 0
 
-# add hub tag
-sed -i "s|turnkey-\(.*\))|turnkey-\1 hub)|" /etc/apt/apt.conf.d/01turnkey
-
-# setup script to update hub that server is booted
-mkdir -p /etc/rc.local.d
-BOOTED_SCRIPT=/etc/rc.local.d/90hubstatus-booted
-
-cat>$BOOTED_SCRIPT<<'EOF'
-#!/bin/bash
-hubclient-status booted 
-hubclient-status sshfp "$(/usr/lib/inithooks/everyboot.d/70ec2-log-sshfp | grep :)"
-rm -f $0
-EOF
-
-chmod +x $BOOTED_SCRIPT

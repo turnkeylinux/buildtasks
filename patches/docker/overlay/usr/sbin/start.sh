@@ -11,7 +11,7 @@ trap "run-parts -a stop /etc/rc2.d" INT TERM EXIT
 
 turnkey-sysinfo
 
-if [ -x /root/.profile.d/turnkey-init-firstlogin ]; then
+if [ -x /root/.profile.d/turnkey-init-fence ]; then
 cat<<EOF
 
 WARNING: The container requires initialization (performed on first login).

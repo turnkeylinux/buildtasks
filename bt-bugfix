@@ -34,9 +34,9 @@ Environment::
     BT_BUGFIX_BACKUP_BUCKET    bucket to store backups (e.g., s3://eu-bugfix-backup/)
     BT_VERSION                 appliance version (e.g., 11.2-lucid-x86)
 
-    BT_PUBLISH_IMGS            rsync destination for release image
-    BT_PUBLISH_META            rsync destination for release meta files
-    BT_PUBLISH_PROFILES        rsync destination for release tklbam profile
+    BT_PUBLISH_IMGS            publish destination for release image
+    BT_PUBLISH_META            publish destination for release meta files
+    BT_PUBLISH_PROFILES        publish destination for release tklbam profile
 
     BT_PROFILES                path containing tklbam profile conf files
 
@@ -154,14 +154,14 @@ fi
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/iso/
-    $BT/bin/publish-files $O/$name.{iso,iso.sig}
+    $BT/bin/publish-files $O/$name.iso
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name.{manifest,iso.sig}
 
     if [ "$gen_profile" == "yes" ]; then
         if [ -e "$BT_PROFILES/$appname" ]; then
-            export PUBLISH_DEST=$BT_PUBLISH_PROFILES
+            export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
             $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
         fi
     fi

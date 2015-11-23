@@ -26,8 +26,8 @@ Environment::
 
     BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
 
-    BT_PUBLISH_IMGS     - rsync destination for release image
-    BT_PUBLISH_META     - rsync destination for release meta files
+    BT_PUBLISH_IMGS     - publish destination for release image
+    BT_PUBLISH_META     - publish destination for release meta files
 
     BT_DEBUG            - turn on debugging
 EOF
@@ -76,7 +76,7 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/headless
 
-mount -o bind /dev $rootfs/dev
+mount --bind --make-rslave /dev $rootfs/dev
 tklpatch-apply $rootfs $BT/patches/xen
 umount $rootfs/dev
 
@@ -92,9 +92,9 @@ $BT/bin/generate-signature $O/$name-xen.tar.bz2
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/xen/
-    $BT/bin/publish-files $O/$name-xen.{tar.bz2,tar.bz2.sig}
+    $BT/bin/publish-files $O/$name-xen.tar.bz2
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name-xen.tar.bz2.sig
 fi
 

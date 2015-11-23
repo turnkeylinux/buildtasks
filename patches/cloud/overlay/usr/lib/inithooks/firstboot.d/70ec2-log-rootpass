@@ -1,4 +1,9 @@
-#!/bin/sh
+#!/bin/bash
+
+USERNAME=root
+
+. /etc/default/inithooks
+[ "$(echo $SUDOADMIN | tr [A-Z] [a-z] )" = "true" ] && USERNAME=admin
 
 [ -e $INITHOOKS_CONF ] && . $INITHOOKS_CONF
 
@@ -6,7 +11,7 @@
 echo
 echo "################################## [ LOGIN DETAILS ] ###################################"
 echo
-echo "                        Random initial root password: $ROOT_PASS"
+echo "                        Random initial $USERNAME password: $ROOT_PASS"
 echo
 echo "########################################################################################"
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -20,6 +20,12 @@ Options:
 
     --copy          Copy created AMI to all other regions
     --publish       Make AMI's public
+
+Environment:
+
+    AWS_ACCESS_KEY_ID       AWS Access Key ID (required)
+    AWS_SECRET_ACCESS_KEY   AWS Secret Access Key (required)
+    AWS_SESSION_TOKEN       AWS Session Token
 
 """
 import os
@@ -87,7 +93,9 @@ def main():
 
     images = []
     if copy:
-        images = copy_image(ami_id, snapshot_name, region, utils.get_regions())
+        regions = utils.get_all_regions()
+        regions.remove(region)
+        images = copy_image(ami_id, snapshot_name, region, regions)
 
     print snapshot_name
     print "  %s - %s" % (ami_id, region)

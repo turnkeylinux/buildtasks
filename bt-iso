@@ -56,13 +56,13 @@ else
     git pull
 fi
 
-deck -D build/root.tmp || true
+deck -D build/root.sandbox || true
 make clean || true
 make || true
 
 if [ ! -e build/product.iso ]; then
     if [ -z "$BT_DEBUG" ]; then
-        deck -D build/root.tmp >/dev/null 2>&1 || true
+        deck -D build/root.sandbox >/dev/null 2>&1 || true
         make clean >/dev/null 2>&1 || true
     fi
     fatal "build failed..."
@@ -77,7 +77,7 @@ if [ "$publish" == "yes" ]; then
 fi
 
 if [ -z "$BT_DEBUG" ]; then
-    deck -D build/root.tmp
+    deck -D build/root.sandbox
     make clean
 fi
 

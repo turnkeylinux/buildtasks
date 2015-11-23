@@ -1,0 +1,44 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 filepath
+Sign signature file (e.g., path/to/file.sig)
+
+Arguments::
+
+    filepath        - path to file to be signed
+
+Environment::
+
+    BT_GPGKEY       - gpg key to use
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+filepath=$1
+
+grep -q "BEGIN PGP" $filepath && fatal "already signed: $filepath"
+[ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+
+info "signing $filepath"
+gpg -u $BT_GPGKEY --output $filepath.asc --clearsign $filepath
+mv $filepath.asc $filepath
+

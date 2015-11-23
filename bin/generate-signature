@@ -15,15 +15,11 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 filepath
-Generate GPG signed and checksums signature for filepath (e.g., path/to/iso)
+Generate signature template with checksums for filepath (e.g., path/to/iso)
 
 Arguments::
 
     filepath        - path to file to be signed
-
-Environment::
-
-    BT_CONFIG       - path to buildtasks config directory
 
 EOF
 exit 1
@@ -35,41 +31,36 @@ fi
 
 filepath=$1
 
-[ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
-
-info "generating gpg signature"
-GNUPGHOME=$BT_CONFIG/gnupg gpg -abs --output $filepath.sig.asc $filepath
-
 info "generating md5 checksum"
 MD5SUM=$(md5sum $filepath | cut -d " " -f 1)
 
 info "generating sha1 checksum"
 SHA1SUM=$(sha1sum $filepath | cut -d " " -f 1)
 
+info "writing signature file"
 cat > $filepath.sig <<EOF
-This signature file may be used to cryptographically verify file integrity,
-like this::
+Two steps are required to cryptographically verify image integrity.
 
-    $ gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys 0xA16EB94D
+1. By verifying the integrity of this signature file, you can be sure that
+   the checksums included in this file are valid.
+
+    $ gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0xA16EB94D
     $ gpg --list-keys 0xA16EB94D
       pub   2048R/A16EB94D 2008-08-15 [expires: 2023-08-12]
       uid   Turnkey Linux Release Key <release@turnkeylinux.com>
 
     $ gpg --verify $(basename $filepath).sig
-      gpg: Signature made $(date) using RSA key ID A16EB94D
       gpg: Good signature from "Turnkey Linux Release Key"
 
-For your convenience we also include file checksums:
+2. By calculating the image checksum and validating the hashed value is the
+   same as listed below, you can be sure the image was not corrupted in
+   transit or tampered with.
 
-    * sha1sum  $SHA1SUM
-    * md5sum   $MD5SUM
+    $ md5sum $(basename $filepath)
+      $MD5SUM
 
-You can calculate these on your end and compare to check for errors, but
-cryptographic verification is recommended for security reasons.
+    $ sha1sum $(basename $filepath)
+      $SHA1SUM
 
 EOF
-
-info "writing signature file"
-cat $filepath.sig.asc >> $filepath.sig
-rm $filepath.sig.asc
 

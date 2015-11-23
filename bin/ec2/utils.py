@@ -1,8 +1,8 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -12,6 +12,7 @@
 import re
 import os
 import sys
+import time
 import logging
 
 import conf
@@ -25,8 +26,9 @@ def connect(region=None):
     region = region if region else get_region()
     return connect_to_region(
         region,
-        aws_access_key_id=conf.SMP_ACCESSKEY,
-        aws_secret_access_key=conf.SMP_SECRETKEY)
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        security_token=os.environ.get('AWS_SESSION_TOKEN', None))
 
 def get_turnkey_version(rootfs):
     return file(os.path.join(rootfs, "etc/turnkey_version")).read().strip()
@@ -40,44 +42,14 @@ def get_zone():
 def get_region():
     return ec2metadata.get('availability-zone')[0:-1]
 
-def get_regions():
+def get_all_regions():
     return conf.KERNELS.keys()
 
 def get_kernel(region, arch):
     return conf.KERNELS[region][arch]
 
 def get_uniquename(region, name):
-    def get_imagenames(region):
-        conn = connect(region)
-        images = conn.get_all_images(owners=[conf.SMP_USERID])
-
-        return set(map(lambda image: image.name, images))
-
-    def get_snapshotnames(region):
-        conn = connect(region)
-        snapshots = conn.get_all_snapshots(owner=conf.SMP_USERID)
-
-        return set(map(lambda snapshot: snapshot.description, snapshots))
-
-    def inc_name(name):
-        try:
-            name, version = name.split('_')
-            version = int(version) + 1
-        except ValueError:
-            version = 2
-
-        return "_".join([name, str(version)])
-
-    if name.endswith('.ebs'):
-        names = get_snapshotnames(region)
-
-    if name.endswith('.s3'):
-        names = get_imagenames(region)
-
-    while name in names:
-        name = inc_name(name)
-
-    return name
+    return "_".join([name, str(int(time.time()))])
 
 def get_logger(name, level=None):
     logger = logging.getLogger(name)

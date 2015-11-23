@@ -92,6 +92,7 @@ cdroot=$name.cdroot
 
 if $(echo $BT_VERSION | grep -q squeeze); then debianversion="debian-6"; fi
 if $(echo $BT_VERSION | grep -q wheezy); then debianversion="debian-7"; fi
+if $(echo $BT_VERSION | grep -q jessie); then debianversion="debian-8"; fi
 [ -n "$debianversion" ] || fatal "debianversion could not be determined"
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
@@ -124,16 +125,13 @@ pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openvz/
-    $BT/bin/publish-files $O/$stupidname.{tar.gz,tar.gz.sig}
-
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
-    $BT/bin/publish-files $O/$stupidname.tar.gz.sig
+    $BT/bin/publish-files $O/$stupidname.tar.gz
 
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/opennode/
-    $BT/bin/publish-files $O/$stupidname.{ova,ova.sig,ova.pfff}
+    $BT/bin/publish-files $O/$stupidname.{ova,ova.pfff}
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/turnkey-$appname/$BT_VERSION/
-    $BT/bin/publish-files $O/$stupidname.ova.sig
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$stupidname.{tar.gz.sig,ova.sig}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
