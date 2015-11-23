@@ -10,15 +10,14 @@
 # option) any later version.
 
 """
-Create Amazon EC2 EBS-backed AMI from rootfs
+Create Amazon EC2 EBS-backed AMI(s) from rootfs
 
 Arguments:
 
     rootfs          Path to rootfs
 
 Options:
-
-    --virt=hvm|pvm  Create AMI for virtualization type (default: hvm)
+    --virt=         Virtualization type: hvm, pvm (default: hvm and pvm)
     --copy          Copy created AMI to all other regions
     --publish       Set AMI launch permission to public
     --marketplace   Share snapshot with AWS marketplace userid
@@ -65,7 +64,7 @@ def main():
         usage(e)
 
 
-    virt = 'hvm'
+    virts = []
     copy = False
     publish = False
     marketplace = False
@@ -74,7 +73,7 @@ def main():
             usage()
 
         if opt == "--virt":
-            virt = val
+            virts.append(val)
 
         if opt == "--copy":
             copy = True
@@ -92,30 +91,34 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
-    if not virt in ('hvm', 'pvm'):
-        fatal("virtualization type not supported: %s" % virt)
+    if not virts:
+        virts = ['hvm', 'pvm']
+
+    for virt in virts:
+        if not virt in ('hvm', 'pvm'):
+            fatal("virtualization type not supported: %s" % virt)
 
     region = utils.get_region()
-
-    snapshot_id, snapshot_name = bundle(rootfs, virt=virt)
-    ami_id = register(snapshot_id, region, virt=virt)
-
-    if publish:
-        share_public(ami_id, region)
+    snapshot_id, snapshot_name = bundle(rootfs)
 
     if marketplace:
         share_marketplace(snapshot_id, region)
 
-    images = []
-    if copy:
-        regions = utils.get_all_regions()
-        regions.remove(region)
-        images = copy_image(ami_id, snapshot_name, region, regions)
+    for virt in virts:
+        ami_id, ami_name = register(snapshot_id, region, virt)
+        log.info(ami_name)
+        log.info("  %s - %s" % (ami_id, region))
 
-    print snapshot_name
-    print "  %s - %s" % (ami_id, region)
-    for image in images:
-        print "  %s - %s" % (image.id, image.region)
+        if publish:
+            share_public(ami_id, region)
+
+        if copy:
+            regions = utils.get_all_regions()
+            regions.remove(region)
+            images = copy_image(ami_id, ami_name, region, regions)
+
+            for image in images:
+                log.info("  %s - %s" % (image.id, image.region))
 
 
 if __name__ == "__main__":

@@ -77,13 +77,12 @@ def rsync(rootfs, dest):
 
 def parse_imagename(s):
     parsed = {}
-    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*).(.*)_(.*)", s)
+    m = re.match("turnkey-(.*)-(\w[-+0-9a-z.]*)-(.*)-(.*)_(.*)", s)
     if m:
         parsed['appname'] = m.groups()[0]
         parsed['version'] = m.groups()[1]
         parsed['distro'] = m.groups()[2]
         parsed['arch'] = m.groups()[3]
-        parsed['virt'] = m.groups()[4]
         parsed['url'] = 'http://www.turnkeylinux.org/' + parsed['appname']
 
     return parsed

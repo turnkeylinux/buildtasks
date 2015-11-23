@@ -18,7 +18,6 @@ Arguments:
 
 Options:
 
-    --virt=hvm|pvm  Virtualization type (default: hvm)
     --size=         Size of snapshot (default: 10)
     --fs=           File system of snapshot (default: ext4)
 
@@ -193,10 +192,10 @@ class Device:
         if self.is_mounted():
             self.umount()
 
-def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
+def bundle(rootfs, size=10, filesystem='ext4'):
     log.debug('getting unique snapshot name')
-    app = utils.get_turnkey_version(rootfs)
-    snapshot_name = "%s.%s_%s" % (app, virt, str(int(time.time())))
+    turnkey_version = utils.get_turnkey_version(rootfs)
+    snapshot_name = '_'.join([turnkey_version, str(int(time.time()))])
     log.info('target snapshot - %s ', snapshot_name)
 
     log.info('creating volume, attaching, formatting and mounting')
@@ -206,30 +205,26 @@ def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
     device = Device()
     volume.attach(utils.get_instanceid(), device)
 
-    if virt == 'hvm':
-        log.info('creating first partition')
-        device.mkpart()
-
+    log.info('creating partitions')
+    device.mkpart()
     device.mkfs(filesystem)
     mount_path = rootfs + '.mount'
     device.mount(mount_path)
 
-    log.info('syncing rootfs to volume')
+    log.info('syncing rootfs to partition')
     utils.rsync(rootfs, mount_path)
 
-    if virt == 'hvm':
-        log.debug('installing GRUB on volume')
-        submounts = ['/sys', '/proc', '/dev']
-        for i in submounts:
-            executil.system('mount', '--bind', i, mount_path + i)
+    log.info('installing GRUB on volume')
+    submounts = ['/sys', '/proc', '/dev']
+    for i in submounts:
+        executil.system('mount', '--bind', i, mount_path + i)
 
-        for i in [ ['grub-install', device.root_path],
-                   ['update-grub'],
-                   ['update-initramfs', '-u'] ]:
-            executil.system('chroot', mount_path, *i)
+    executil.system('chroot', mount_path, 'grub-install', device.root_path)
+    executil.system('chroot', mount_path, 'update-grub')
+    executil.system('chroot', mount_path, 'update-initramfs', '-u')
 
-        for i in submounts:
-            executil.system('umount', mount_path + i)
+    for i in submounts:
+        executil.system('umount', mount_path + i)
 
     device.umount()
     volume.detach()
@@ -247,27 +242,23 @@ def bundle(rootfs, virt='hvm', size=10, filesystem='ext4'):
 
 def main():
     try:
-        l_opts = ["help", "virt=", "size=", "fs="]
+        l_opts = ["help", "size=", "filesystem="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
     kwargs = {
         'filesystem': 'ext4',
-        'virt': 'hvm',
         'size': 10,
     }
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
 
-        if opt == "--virt":
-            kwargs['virt'] = val
-
         if opt == "--size":
             kwargs['size'] = int(val)
 
-        if opt == "--fs":
+        if opt == "--filesystem":
             kwargs['filesystem'] = val
 
     if len(args) != 1:
@@ -277,12 +268,9 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
-    if not kwargs['virt'] in ('hvm', 'pvm'):
-        fatal("virtualization type not supported: %s" % kwargs['virt'])
-
     snapshot_id, snapshot_name = bundle(rootfs, **kwargs)
 
-    print "%s %s" % (snapshot_id, snapshot_name)
+    print snapshot_id, snapshot_name
 
 if __name__ == "__main__":
     main()
