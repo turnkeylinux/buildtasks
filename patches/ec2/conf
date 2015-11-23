@@ -26,7 +26,6 @@ chmod +x /etc/grub.d/40_custom
 grub-mkconfig -o /boot/grub/menu.lst
 
 # disable pvgrub, ebs-bundle will handle grub config for hvm
-# IMPORTANT: this will break pvgrub on kernel upgrades (TBD)
 chmod +x /etc/grub.d/*
 chmod -x /etc/grub.d/40_custom
 

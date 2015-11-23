@@ -1,0 +1,22 @@
+#!/bin/bash -e
+
+# PVM: 'Booting paravirtualized kernel on Xen'
+# HVM: 'Booting paravirtualized kernel on Xen HVM'
+line=$( dmesg | grep 'Booting paravirtualized kernel on Xen' )
+
+if echo $line | grep -q 'HVM'; then
+    virt='hvm'
+    chmod +x /etc/grub.d/*
+    chmod -x /etc/grub.d/40_custom
+else
+    virt='pvm'
+    chmod -x /etc/grub.d/*
+    chmod +x /etc/grub.d/40_custom
+fi
+
+if grep -vq $virt /etc/apt/apt.conf.d/01turnkey; then
+    sed -i "s|turnkey-\(.*\))|turnkey-\1 $virt)|" /etc/apt/apt.conf.d/01turnkey
+fi
+
+exit 0
+
