@@ -51,10 +51,21 @@ def get_logger(name, level=None):
     logger = logging.getLogger(name)
 
     if not logger.handlers:
+        logging.addLevelName(45, 'IMPORTANT')
+        setattr(logger, 'important',
+                lambda *args, **kwargs: logger.log(45, *args, **kwargs))
+
+        format = logging.Formatter('%(levelname)s [%(name)s]: %(message)s')
+
         stdout = logging.StreamHandler(sys.stdout)
-        stdout.setFormatter(logging.Formatter(
-            '%(levelname)s [%(name)s]: %(message)s'))
+        stdout.setFormatter(format)
         logger.addHandler(stdout)
+
+        logfile = os.environ.get('LOGFILE_PATH', None)
+        if logfile:
+            filehandler = logging.FileHandler(logfile, mode='a')
+            filehandler.setFormatter(format)
+            logger.addHandler(filehandler)
 
         level = level if level else conf.LOG_LEVEL
         logger.setLevel(getattr(logging, level))

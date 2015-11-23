@@ -106,8 +106,9 @@ def main():
 
     for virt in virts:
         ami_id, ami_name = register(snapshot_id, region, virt)
+
         log.info(ami_name)
-        log.info("  %s - %s" % (ami_id, region))
+        log.important(' '.join([ami_id, virt, region]))
 
         if publish:
             share_public(ami_id, region)
@@ -118,7 +119,7 @@ def main():
             images = copy_image(ami_id, ami_name, region, regions)
 
             for image in images:
-                log.info("  %s - %s" % (image.id, image.region))
+                log.important(' '.join([image.id, virt, image.region]))
 
 
 if __name__ == "__main__":

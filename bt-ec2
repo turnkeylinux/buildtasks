@@ -22,7 +22,7 @@ Options::
 
     --virt=             - virtualization type: hvm, pvm (default: hvm and pvm)
     --copy              - if set, image will be copied to all other regions
-    --publish           - if set, image will be made public
+    --publish           - if set, image will be made public and log published
     --marketplace       - if set, image will be shared for marketplace
     --secupdates        - install security updates before building image
 
@@ -40,7 +40,7 @@ while [ "$1" != "" ]; do
         --virt=hvm)    backed_opts="--virt=hvm ";;
         --virt=pvm)    backed_opts="--virt=pvm ";;
         --copy)        backed_opts+="--copy ";;
-        --publish)     backed_opts+="--publish ";;
+        --publish)     backed_opts+="--publish "; publish="yes";;
         --marketplace) backed_opts+="--marketplace ";;
         --secupdates)  secupdates="yes";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
@@ -49,6 +49,7 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
@@ -68,6 +69,10 @@ name=turnkey-$appname-$BT_VERSION
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 isofile=$name.iso
+logfile=$name.log
+
+export LOGFILE_PATH=$O/$logfile
+cat > $LOGFILE_PATH
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
@@ -83,6 +88,7 @@ function _cleanup() {
     if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
         rm -rf $rootfs
         rm -rf $cdroot
+        rm -f $logfile
     fi
 }
 
@@ -104,4 +110,9 @@ umount -l $rootfs/proc || true
 $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs ec2
 $BT/bin/ec2/ebs.py $backed_opts $rootfs
+
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/
+    $BT/bin/publish-files $LOGFILE_PATH
+fi
 

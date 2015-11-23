@@ -49,6 +49,7 @@ buildtasks/config/build.cfg ::
 
 buildtasks/config/common.cfg ::
 
+    export BT_PUBLISH_LOGS="s3://BUCKET/logs"
     export BT_PUBLISH_IMGS="s3://BUCKET/images"
     export BT_PUBLISH_META="s3://BUCKET/metadata"
     export BT_PUBLISH_PROFILES="s3://BUCKET/profiles"
