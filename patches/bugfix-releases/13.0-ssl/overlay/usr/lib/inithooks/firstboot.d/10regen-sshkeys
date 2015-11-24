@@ -1,0 +1,8 @@
+#!/bin/bash -e
+# remove existing ssh keys and generate new ones
+# note: ssh daemon needs to be restarted for changes to take effect
+
+echo "* Regenerating SSH cryptographic keys"
+
+rm -f /etc/ssh/*_key{,.pub}
+dpkg-reconfigure openssh-server

@@ -114,6 +114,9 @@ if [ -f /usr/lib/inithooks/bin/canvas.py ]; then
 
     echo -e '# Backports repository\ndeb http://ftp.debian.org/debian wheezy-backports main' >> /etc/apt/sources.list.d/wheezy-backports.list
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get -y install -t wheezy-backports redis-server
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install -t wheezy-backports redis-server
 
 fi
