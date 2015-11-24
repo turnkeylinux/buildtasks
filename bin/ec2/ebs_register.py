@@ -20,12 +20,10 @@ Arguments:
 Options:
 
     --region=       Snapshot region (default: current region)
-    --size=         Image rootfs size (default: snapshot size)
-    --name=         Image name (default: snapshotname_virt)
-    --desc=         Image website link (default: enumerate from name*)
-    --arch=         Image architecture (default: enumerate from name*)
-
-    *name: turnkey-appname-version-distro-arch_timestamp
+    --size=         Image rootfs size (default: snapshot_size)
+    --name=         Image name (default: snapshot_name + virt)
+    --arch=         Image architecture (default: system arch)
+    --desc=         Image description (default: none)
 
 """
 import sys
@@ -53,20 +51,17 @@ def usage(e=None):
 
     sys.exit(1)
 
-def register(snapshot_id, region, virt, size=None, arch=None, name=None, desc=None):
+def register(snapshot_id, region, virt, arch, size=None, name=None, desc=None):
     conn = utils.connect(region)
 
-    log.debug('getting snapshot - %s', snapshot_id)
     if None in (name, size):
+        log.debug('getting snapshot - %s', snapshot_id)
         snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
         size = size if size else snapshot.volume_size
         name = name if name else '_'.join([snapshot.description, virt])
 
-    desc = desc if desc else utils.parse_imagename(name)['url']
-    arch = arch if arch else utils.parse_imagename(name)['arch']
-
-    arch_ec2 = "x86_64" if arch == "amd64" else arch
-    virt_ec2 = "paravirtual" if virt == "pvm" else virt
+    ec2_arch = "x86_64" if arch == "amd64" else arch
+    ec2_virt = "paravirtual" if virt == "pvm" else virt
     kernel_id = utils.get_kernel(region, arch) if virt == 'pvm' else None
 
     log.debug('creating block_device_map')
@@ -88,18 +83,18 @@ def register(snapshot_id, region, virt, size=None, arch=None, name=None, desc=No
     ami_id = conn.register_image(
         name=name,
         description=desc,
-        architecture=arch_ec2,
+        architecture=ec2_arch,
         kernel_id=kernel_id,
         root_device_name=rootfs_device_name,
         block_device_map=block_device_map,
-        virtualization_type=virt_ec2)
+        virtualization_type=ec2_virt)
 
     log.info('registered image - %s %s %s', ami_id, name, region)
     return ami_id, name
 
 def main():
     try:
-        l_opts = ["help", "region=", "size=", "name=", "desc=", "arch="]
+        l_opts = ["help", "region=", "size=", "name=", "arch=", "desc="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
@@ -108,12 +103,15 @@ def main():
         'size': None,
         'name': None,
         'desc': None,
-        'arch': None,
     }
+    arch = None
     region = None
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
+
+        if opt == "--arch":
+            arch = val
 
         if opt == "--region":
             region = val
@@ -127,20 +125,18 @@ def main():
         if opt == "--desc":
             kwargs['desc'] = val
 
-        if opt == "--arch":
-            kwargs['arch'] = val
-
     if len(args) != 2:
         usage("incorrect number of arguments")
 
     snapshot_id = args[0]
     virt = args[1]
+    arch = arch if arch else utils.get_arch()
     region = region if region else utils.get_region()
 
     if not virt in ('hvm', 'pvm'):
         fatal("virtualization type not supported: %s" % virt)
 
-    ami_id, ami_name = register(snapshot_id, region, virt, **kwargs)
+    ami_id, ami_name = register(snapshot_id, region, virt, arch, **kwargs)
 
     print ami_id, ami_name
 

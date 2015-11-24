@@ -18,6 +18,7 @@ Arguments:
 
 Options:
     --virt=         Virtualization type: hvm, pvm (default: hvm and pvm)
+    --name=         Use as name basis (default: turnkey_version + ctime)
     --copy          Copy created AMI to all other regions
     --publish       Set AMI launch permission to public
     --marketplace   Share snapshot with AWS marketplace userid
@@ -31,6 +32,7 @@ Environment:
 """
 import os
 import sys
+import time
 import getopt
 
 import utils
@@ -58,13 +60,13 @@ def usage(e=None):
 
 def main():
     try:
-        l_opts = ["help", "copy", "publish", "marketplace", "virt="]
+        l_opts = ["help", "copy", "publish", "marketplace", "virt=", "name="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
-
-    virts = []
+    virts = set()
+    name = None
     copy = False
     publish = False
     marketplace = False
@@ -73,7 +75,10 @@ def main():
             usage()
 
         if opt == "--virt":
-            virts.append(val)
+            virts.add(val)
+
+        if opt == "--name":
+            name = val
 
         if opt == "--copy":
             copy = True
@@ -91,24 +96,30 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
+    if not name:
+        turnkey_version = utils.get_turnkey_version(rootfs)
+        name = '_'.join([turnkey_version, str(int(time.time()))])
+
     if not virts:
-        virts = ['hvm', 'pvm']
+        virts.add('hvm')
+        virts.add('pvm')
 
     for virt in virts:
         if not virt in ('hvm', 'pvm'):
             fatal("virtualization type not supported: %s" % virt)
 
+    arch = utils.get_arch()
     region = utils.get_region()
-    snapshot_id, snapshot_name = bundle(rootfs)
+    snapshot_id, snapshot_name = bundle(rootfs, name)
 
     if marketplace:
         share_marketplace(snapshot_id, region)
 
     for virt in virts:
-        ami_id, ami_name = register(snapshot_id, region, virt)
+        ami_id, ami_name = register(snapshot_id, region, virt, arch)
 
         log.info(ami_name)
-        log.important(' '.join([ami_id, virt, region]))
+        log.important(' '.join([ami_id, arch, virt, region]))
 
         if publish:
             share_public(ami_id, region)
@@ -119,7 +130,7 @@ def main():
             images = copy_image(ami_id, ami_name, region, regions)
 
             for image in images:
-                log.important(' '.join([image.id, virt, image.region]))
+                log.important(' '.join([image.id, arch, virt, image.region]))
 
 
 if __name__ == "__main__":

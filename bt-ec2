@@ -21,6 +21,7 @@ Converts appliance appname (e.g., core) to EC2 EBS-backed AMI(s)
 Options::
 
     --virt=             - virtualization type: hvm, pvm (default: hvm and pvm)
+    --name=             - use as name basis (default: turnkey-version)
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public and log published
     --marketplace       - if set, image will be shared for marketplace
@@ -33,15 +34,16 @@ EOF
 exit 1
 }
 
-backed_opts=""
+ebs_opts=""
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h)     usage;;
-        --virt=hvm)    backed_opts="--virt=hvm ";;
-        --virt=pvm)    backed_opts="--virt=pvm ";;
-        --copy)        backed_opts+="--copy ";;
-        --publish)     backed_opts+="--publish "; publish="yes";;
-        --marketplace) backed_opts+="--marketplace ";;
+        --virt=hvm)    ebs_opts+="$1 ";;
+        --virt=pvm)    ebs_opts+="$1 ";;
+        --name=*)      ebs_opts+="$1 ";;
+        --copy)        ebs_opts+="$1 ";;
+        --marketplace) ebs_opts+="$1 ";;
+        --publish)     ebs_opts+="$1 "; publish="yes";;
         --secupdates)  secupdates="yes";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
@@ -109,7 +111,7 @@ umount -l $rootfs/proc || true
 
 $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs ec2
-$BT/bin/ec2/ebs.py $backed_opts $rootfs
+$BT/bin/ec2/ebs.py $ebs_opts $rootfs
 
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/

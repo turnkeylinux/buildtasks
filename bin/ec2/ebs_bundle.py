@@ -18,14 +18,15 @@ Arguments:
 
 Options:
 
+    --name=         Snapshot name (default: turnkey_version + ctime)
     --size=         Size of snapshot (default: 10)
-    --fs=           File system of snapshot (default: ext4)
+    --filesystem=   File system of snapshot (default: ext4)
 
 """
 import os
 import sys
-import getopt
 import time
+import getopt
 
 import utils
 
@@ -192,10 +193,7 @@ class Device:
         if self.is_mounted():
             self.umount()
 
-def bundle(rootfs, size=10, filesystem='ext4'):
-    log.debug('getting unique snapshot name')
-    turnkey_version = utils.get_turnkey_version(rootfs)
-    snapshot_name = '_'.join([turnkey_version, str(int(time.time()))])
+def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
     log.info('target snapshot - %s ', snapshot_name)
 
     log.info('creating volume, attaching, formatting and mounting')
@@ -242,24 +240,26 @@ def bundle(rootfs, size=10, filesystem='ext4'):
 
 def main():
     try:
-        l_opts = ["help", "size=", "filesystem="]
+        l_opts = ["help", "name=", "size=", "filesystem="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
-    kwargs = {
-        'filesystem': 'ext4',
-        'size': 10,
-    }
+    name = None
+    size = 10
+    filesystem = 'ext4'
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
 
+        if opt == "--name":
+            name = val
+
         if opt == "--size":
-            kwargs['size'] = int(val)
+            size = int(val)
 
         if opt == "--filesystem":
-            kwargs['filesystem'] = val
+            filesystem = val
 
     if len(args) != 1:
         usage("incorrect number of arguments")
@@ -268,7 +268,12 @@ def main():
     if not os.path.exists(rootfs):
         fatal("rootfs path does not exist: %s" % rootfs)
 
-    snapshot_id, snapshot_name = bundle(rootfs, **kwargs)
+    if not name:
+        turnkey_version = utils.get_turnkey_version(rootfs)
+        name = '_'.join([turnkey_version, str(int(time.time()))])
+
+    kwargs = {'size': size, 'filesystem': filesystem}
+    snapshot_id, snapshot_name = bundle(rootfs, name, **kwargs)
 
     print snapshot_id, snapshot_name
 
