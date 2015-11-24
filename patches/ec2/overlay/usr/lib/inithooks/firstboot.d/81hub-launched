@@ -1,9 +1,12 @@
 #!/bin/bash -e
 
-# if registered with hub, add hub tag
-if grep SERVERID= /var/lib/hubclient/server.conf -q -s; then
-    sed -i "s|turnkey-\(.*\))|turnkey-\1 hub)|" /etc/apt/apt.conf.d/01turnkey
-fi
+aptconf_tag() {
+    grep -q $1 /etc/apt/apt.conf.d/01turnkey && return
+    sed -i "s|turnkey-\(.*\))|turnkey-\1 $1)|" /etc/apt/apt.conf.d/01turnkey
+}
+
+grep SERVERID= /var/lib/hubclient/server.conf -q -s && aptconf_tag hub
+[ "$(ec2metadata --product-codes)" == "unavailable" ] || aptconf_tag mp
 
 exit 0
 
