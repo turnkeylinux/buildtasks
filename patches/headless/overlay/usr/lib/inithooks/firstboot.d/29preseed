@@ -18,5 +18,5 @@ export SEC_ALERTS=SKIP
 export SEC_UPDATES=SKIP
 EOF
 
-chmod +x /usr/lib/inithooks/firstboot.d/30turnkey-init-fence
+chmod +x /usr/lib/inithooks/firstboot.d/??turnkey-init-fence*
 
