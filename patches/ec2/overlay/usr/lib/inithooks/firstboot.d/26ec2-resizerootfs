@@ -2,6 +2,11 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
+import sys
+
+if '_TURNKEY_INIT' in os.environ:
+    sys.exit(0)
+
 import stat
 import statvfs
 import tempfile
@@ -37,7 +42,7 @@ def get_mounts(mounts_file="/proc/mounts"):
 
 def get_partitions(partitions_file="/proc/partitions"):
     """
-    Given a partitions file (e.g., /proc/partitions), generate dicts with the 
+    Given a partitions file (e.g., /proc/partitions), generate dicts with the
     following keys:
 
      - major: Major block
@@ -106,10 +111,10 @@ class RootFS:
 
         try:
             system("resize2fs", devpath)
-        except ExecError, e:
+        except ExecError:
             os.unlink(devpath)
             raise
-            
+
         os.unlink(devpath)
 
 

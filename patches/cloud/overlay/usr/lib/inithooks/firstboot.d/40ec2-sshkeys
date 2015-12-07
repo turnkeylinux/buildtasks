@@ -2,6 +2,11 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
+import sys
+
+if '_TURNKEY_INIT' in os.environ:
+    sys.exit(0)
+
 import pwd
 import ec2metadata
 

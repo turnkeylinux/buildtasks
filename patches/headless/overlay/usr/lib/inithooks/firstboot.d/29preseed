@@ -1,6 +1,8 @@
 #!/bin/bash -e
 # generic preseeding of inithooks.conf if it doesn't exist
 
+[ -n "$_TURNKEY_INIT" ] && exit 0
+
 [ -e $INITHOOKS_CONF ] && exit 0
 
 MASTERPASS=$(mcookie | cut --bytes 1-8)

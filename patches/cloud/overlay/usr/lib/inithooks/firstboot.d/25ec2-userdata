@@ -2,7 +2,11 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
-import shutil
+import sys
+
+if '_TURNKEY_INIT' in os.environ:
+    sys.exit(0)
+
 import tempfile
 
 import executil
