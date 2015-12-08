@@ -1,11 +1,5 @@
 #!/bin/bash -e
 
-aptconf_tag() {
-    grep -q $1 /etc/apt/apt.conf.d/01turnkey && return
-    sed -i "s|turnkey-\(.*\))|turnkey-\1 $1)|" /etc/apt/apt.conf.d/01turnkey
-}
-
-
 # PVM: 'Booting paravirtualized kernel on Xen'
 # HVM: 'Booting paravirtualized kernel on Xen HVM'
 line=$( dmesg | grep 'Booting paravirtualized kernel on Xen' )
@@ -13,11 +7,9 @@ line=$( dmesg | grep 'Booting paravirtualized kernel on Xen' )
 if echo $line | grep -q 'HVM'; then
     chmod +x /etc/grub.d/*
     chmod -x /etc/grub.d/40_custom
-    aptconf_tag hvm
 else
     chmod -x /etc/grub.d/*
     chmod +x /etc/grub.d/40_custom
-    aptconf_tag pvm
 fi
 
 exit 0
