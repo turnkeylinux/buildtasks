@@ -15,13 +15,12 @@ Register AMI from snapshot
 Arguments:
 
     snapshot_id     Snapshot ID
-    virt            Virtualization type (hvm, pvm)
 
 Options:
 
     --region=       Snapshot region (default: current region)
     --size=         Image rootfs size (default: snapshot_size)
-    --name=         Image name (default: snapshot_name + virt)
+    --name=         Image name (default: snapshot_name)
     --arch=         Image architecture (default: system arch)
     --desc=         Image description (default: none)
 
@@ -46,23 +45,21 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Syntax: %s [ opts ] snapshot_id virt" % (sys.argv[0])
+    print >> sys.stderr, "Syntax: %s [ opts ] snapshot_id" % (sys.argv[0])
     print >> sys.stderr, __doc__.strip()
 
     sys.exit(1)
 
-def register(snapshot_id, region, virt, arch, size=None, name=None, desc=None):
+def register(snapshot_id, region, arch, size=None, name=None, desc=None):
     conn = utils.connect(region)
 
     if None in (name, size):
         log.debug('getting snapshot - %s', snapshot_id)
         snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
         size = size if size else snapshot.volume_size
-        name = name if name else '_'.join([snapshot.description, virt])
+        name = name if name else snapshot.description
 
     ec2_arch = "x86_64" if arch == "amd64" else arch
-    ec2_virt = "paravirtual" if virt == "pvm" else virt
-    kernel_id = utils.get_kernel(region, arch) if virt == 'pvm' else None
 
     log.debug('creating block_device_map')
     block_device_map = BlockDeviceMapping()
@@ -84,10 +81,9 @@ def register(snapshot_id, region, virt, arch, size=None, name=None, desc=None):
         name=name,
         description=desc,
         architecture=ec2_arch,
-        kernel_id=kernel_id,
         root_device_name=rootfs_device_name,
         block_device_map=block_device_map,
-        virtualization_type=ec2_virt)
+        virtualization_type='hvm')
 
     log.info('registered image - %s %s %s', ami_id, name, region)
     return ami_id, name
@@ -125,19 +121,14 @@ def main():
         if opt == "--desc":
             kwargs['desc'] = val
 
-    if len(args) != 2:
+    if len(args) != 1:
         usage("incorrect number of arguments")
 
     snapshot_id = args[0]
-    virt = args[1]
     arch = arch if arch else utils.get_arch()
     region = region if region else utils.get_region()
 
-    if not virt in ('hvm', 'pvm'):
-        fatal("virtualization type not supported: %s" % virt)
-
-    ami_id, ami_name = register(snapshot_id, region, virt, arch, **kwargs)
-
+    ami_id, ami_name = register(snapshot_id, region, arch, **kwargs)
     print ami_id, ami_name
 
 if __name__ == "__main__":

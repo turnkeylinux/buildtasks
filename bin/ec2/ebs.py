@@ -10,14 +10,13 @@
 # option) any later version.
 
 """
-Create Amazon EC2 EBS-backed AMI(s) from rootfs
+Create Amazon EC2 EBS-backed HVM AMI from rootfs
 
 Arguments:
 
     rootfs          Path to rootfs
 
 Options:
-    --virt=         Virtualization type: hvm, pvm (default: hvm and pvm)
     --name=         Use as name basis (default: turnkey_version + ctime)
     --copy          Copy created AMI to all other regions
     --publish       Set AMI launch permission to public
@@ -60,12 +59,11 @@ def usage(e=None):
 
 def main():
     try:
-        l_opts = ["help", "copy", "publish", "marketplace", "virt=", "name="]
+        l_opts = ["help", "copy", "publish", "marketplace", "name="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
 
-    virts = set()
     name = None
     copy = False
     publish = False
@@ -73,9 +71,6 @@ def main():
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
-
-        if opt == "--virt":
-            virts.add(val)
 
         if opt == "--name":
             name = val
@@ -100,14 +95,6 @@ def main():
         turnkey_version = utils.get_turnkey_version(rootfs)
         name = '_'.join([turnkey_version, str(int(time.time()))])
 
-    if not virts:
-        virts.add('hvm')
-        virts.add('pvm')
-
-    for virt in virts:
-        if not virt in ('hvm', 'pvm'):
-            fatal("virtualization type not supported: %s" % virt)
-
     arch = utils.get_arch()
     region = utils.get_region()
     snapshot_id, snapshot_name = bundle(rootfs, name)
@@ -115,22 +102,21 @@ def main():
     if marketplace:
         share_marketplace(snapshot_id, region)
 
-    for virt in virts:
-        ami_id, ami_name = register(snapshot_id, region, virt, arch)
+    ami_id, ami_name = register(snapshot_id, region, arch)
 
-        log.info(ami_name)
-        log.important(' '.join([ami_id, arch, virt, region]))
+    log.info(ami_name)
+    log.important(' '.join([ami_id, arch, region]))
 
-        if publish:
-            share_public(ami_id, region)
+    if publish:
+        share_public(ami_id, region)
 
-        if copy:
-            regions = utils.get_all_regions()
-            regions.remove(region)
-            images = copy_image(ami_id, ami_name, region, regions)
+    if copy:
+        regions = utils.get_all_regions()
+        regions.remove(region)
+        images = copy_image(ami_id, ami_name, region, regions)
 
-            for image in images:
-                log.important(' '.join([image.id, arch, virt, image.region]))
+        for image in images:
+            log.important(' '.join([image.id, arch, image.region]))
 
 
 if __name__ == "__main__":

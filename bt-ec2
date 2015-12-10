@@ -16,11 +16,10 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to EC2 EBS-backed AMI(s)
+Converts appliance appname (e.g., core) to EC2 EBS-backed HVM AMI
 
 Options::
 
-    --virt=             - virtualization type: hvm, pvm (default: hvm and pvm)
     --name=             - use as name basis (default: turnkey-version)
     --copy              - if set, image will be copied to all other regions
     --publish           - if set, image will be made public and log published
@@ -38,8 +37,6 @@ ebs_opts=""
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h)     usage;;
-        --virt=hvm)    ebs_opts+="$1 ";;
-        --virt=pvm)    ebs_opts+="$1 ";;
         --name=*)      ebs_opts+="$1 ";;
         --copy)        ebs_opts+="$1 ";;
         --marketplace) ebs_opts+="$1 ";;
