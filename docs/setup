@@ -19,7 +19,7 @@ bt-iso ::
 
 bt-ec2 ::
 
-    apt-get install ec2metadata
+    apt-get install parted ec2metadata
     pip install boto
 
 bt-vm ::
