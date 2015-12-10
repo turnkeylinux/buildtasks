@@ -108,7 +108,7 @@ class Volume:
                 except EC2ResponseError, e:
                     error_code = e.errors[0][0]
                     log.debug('delete failed %s - %s)', self.vol.id, error_code)
-                    if not error_code == "Client.VolumeInUse":
+                    if not error_code == ("Client.VolumeInUse", "VolumeInUse"):
                         raise
 
                     if max_attempts == attempt:
