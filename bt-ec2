@@ -74,7 +74,7 @@ isofile=$name.iso
 logfile=$name.log
 
 export LOGFILE_PATH=$O/$logfile
-cat > $LOGFILE_PATH
+echo > $LOGFILE_PATH
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
