@@ -215,7 +215,7 @@ def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
     log.info('installing GRUB on volume')
     submounts = ['/sys', '/proc', '/dev']
     for s in submounts:
-        executil.system('mount', '--bind' '--make-rslave', s, mount_path + s)
+        executil.system('mount', '--bind', '--make-rslave', s, mount_path + s)
 
     executil.system('chroot', mount_path, 'grub-install', device.root_path)
     executil.system('chroot', mount_path, 'update-grub')
