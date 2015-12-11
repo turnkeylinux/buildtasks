@@ -5,47 +5,45 @@
 </head>
 
 <body>
+
+<div id="please-initialize">
   <h1>Please initialize this system...</h1>
 
-  <p>Welcome to TurnKey! You need to initialize this system first before you
-  can use it. To do that you'll need to log into the admin account. The <i>turnkey-init</i> initialization program will start automatically:</p>
+  <p>Welcome to TurnKey! Before we fully expose this instance to a hostile Internet,
+  we need to initialize it. This will setup passwords, install security
+  updates, etc.</p>
+
+  <p>To continue you'll need to SSH into the <b>admin</b>
+  account, which will automatically start the <i>turnkey-init</i>
+  initialization program:</p>
 
     <img src="/turnkey-init-admin.png" />
 
-  <h2>How do I log into the admin account?</h2>
+   <p>After initialization try reloading this page. This message will
+   disappear and you'll be able to access all services on this system
+   normally.</p>
 
-  You can authenticate in one of two ways:
-  <ol>
-    <li><b>Without a password, using your SSH key-pair</b>: If you've
-    correctly configured an <a href="http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/AccessingInstances.html">AWS SSH key-pair</a>, you'll be able to log into the admin account 
-    without having to enter a password using your SSH client (e.g., Putty on Windows).</li>
+</div>
 
-    <li><b>With a password</b>: For security reasons the 
-    admin password is initially set to a random value. To find the initial random admin
-    password, right click the instance in the AWS Management console, select
-    "Get System Log":</li>
-  </ol>
+<div id="howto-ssh">
 
-  <img src="/ec2-console.png" />
+  <h2>How do I SSH into the admin account?</h2>
 
-  <p>Then scroll down until you see <i>LOGIN DETAILS</i> in the log:</p>
+  <b>Using your SSH key-pair</b>: If you've
+    correctly configured an <a href="http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/AccessingInstances.html">AWS SSH key-pair</a>, you'll be able to log into the <b>admin</b> account 
+    without having to enter a password using your SSH client (e.g., Putty on Windows).
 
-    <img src='/system-log-admin.png' />
+</div>
 
-  <h2>Can I log in without SSH?</h2>
-
-  <p>Yes. Get the random admin password as explained above and then point your browser at this machine's <a href="https://__document.domain__:12320/">webshell</a>:</p>
-
-    <a href="https://__document.domain__:12320/"><img src="/webshell.png"/></a>
-
-  <p>Expect a browser warning regarding unsafe HTTPS encryption. This is
-  unavoidable with the use of auto generated self-signed SSL certificates.</p>
+<div id="more-information">
 
   <h2>For more information, visit our website!</h2>
 
   <p>For further information regarding this appliance, please consult the
   <a href="http://www.turnkeylinux.org/$CODENAME">product page</a> on
   the <a href="http://www.turnkeylinux.org">TurnKey GNU/Linux</a> website.</p>
+
+</div>
 
 </body>
 </html>
