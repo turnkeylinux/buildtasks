@@ -18,7 +18,7 @@ WARNING: The container requires initialization (performed on first login).
 This can be performed from the host as follows:
 
     CID=\$(docker ps -l -q)
-    CIP=\$(docker inspect -format='{{.NetworkSettings.IPAddress}}' \$CID)
+    CIP=\$(docker inspect --format='{{.NetworkSettings.IPAddress}}' \$CID)
     docker logs \$CID | grep "Random initial root password"
     ssh root@\$CIP
 EOF
