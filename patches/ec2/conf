@@ -8,7 +8,7 @@ install() {
         install $@
 }
 
-install hubclient ebsmount sudo
+install hubclient ebsmount sudo parted gdisk
 
 # grub tweaks
 DEFAULT=/etc/default/grub
