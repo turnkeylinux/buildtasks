@@ -1,11 +1,18 @@
 #!/bin/bash -e
 
+aptconf_tag() {
+    grep -q $1 /etc/apt/apt.conf.d/01turnkey && return
+    sed -i "s|turnkey-\(.*\))|turnkey-\1 $1)|" /etc/apt/apt.conf.d/01turnkey
+}
+
 if ec2metadata --kernel-id |grep -q aki; then
     chmod -x /etc/grub.d/*
     chmod +x /etc/grub.d/40_custom
+    apt_conf pvm
 else
     chmod +x /etc/grub.d/*
     chmod -x /etc/grub.d/40_custom
+    apt_conf hvm
 fi
 
 exit 0
