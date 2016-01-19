@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+[ -n "$_TURNKEY_INIT" ] && exit 0
+
 aptconf_tag() {
     grep -q $1 /etc/apt/apt.conf.d/01turnkey && return
     sed -i "s|turnkey-\(.*\))|turnkey-\1 $1)|" /etc/apt/apt.conf.d/01turnkey
