@@ -1,0 +1,23 @@
+#!/bin/bash
+# Author: Anton Pyrogovskyi <anton@turnkeylinux.org>
+
+[ -n "$_TURNKEY_INIT" ] && exit 0
+
+DEV=/dev/xvda
+
+sgdisk -v $DEV | grep -q "Problem: The secondary header's self-pointer indicates that it doesn't reside"
+
+[ $? -eq 0 ] || exit 0
+
+echo 'Backing up the GPT.'
+sgdisk -b /var/tmp/gpt.bak $DEV
+
+FSCT=$( sgdisk -i 2 $DEV | grep 'First sector' | cut -d' ' -f3 )
+sgdisk -e -d 2 -n 2:$FSCT:0 -c 2:rootfs -t 2:8300 $DEV
+
+if [ $? -ne 0 ]; then
+    echo 'Something went wrong, rolling back GPT.'
+    sgdisk -l /var/tmp/gpt.bak $DEV
+fi
+
+partprobe
