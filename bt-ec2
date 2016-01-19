@@ -25,6 +25,7 @@ Options::
     --publish           - if set, image will be made public and log published
     --marketplace       - if set, image will be shared for marketplace
     --secupdates        - install security updates before building image
+    --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
 
 Environment::
 
@@ -42,6 +43,7 @@ while [ "$1" != "" ]; do
         --marketplace) ebs_opts+="$1 ";;
         --publish)     ebs_opts+="$1 "; publish="yes";;
         --secupdates)  secupdates="yes";;
+        --pvmshim)     pvmshim="yes";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
     shift
@@ -100,6 +102,7 @@ tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
 [ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
+[ "$pvmshim" == "yes" ] && tklpatch-apply $rootfs $BT/patches/ec2-pvmshim
 
 umount -l $rootfs/dev || true
 umount -l $rootfs/sys || true

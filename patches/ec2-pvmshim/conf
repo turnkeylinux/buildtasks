@@ -1,0 +1,10 @@
+#!/bin/bash -ex
+
+# create grub config for pvgrub
+chmod -x /etc/grub.d/*
+chmod +x /etc/grub.d/40_custom
+grub-mkconfig -o /boot/grub/menu.lst
+
+# disable pvgrub, ebs-bundle will handle grub config for hvm
+chmod +x /etc/grub.d/*
+chmod -x /etc/grub.d/40_custom

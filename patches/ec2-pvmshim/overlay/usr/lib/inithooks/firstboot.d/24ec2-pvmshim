@@ -1,0 +1,11 @@
+#!/bin/bash -e
+
+if ec2metadata --kernel-id |grep -q aki; then
+    chmod -x /etc/grub.d/*
+    chmod +x /etc/grub.d/40_custom
+else
+    chmod +x /etc/grub.d/*
+    chmod -x /etc/grub.d/40_custom
+fi
+
+exit 0
