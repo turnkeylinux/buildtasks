@@ -98,6 +98,7 @@ def main():
     arch = utils.get_arch()
     region = utils.get_region()
     snapshot_id, snapshot_name = bundle(rootfs, name)
+    log.important(' '.join([snapshot_id, arch, region]))
 
     if marketplace:
         share_marketplace(snapshot_id, region)
