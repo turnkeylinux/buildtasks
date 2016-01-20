@@ -186,6 +186,7 @@ class Device:
     def mkpart(self):
         executil.system('parted', self.real_path, '--script', 'unit mib mklabel gpt mkpart primary 1 3 name 1 grub set 1 bios_grub on mkpart primary ext4 3 -1 name 2 rootfs quit')
         executil.system('partprobe', self.real_path)
+        time.sleep(5)
         self.root_path = self.real_path
         self.real_path = self.real_path + '2'
 
