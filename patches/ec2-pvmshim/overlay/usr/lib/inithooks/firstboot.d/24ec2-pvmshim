@@ -8,11 +8,11 @@ aptconf_tag() {
 }
 
 if ec2metadata --kernel-id |grep -q aki; then
-    chmod -x /etc/grub.d/*
+    chmod -x /etc/grub.d/??_*
     chmod +x /etc/grub.d/40_custom
     aptconf_tag pvm
 else
-    chmod +x /etc/grub.d/*
+    chmod +x /etc/grub.d/??_*
     chmod -x /etc/grub.d/40_custom
     aptconf_tag hvm
 fi
