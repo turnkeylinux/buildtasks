@@ -9,7 +9,10 @@ install() {
 }
 
 # install useful packages
-install ebsmount
+install ebsmount sysvinit-core systemd-shim
+
+# remove systemd (sysvinit used in container)
+dpkg --purge systemd-sysv systemd || true
 
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
