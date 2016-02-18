@@ -1,0 +1,84 @@
+turnkey-typo3-14.1 (1) turnkey; urgency=low
+
+  * Changed visible references of 'Typo3' to 'TYPO3' [#463].
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Thu, 18 Feb 2016 16:42:02 +1100
+
+turnkey-typo3-14.0 (1) turnkey; urgency=low
+
+  * Upgraded to latest major version of Typo3 (7.3.1).
+
+  * Installs the Introduction package by default.
+ 
+  * Replaced PHPMyAdmin with Adminer
+
+  * Hardened default SSL settings
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Anton Pyrogovskyi <q@dae.pp.ua>  Thu, 9 Jul 2015 21:03:19 +0300
+
+turnkey-typo3-13.0 (1) turnkey; urgency=low
+
+  * PHPMyAdmin:
+
+    - Configured to allow users preferences stored in database.
+    - Specified blowfish_secret and regeneration on firstboot (security).
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Fri, 11 Oct 2013 11:30:36 +0300
+
+turnkey-typo3-12.1 (1) turnkey; urgency=low
+
+  * Upgraded to latest major version of Typo3.
+
+  * Added phpsh (interative shell for PHP) and php5-cli (generically useful).
+
+  * Upstream source component versions:
+
+    typo3           6.0.3
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Fri, 05 Apr 2013 08:00:00 +0200
+
+turnkey-typo3-12.0 (1) turnkey; urgency=low
+
+  * Initial public release of TurnKey Typo3.
+
+  * Set Typo3 admin password on firstboot (convenience, security).
+
+  * Regenerates all secrets during installation / firstboot (security).
+
+  * MySQL related:
+
+    - Set MySQL root password on firstboot (convenience, security).
+    - Force MySQL to use Unicode/UTF8.
+    - Includes PhpMyAdmin (listening on port 12322 - uses SSL).
+
+  * SSL support out of the box.
+
+  * Includes php-xcache PHP opcode cacher / optimizer (performance).
+
+  * Includes postfix MTA (bound to localhost) for sending of email (e.g.
+    password recovery). Also includes webmin postfix module for convenience.
+
+  * Major component versions
+
+    typo3           4.7.1 (upstream archive)
+    apache2         2.2.16-6+squeeze7
+    mysql-server    5.1.63-0+squeeze1
+    phpmyadmin      4:3.3.7-7
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Wed, 01 Aug 2012 08:00:00 +0200
+
