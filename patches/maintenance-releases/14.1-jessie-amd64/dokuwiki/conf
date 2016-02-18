@@ -1,0 +1,5 @@
+#!/bin/bash -e
+
+apt-get purge php5-xcache -y
+rm -f /etc/php5/cli/conf.d/20-xcache.ini
+
