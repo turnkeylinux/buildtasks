@@ -1,0 +1,29 @@
+#!/bin/bash -e
+
+# Force Passenger to use canvasuser
+echo "PassengerDefaultUser canvasuser" >> /etc/apache2/conf/canvas.conf
+
+# Setup canvasuser
+adduser --disabled-password --no-create-home --gecos "Canvas user" canvasuser
+adduser canvasuser www-data
+
+WEBROOT=/var/www/canvas
+USER=canvasuser:www-data
+
+chown -R $USER $WEBROOT/log
+chown -R $USER $WEBROOT/tmp
+chown $USER $WEBROOT/config/*.yml
+chown $USER $WEBROOT/config/environment.rb
+chown -R $USER $WEBROOT/public
+
+service postgresql start
+sleep 10
+service canvas_init start
+service apache2 start
+service apache2 stop
+service canvas_init stop
+service postgresql stop
+
+rm -rf /var/log/canvas
+ln -s /var/www/canvas/log /var/log/canvas
+

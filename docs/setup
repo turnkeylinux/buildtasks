@@ -27,7 +27,7 @@ bt-vm ::
     # vmware ovftool
     apt-get install qemu parted kpartx grub-pc zip
 
-bt-openvz ::
+bt-container ::
 
     apt-get install cmake
 
@@ -40,12 +40,18 @@ config files
 
 buildtasks/config/build.cfg ::
 
-    VERSION=14.0
+    VERSION=14.1
+    CUR_VER=14.0
     CODENAME=$(lsb_release -s -c)
     ARCH=$(dpkg --print-architecture)
 
     #export VERSION_TAG=rcX
     export BT_VERSION=${VERSION}${VERSION_TAG}-${CODENAME}-${ARCH}
+    export BT_NEW_VERSION=$BT_VERSION
+    export BT_CUR_VERSION=${CUR_VER}${VERSION_TAG}-${CODENAME}-${ARCH}
+
+    #Note: CUR_VER, BT_NEW_VERSION & BT_CUR_VERSION are only required
+    # for bt-maintence
 
 buildtasks/config/common.cfg ::
 

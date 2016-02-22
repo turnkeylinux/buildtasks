@@ -101,6 +101,7 @@ cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
 tklpatch-apply $rootfs $BT/patches/secupdates
+tklpatch-apply $rootfs $BT/patches/tklupdates
 tklpatch-apply $rootfs $maintenance_patch/common
 
 $BT/bin/generate-app-patch $rootfs $maintenance_patch $maintenance_app_patch

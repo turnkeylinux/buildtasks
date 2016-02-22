@@ -1,0 +1,28 @@
+#!/bin/bash -e
+
+update_repo() {
+    apt-get update -o Dir::Etc::sourcelist="sources.list.d/$1.list" \
+        -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
+}
+
+TMP_SOURCE=/etc/apt/sources.list.d/turnkey.list
+cat > $TMP_SOURCE <<EOF
+deb http://archive.turnkeylinux.org/debian jessie main
+EOF
+
+update_repo turnkey
+
+apt-get upgrade --assume-yes
+
+# The following line can be removed post v14.1 release
+# "|| true" added to stop failure prior to inclusion of webmin-filemin in main TurnKey repo
+apt-get install webmin-filemin || true
+
+# cleanup
+apt-get autoremove --assume-yes
+apt-get clean
+rm $TMP_SOURCE
+rm -f /boot/*.bak
+rm -f /var/cache/apt/*.bin
+rm -f /var/lib/apt/lists/{archive.*,security.*}
+
