@@ -1,0 +1,36 @@
+*nat
+:PREROUTING ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+COMMIT
+*mangle
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+COMMIT
+*filter
+:FORWARD ACCEPT [0:0]
+:INPUT DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -i lo -j ACCEPT
+-A INPUT -p icmp -m icmp --icmp-type echo-request -j ACCEPT
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 88 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 135 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 139 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 389 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 445 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 464 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 631 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 3268 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 12320 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 12321 -j ACCEPT
+-A INPUT -p udp -m udp --dport 123 -j ACCEPT
+-A INPUT -p udp -m udp --dport 137 -j ACCEPT
+-A INPUT -p udp -m udp --dport 138 -j ACCEPT
+COMMIT
