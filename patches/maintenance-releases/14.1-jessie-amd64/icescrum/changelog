@@ -1,0 +1,112 @@
+turnkey-icescrum-14.1 (1) turnkey; urgency=low
+
+  * Apply v14.0 Tomcat fix to icescrum appliance [#581].
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Tue, 23 Feb 2016 16:25:30 +1100
+
+turnkey-icescrum-14.0 (1) turnkey; urgency=low
+
+  * Icescrum:
+
+    - Upgraded to latest release version.
+
+  * Tomcat/JDK:
+
+    - Upgraded to Tomcat7 (Jessie).
+    - Upgraded to OpenJDK7 (Jessie).
+
+  * Upstream source component versions:
+
+    icescrum            R6_14.1
+    geronimo-serverlet  3.0_spec-1.0
+
+  * Debian component versions:
+
+    tomcat7             7.0.56-3
+    openjdk-7-jdk       7u79-2.5.5-1~deb8u1
+
+  * Hardened default SSL settings
+  
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Sun, 31 Jul 2015 01:11:21 +1000
+
+turnkey-icescrum-13.0 (1) turnkey; urgency=low
+
+  * Icescrum:
+
+    - Upgraded to latest release version [#105].
+
+  * Upstream source component versions:
+
+    icescrum            R6_9
+    geronimo-serverlet  3.0_spec-1.0
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Thu, 10 Oct 2013 18:05:42 +0300
+
+turnkey-icescrum-12.1 (1) turnkey; urgency=low
+
+  * Icescrum:
+
+    - Upgraded to latest version.
+    - Transitioned configuration to groovy format (required in new version).
+    - Added geronimo-servlet to tomcat6/lib (required in new version).
+
+  * Upstream source component versions:
+
+    icescrum            R6_3
+    geronimo-serverlet  3.0_spec-1.0
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Sun, 07 Apr 2013 08:00:00 +0200
+
+turnkey-icescrum-12.0 (1) turnkey; urgency=low
+
+  * Initial public release of TurnKey iceScrum, based on TKLPatch submitted
+    by Adrian Moya.
+
+  * Set iceScrum admin password, email and domain on firstboot (convenience,
+    security).
+
+  * Regenerates all secrets during installation / firstboot (security).
+
+  * iceScrum base directory set to: /var/local/lib/icescrum.
+
+  * SSL support out of the box.
+
+  * Tomcat and Java configurations
+
+    - Configured Tomcat admin/manager roles and admin user.
+    - Configured Tomcat HTTP connector to bind to port 80 (default: 8180).
+    - Configured SSL port to bind to port 443 (default: 8443).
+    - Disabled AJP connector on port 8009 (security).
+    - Tomcat and Java environment variables configuration system wide.
+
+  * Includes postfix MTA (bound to localhost) for sending of email (e.g.
+    password recovery). Also includes webmin postfix module for convenience.
+
+  * Major component versions
+
+    icescrum            R5_1.2 (upstream archive)
+    tomcat6             6.0.35-1+squeeze2
+    apache2             2.2.16-6+squeeze7
+    openjdk-6-jdk       6b18-1.8.13-0+squeeze2
+    openjdk-6-jre       6b18-1.8.13-0+squeeze2
+    ant                 1.8.0-4
+    mysql-server        5.1.63-0+squeeze1
+    libmysql-java       5.1.10+dfsg-2
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Wed, 01 Aug 2012 08:00:00 +0200
+
