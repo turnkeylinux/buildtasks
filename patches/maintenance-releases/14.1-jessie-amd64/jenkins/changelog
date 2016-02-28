@@ -1,0 +1,127 @@
+turnkey-jenkins-14.1 (1) turnkey; urgency=low
+
+  * Jenkins:
+
+    -Latest version of Jenkins from upstream Long Term Support repo.
+    -Included scm_api dependency (#507).
+    -Fix reverse proxy (#untracked bug).
+    -Redirect HTTP to HTTPS.
+
+  * Latest versions of Debian packages (from repos).
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Wed, 17 Feb 2016 16:33:08 +1100
+
+turnkey-jenkins-14.0 (2) turnkey; urgency=low
+
+  * Latest version of Jenkins from Long Term Support release version. Fixes
+    remote code execution vulnerability.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Thu, 26 Nov 2015 19:28:32 +1000
+
+turnkey-jenkins-14.0 (1) turnkey; urgency=low
+
+  * Jenkins:
+
+    - Latest version of Jenkins from official package repository.
+
+  * Tomcat/JDK:
+
+    - Upgraded to Tomcat7 (Jessie).
+    - Upgraded to OpenJDK7 (Jessie).
+
+  * Debian component versions:
+
+    tomcat7             7.0.56-3
+    openjdk-7-jdk       7u79-2.5.5-1~deb8u1
+  
+  * Hardened default SSL settings
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Jeremy Davis <jeremy@turnkeylinux.org>  Sun, 24 May 2015 04:37:32 +1000
+
+turnkey-jenkins-13.0 (1) turnkey; urgency=low
+
+  * Jenkins:
+
+    - Latest version of Jenkins from official package repository.
+    - Bugfixed plugin permissions [#42].
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Thu, 10 Oct 2013 18:07:35 +0300
+
+turnkey-jenkins-12.1 (1) turnkey; urgency=low
+
+  * Jenkins:
+
+    - Installing latest version of Jenkins from official package repository,
+      and pinning for security.
+    - Latest plugins versions are installed at build time.
+    - Transitioned to jenkins daemon localhost, removed tomcat related.
+    - Regenerate jenkins secrets/keys on firstboot (security).
+    - Configured authentication via pam (admin posix user, disabled login).
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Sun, 07 Apr 2013 08:00:00 +0200
+
+turnkey-jenkins-12.0 (1) turnkey; urgency=low
+
+  * Initial public release of TurnKey Jenkins, based on TKLPatch submitted
+    by Adrian Moya.
+
+  * Jenkins is preconfigured with PrivateSecurityRealm, providing users
+    full control once logged in (signup is disabled by default).
+
+  * Set Jenkins admin password on firstboot (convenience, security).
+
+  * Regenerates all secrets during installation / firstboot (security).
+
+  * Includes all popular VCS clients and related Jenkins plugins for Git,
+    Bazaar, Mercurial and Subversion.
+
+  * JENKINS_HOME configured in environment: /var/local/lib/jenkins.
+
+  * SSL support out of the box.
+
+  * Tomcat, Apache and Java configurations
+
+    - Apache2 Jk loadbalancer connector to Tomcat (performance).
+    - JkMounts for jenkins, admin, manager, host-manager applications.
+    - Configured Tomcat admin/manager roles and admin user.
+    - Configured Tomcat AJP connector to bind to localhost (security).
+    - Removed tomcat HTTP connector listener (security).
+    - Tomcat and Java environment variables configuration system wide.
+
+  * Includes postfix MTA (bound to localhost) for sending of email (e.g.
+    password recovery). Also includes webmin postfix module for convenience.
+
+  * Major component versions
+
+    tomcat6             6.0.35-1+squeeze2
+    apache2             2.2.16-6+squeeze7
+    libapache2-mod-jk   1:1.2.30-1squeeze1
+    openjdk-6-jdk       6b18-1.8.13-0+squeeze2
+    openjdk-6-jre       6b18-1.8.13-0+squeeze2
+    ant                 1.8.0-4
+    mysql-server        5.1.63-0+squeeze1
+    libmysql-java       5.1.10+dfsg-2
+
+    git-core            1:1.7.2.5-3
+    bzr                 2.1.2-1
+    subversion          1.6.12dfsg-6
+    mercurial           1.6.4-1
+    build-essential     11.5
+
+  * Note: Please refer to turnkey-core's changelog for changes common to all
+    appliances. Here we only describe changes specific to this appliance.
+
+ -- Alon Swartz <alon@turnkeylinux.org>  Wed, 01 Aug 2012 08:00:00 +0200
+
