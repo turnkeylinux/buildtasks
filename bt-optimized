@@ -40,7 +40,7 @@ BT=$(dirname $(readlink -f $0))
 ARCH=$(dpkg --print-architecture)
 
 $BT/bt-vm $opts $appname
-$BT/bt-openvz $opts $appname
+$BT/bt-container $opts $appname
 $BT/bt-openstack $opts $appname
 $BT/bt-xen $opts $appname
 [ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appname
