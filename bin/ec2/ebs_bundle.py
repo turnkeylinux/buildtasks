@@ -95,7 +95,7 @@ class Volume:
         self._wait("available")
         log.debug('created volume - %s', self.vol.id)
 
-    def delete(self, max_attempts=5):
+    def delete(self, max_attempts=10):
         if self.vol:
             attempt = 0
             while True:
