@@ -67,6 +67,16 @@ if [ ! -e /etc/apt/sources.list.d/docker.list ]; then
     cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://apt.dockerproject.org/repo debian-jessie main
 EOF
+    REPO_ORIGIN="apt.dockerproject.org"
+    cat > /etc/apt/preferences.d/docker<<EOF
+Package: *
+Pin: origin "$REPO_ORIGIN"
+Pin-Priority: 100
+Package: docker-engine
+Pin: origin "$REPO_ORIGIN"
+Pin-Priority: 500
+EOF
+
 fi
 
 if ! which docker >/dev/null; then
