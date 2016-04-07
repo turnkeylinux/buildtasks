@@ -31,6 +31,10 @@ bt-container ::
 
     apt-get install cmake
 
+bt-docker ::
+
+    apt-get install aufs-tools
+
 bt-xen ::
 
     apt-get install bzip2

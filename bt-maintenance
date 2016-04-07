@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 # Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
@@ -100,6 +100,10 @@ $BT/bin/iso-verify $BT_ISOS $BT_CUR_VERSION $appname
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
+# dirty workaround for websvn Debian package bug
+if [ "$appname" == "revision-control" ] && [ "$(echo $BT_CUR_VERSION | cut -d. -f1)" == "14" ]; then
+     fab-chroot $rootfs 'mkdir -p /etc/apache2/conf.d && touch /etc/apache2/conf.d/dummy && ln -s /etc/apache2/conf.d/dummy /etc/apache2/conf.d/websvn'
+fi
 tklpatch-apply $rootfs $BT/patches/secupdates
 tklpatch-apply $rootfs $BT/patches/tklupdates
 tklpatch-apply $rootfs $maintenance_patch/common

@@ -43,9 +43,14 @@ done
 
 [ -n "$BT_DEBUG" ] && set -x
 
+install() {
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y install $1
+}
+
 if ! which lxc >/dev/null; then
-    info "installing lxc and xz-utils"
-    DEBIAN_FRONTEND=noninteractive apt-get -y install lxc xz-utils
+    info "installing lxc & xz-utils"
+    install "lxc xz-utils"
 fi
 
 if ! grep -qs /sys/fs/cgroup /etc/fstab; then
@@ -54,11 +59,29 @@ if ! grep -qs /sys/fs/cgroup /etc/fstab; then
     mount /sys/fs/cgroup
 fi
 
-if [ ! -e /usr/local/bin/docker ]; then
-    info "downloading docker..."
-    DOCKER=https://get.docker.io/builds/Linux/x86_64/docker-latest
-    wget $DOCKER -O /usr/local/bin/docker
-    chmod +x /usr/local/bin/docker
+if [ ! -e /etc/apt/sources.list.d/docker.list ]; then
+    info "installing apt-transport-https"
+    install apt-transport-https
+    info "importing docker repo key and creating docker apt repo entry"
+    apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+    cat > /etc/apt/sources.list.d/docker.list <<EOF
+deb https://apt.dockerproject.org/repo debian-jessie main
+EOF
+    REPO_ORIGIN="apt.dockerproject.org"
+    cat > /etc/apt/preferences.d/docker<<EOF
+Package: *
+Pin: origin "$REPO_ORIGIN"
+Pin-Priority: 100
+Package: docker-engine
+Pin: origin "$REPO_ORIGIN"
+Pin-Priority: 500
+EOF
+
+fi
+
+if ! which docker >/dev/null; then
+    info "installing docker"
+    install docker-engine
 fi
 
 if [ ! -e /var/lib/docker ]; then
@@ -82,6 +105,6 @@ fi
 
 if ! pidof docker >/dev/null; then
     info "starting docker daemon"
-    docker -d &
+    service docker start
 fi
 

@@ -35,7 +35,7 @@ done
 BT=$(dirname $(readlink -f $0))
 ARCH=$(dpkg --print-architecture)
 
-$BT/bt-iso --publish $appname
+$BT/bt-maintenance --publish $appname
 #$BT/bt-ec2 --publish --copy $appname
 $BT/bt-vm --publish $appname
 $BT/bt-container --publish $appname
