@@ -103,6 +103,9 @@ $BT/bin/vm-bundle $O/$rootfs
 $BT/bin/generate-signature $O/$name-vmdk.zip
 $BT/bin/generate-signature $O/$name.ova
 
+$BT/bin/generate-buildenv vm $BT_ISOS/$isofile.sig > $O/$name-vmdk.zip.buildenv
+$BT/bin/generate-buildenv vm $BT_ISOS/$isofile.sig > $O/$name.ova.buildenv
+
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
@@ -112,8 +115,8 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$name.ova
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name-vmdk.zip.sig
-    $BT/bin/publish-files $O/$name.ova.sig
+    $BT/bin/publish-files $O/$name-vmdk.{zip.sig,zip.buildenv}
+    $BT/bin/publish-files $O/$name.{ova.sig,ova.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

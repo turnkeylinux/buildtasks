@@ -54,6 +54,7 @@ appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 if [ "$force" == "yes" ]; then
     rm -f $O/$name.iso
     rm -f $O/$name.iso.sig
+    rm -f $O/$name.iso.buildenv
     rm -f $O/$name.manifest
     rm -f $O/$name.changelog
     rm -f $O/$name.log
@@ -62,6 +63,7 @@ fi
 
 [ -e $O/$name.iso ] && fatal "$O/$name.iso already exists"
 [ -e $O/$name.iso.sig ] && fatal "$O/$name.iso.sig already exists"
+[ -e $O/$name.iso.buildenv ] && fatal "$O/$name.iso.buildenv already exists"
 [ -e $O/$name.manifest ] && fatal "$O/$name.manifest already exists"
 [ -e $O/$name.changelog ] && fatal "$O/$name.changelog already exists"
 [ -e $O/$name.tklbam ] && fatal "$O/$name.tklbam already exists"
@@ -71,6 +73,7 @@ cp changelog $O/$name.changelog
 cp build/product.iso $O/$name.iso
 $BT/bin/generate-signature $O/$name.iso
 $BT/bin/generate-manifest $rootfs > $O/$name.manifest
+$BT/bin/generate-buildenv iso $appname > $O/$name.iso.buildenv
 if [ -e $BT_PROFILES/$appname ]; then
     mkdir -p $O/$name.tklbam
     export PROFILES_CONF=$BT_PROFILES

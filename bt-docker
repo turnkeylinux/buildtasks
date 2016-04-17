@@ -98,6 +98,8 @@ appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
 dockername=$BT_DOCKER_USER/${appname}-${appversion}
 $BT/bin/docker-bundle $rootfs $dockername $ports
 
+$BT/bin/generate-buildenv docker $BT_ISOS/$isofile.sig > $O/$name.docker.buildenv
+
 # publish if specified
 if [ "$publish" == "yes" ]; then
     while true; do
@@ -105,6 +107,9 @@ if [ "$publish" == "yes" ]; then
         echo "autoresume push: sleeping for 5 seconds"
         sleep 5
     done
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$name.docker.buildenv
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

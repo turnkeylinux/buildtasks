@@ -130,6 +130,9 @@ cd ..
 $BT/bin/generate-signature $O/$stupidname.ova
 pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
 
+$BT/bin/generate-buildenv container $BT_ISOS/$isofile.sig > $O/$stupidname.tar.gz.buildenv
+$BT/bin/generate-buildenv container $BT_ISOS/$isofile.sig > $O/$stupidname.ova.buildenv
+
 # publish if specified
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/proxmox/
@@ -139,7 +142,8 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$stupidname.{ova,ova.pfff}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$stupidname.{tar.gz.sig,ova.sig}
+    $BT/bin/publish-files $O/$stupidname.{tar.gz.sig,tar.gz.buildenv}
+    $BT/bin/publish-files $O/$stupidname.{ova.sig,ova.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
