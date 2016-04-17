@@ -1,0 +1,109 @@
+#!/bin/bash
+# Copyright (c) 2016 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) target target-args
+Print build environment related to target build type
+
+Targets::
+
+    iso         appname
+    vm          path/to/iso.sig
+    ec2         path/to/iso.sig
+    xen         path/to/iso.sig
+    docker      path/to/iso.sig
+    container   path/to/iso.sig
+    openstack   path/to/iso.sig
+
+EOF
+exit 1
+}
+
+BT=$(dirname $(dirname $(readlink -f $0)))
+BT_CONFIG=$BT/config
+. $BT/config/build.cfg
+. $BT/config/common.cfg
+
+_git_state() {
+    dir=$1
+    cd $dir
+    commit=$(git rev-parse --short HEAD)
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    status=$(git status --porcelain | tr '\n' ' ')
+    echo "$dir $commit $branch $status"
+}
+
+_common() {
+    git_state $BT
+    echo "turnkey_version $(cat /etc/turnkey_version)"
+    echo "ami-id $(which ec2metadata && ec2metadata --ami-id || echo none)"
+    echo "awscli $(python -c 'import awscli; print awscli.__version__')"
+}
+
+_optimized() {
+    # get sha1 from sig (supports yet-to-be signed iso sigs)
+    sigpath=$1
+    sigsha1=$(grep -A 1 sha1sum $sigpath | tail -n 1 | sed "s/^ *//")
+    echo "$(basename $sigpath) $sigsha1)"
+
+    echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"
+}
+
+bt_iso() {
+    appname=$1
+
+    _git_state $FAB_PATH/common
+    _git_state $FAB_PATH/cdroots
+    _git_state $BT_PRODUCTS/core
+    _git_state $BT_PRODUCTS/$appname
+    _git_state $BT_PROFILES
+
+    bootstrap_sig=$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.sig
+    bootstrap_sig_md5=$(md5sum $bootstrap_sig | cut -d " " -f 1)
+    echo "$(basename $bootstrap_sig) $bootstrap_sig_md5"
+
+    echo "fab $(fab --version)"
+    echo "deck $(deck --version)"
+}
+
+bt_ec2() {
+    echo "boto $(python -c 'import boto; print boto.__version__')"
+}
+
+bt_vm() {
+    echo "ovftool $(ovftool --version)"
+    echo "qemu $(qemu --version)"
+}
+
+bt_docker() {
+    echo "docker $(docker --version)"
+    echo "aufs-tools $(dpkg -s aufs-tools | grep Version | cut -d ' ' -f 2)"
+}
+
+if [[ "$#" != "2" ]]; then
+    usage
+fi
+
+target=$1
+case $target in
+    iso)        _common; bt_iso $2;;
+    ec2)        _common; _optimized $2; bt_ec2;;
+    vm)         _common; _optimized $2; bt_vm;;
+    docker)     _common; _optimized $2; bt_docker;;
+    container)  _common; _optimized $2;;
+    openstack)  _common; _optimized $2;;
+    xen)        _common; _optimized $2;;
+    *)          fatal "unrecognized build target";;
+esac
+
