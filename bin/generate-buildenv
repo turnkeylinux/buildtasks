@@ -55,7 +55,7 @@ _optimized() {
     # get sha1 from sig (supports yet-to-be signed iso sigs)
     sigpath=$1
     sigsha1=$(grep -A 1 sha1sum $sigpath | tail -n 1 | sed "s/^ *//")
-    echo "$(basename $sigpath) $sigsha1)"
+    echo "$(basename $sigpath) $sigsha1"
 
     echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"
 }
