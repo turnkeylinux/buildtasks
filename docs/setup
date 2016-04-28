@@ -22,6 +22,11 @@ bt-ec2 ::
     apt-get install parted ec2metadata
     pip install boto
 
+bt-openstack ::
+
+    apt-get install parted ec2metadata mbr qemu kpartx extlinux
+    pip install boto
+
 bt-vm ::
 
     # vmware ovftool

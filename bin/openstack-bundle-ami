@@ -1,0 +1,74 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs
+Bundles rootfs into an openstack tarball
+
+Arguments::
+
+    rootfs          - root filesystem path
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+name=$(echo $rootfs | sed 's/.rootfs//')
+appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+
+case "$appname" in
+    canvas)           loopsize_padding=524288 ;;
+    ejabberd)         loopsize_padding=524288 ;;
+    appengine-python) loopsize_padding=524288 ;;
+    *)                loopsize_padding=262144 ;;
+esac
+
+info "getting size for loopback"
+rootsize=$(du -s $rootfs | awk '{print $1}')
+loopsize=$[$rootsize + $loopsize_padding]
+
+info "creating sparse loopback"
+dd if=/dev/null of=$rootfs.img bs=1 seek=${loopsize}K
+mkfs.ext4 -F -j $rootfs.img
+
+mkdir $rootfs.img.mount
+mount -o loop $rootfs.img $rootfs.img.mount
+
+info "syncing rootfs to loopback"
+rsync -a -t -r -S -I -H $rootfs/ $rootfs.img.mount
+
+info "umount loopback"
+umount -d $rootfs.img.mount
+rmdir $rootfs.img.mount
+
+info "setting up image directory"
+mkdir $name
+mv $rootfs.img $name/$name.img
+cp $rootfs/boot/vmlinuz-* $name/$name-kernel
+cp $rootfs/boot/initrd.img-* $name/$name-initrd
+
+info "creating $name-openstack.tar.gz"
+tar --sparse -zcvf $name-openstack.tar.gz $name
+
+if [ -z "$BT_DEBUG" ]; then
+    info "removing directory"
+    rm -rf $name
+fi
+

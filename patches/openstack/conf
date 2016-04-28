@@ -8,29 +8,16 @@ install() {
         install $@
 }
 
-# install useful packages
-install ebsmount sysvinit-core systemd-shim
+#conflicts with cloud-utils, which is a dependency of cloud-initramfs-growroot
+dpkg --purge ec2metadata
 
-# remove systemd (sysvinit used in container)
-dpkg --purge systemd-sysv systemd || true
+# install useful packages
+install ebsmount cloud-initramfs-growroot extlinux
+
+#on the other hand, inithooks needs it and the other implementation is written by Alon Swartz anyway
+DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
+  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
+  install ec2metadata
 
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
-
-# hold kernel (not used in image, pro-longs sec-updates)
-ARCH=$(dpkg --print-architecture)
-case "$ARCH" in
-    "i386")
-        META_KERNEL="linux-image-686";
-        ;;
-    "amd64")
-        META_KERNEL="linux-image-amd64";
-        ;;
-    *)
-        fatal "non-supported architecture: $ARCH";
-        ;;
-esac
-KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
-echo "$KERNEL hold" | dpkg --set-selections
-echo "$META_KERNEL hold" | dpkg --set-selections
-

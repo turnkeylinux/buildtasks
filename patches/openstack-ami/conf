@@ -1,0 +1,36 @@
+#!/bin/bash -ex
+
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+# install useful packages
+install ebsmount sysvinit-core systemd-shim
+
+# remove systemd (sysvinit used in container)
+dpkg --purge systemd-sysv systemd || true
+
+# support hot-plugging of attached volumes
+echo "acpiphp" >> /etc/modules
+
+# hold kernel (not used in image, pro-longs sec-updates)
+ARCH=$(dpkg --print-architecture)
+case "$ARCH" in
+    "i386")
+        META_KERNEL="linux-image-686";
+        ;;
+    "amd64")
+        META_KERNEL="linux-image-amd64";
+        ;;
+    *)
+        fatal "non-supported architecture: $ARCH";
+        ;;
+esac
+KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
+echo "$KERNEL hold" | dpkg --set-selections
+echo "$META_KERNEL hold" | dpkg --set-selections
+
