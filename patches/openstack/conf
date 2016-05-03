@@ -12,12 +12,29 @@ install() {
 dpkg --purge ec2metadata
 
 # install useful packages
-install ebsmount cloud-initramfs-growroot extlinux
+install ebsmount cloud-initramfs-growroot extlinux cloud-init sudo
 
 #on the other hand, inithooks needs it and the other implementation is written by Alon Swartz anyway
-DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
-  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
-  install ec2metadata
+#on the third hand, we've got cloud-init, these inithooks can go away
+#DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
+#  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
+#  install ec2metadata
 
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
+
+#duplication with cloud-init
+rm /usr/lib/inithooks/firstboot.d/10regen-sshkeys
+
+#we're setting this another way in 29sudoadmin-fencethemall
+rm /usr/lib/inithooks/firstboot.d/29sudoadmin
+
+#For OpenStack, we would like to use Ec2 and no other API
+echo "# to update this file, run dpkg-reconfigure cloud-init
+datasource_list: [ConfigDrive, Openstack, Ec2]" >/etc/cloud/cloud.cfg.d/90_dpkg.cfg
+
+#fix the ordering of the init scripts, so that cloud-init runs before inithooks and friends
+sed -i '/^# Required-Start/ s/$/ cloud-config/' /etc/init.d/inithooks
+sed -i '/^# Required-Start/ s/$/ cloud-config/' /etc/init.d/hubdns
+sed -i '/^# Required-Start/ s/$/ cloud-config/' /etc/init.d/turnkey-init-fence
+insserv
