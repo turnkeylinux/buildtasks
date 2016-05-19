@@ -45,7 +45,7 @@ _git_state() {
 }
 
 _common() {
-    git_state $BT
+    _git_state $BT
     echo "turnkey_version $(cat /etc/turnkey_version)"
     echo "ami-id $(which ec2metadata && ec2metadata --ami-id || echo none)"
     echo "awscli $(python -c 'import awscli; print awscli.__version__')"
