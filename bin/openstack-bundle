@@ -34,7 +34,7 @@ name=$(echo $rootfs | sed 's/.rootfs//')
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 
 case "$appname" in
-    canvas)           loopsize_padding=524288 ;;
+    canvas)           loopsize_padding=786432 ;;
     ejabberd)         loopsize_padding=524288 ;;
     appengine-python) loopsize_padding=524288 ;;
     *)                loopsize_padding=262144 ;;
