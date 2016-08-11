@@ -1,5 +1,4 @@
 # /etc/fstab: static file system information.
 # <file system>        <mount point>   <type>  <options>       <dump>  <pass>
 proc                    /proc           proc    nodev,noexec,nosuid 0       0
-/dev/vda1               /               ext4    defaults            0       0
-
+LABEL=root              /               ext4    discard             0       0
