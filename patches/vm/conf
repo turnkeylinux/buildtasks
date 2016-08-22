@@ -3,14 +3,17 @@
 install() {
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -t jessie-backports \
         -o DPkg::Options::=--force-confdef \
         -o DPkg::Options::=--force-confold \
         install $@
 }
 
+apt-get -y update
+
 # install open-vm-tools and modules
 install open-vm-tools
-/etc/init.d/open-vm-tools stop || true
+service open-vm-tools stop || true
 
 KERNEL_VERSION=$(ls -l /vmlinuz | awk '{print $11}' | sed 's|boot/vmlinuz-||')
 MODULES_SRC=/usr/local/src/open-vm-modules/$KERNEL_VERSION.tar.gz
