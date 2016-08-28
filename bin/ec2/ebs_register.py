@@ -50,7 +50,7 @@ def usage(e=None):
 
     sys.exit(1)
 
-def register(snapshot_id, region, arch, size=None, name=None, desc=None):
+def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=False):
     conn = utils.connect(region)
 
     if None in (name, size):
@@ -59,7 +59,16 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None):
         size = size if size else snapshot.volume_size
         name = name if name else snapshot.description
 
+    virt = 'hvm'
+    kernel_id = None
+    device_base = '/dev/xvd'
     ec2_arch = "x86_64" if arch == "amd64" else arch
+
+    if pvm:
+        kernel_id = utils.get_kernel(region, arch)
+        virt = 'paravirtual'
+        device_base = '/dev/sd'
+        name += '-pvm'
 
     log.debug('creating block_device_map')
     block_device_map = BlockDeviceMapping()
@@ -68,29 +77,30 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None):
     rootfs.delete_on_termination = True
     rootfs.size = size
     rootfs.snapshot_id = snapshot_id
-    rootfs_device_name = '/dev/xvda'
+    rootfs_device_name = device_base + 'a'
     block_device_map[rootfs_device_name] = rootfs
 
     ephemeral = BlockDeviceType()
     ephemeral.ephemeral_name = 'ephemeral0'
-    ephemeral_device_name = '/dev/xvdb'
+    ephemeral_device_name = device_base + 'b'
     block_device_map[ephemeral_device_name] = ephemeral
 
     log.debug('registering image - %s', name)
     ami_id = conn.register_image(
         name=name,
         description=desc,
+        kernel_id=kernel_id,
         architecture=ec2_arch,
         root_device_name=rootfs_device_name,
         block_device_map=block_device_map,
-        virtualization_type='hvm')
+        virtualization_type=virt)
 
     log.info('registered image - %s %s %s', ami_id, name, region)
     return ami_id, name
 
 def main():
     try:
-        l_opts = ["help", "region=", "size=", "name=", "arch=", "desc="]
+        l_opts = ["help", "pvm", "region=", "size=", "name=", "arch=", "desc="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError, e:
         usage(e)
@@ -99,6 +109,7 @@ def main():
         'size': None,
         'name': None,
         'desc': None,
+        'pvm' : False
     }
     arch = None
     region = None
@@ -120,6 +131,9 @@ def main():
 
         if opt == "--desc":
             kwargs['desc'] = val
+
+        if opt == "--pvm":
+            kwargs['pvm'] = True
 
     if len(args) != 1:
         usage("incorrect number of arguments")

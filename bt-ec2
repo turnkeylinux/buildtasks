@@ -26,6 +26,7 @@ Options::
     --marketplace       - if set, image will be shared for marketplace
     --secupdates        - install security updates before building image
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
+    --pvmregister       - register pvm-virtualized snapshot, too
 
 Environment::
 
@@ -44,6 +45,7 @@ while [ "$1" != "" ]; do
         --publish)     ebs_opts+="$1 "; publish="yes";;
         --secupdates)  secupdates="yes";;
         --pvmshim)     pvmshim="yes";;
+        --pvmregister) ebs_opts+="$1 ";;
         *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
     esac
     shift
