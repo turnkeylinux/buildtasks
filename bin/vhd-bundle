@@ -47,8 +47,10 @@ name=$(basename $rootfs .rootfs)
 
 # image size consts.
 
+# made default size smaller for testing
+# azure docs recommend disabling LVM
 info "creating raw image ($VM_SIZE sparse) and partitions"
-qemu-img create -f raw $rootfs.raw 4G
+qemu-img create -f raw $rootfs.raw 4G # made default size smaller for testing
 parted --script $rootfs.raw mklabel msdos
 parted --script -- $rootfs.raw mkpart primary 512M 3512M
 parted --script -- $rootfs.raw set 1 boot on
@@ -75,10 +77,6 @@ mount --rbind --make-rslave /proc $rootfs.fs/proc
 info "installing and configuring grub"
 grubcfg=$rootfs.fs/boot/grub/grub.cfg
 
-# remove / add executable perm to os-prober to stop duplicate grub entries
-chroot $rootfs.fs chmod -x /etc/grub.d/30_os-prober
-chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
-chroot $rootfs.fs chmod +x /etc/grub.d/30_os-prober
 
 devicemap=$rootfs.fs/boot/grub/device.map
 
@@ -86,15 +84,7 @@ cat > $devicemap <<EOF
 (hd0)	$loopdev
 EOF
 
-chroot $rootfs.fs grub-mkconfig /boot/grub/grub.cfg
-grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.fs $loopdev
-
 UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
-
-info "tweaking grub settings"
-sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1UUID=$UUID ro dolvm|" $grubcfg
-#remove temp grub/device.map 
-rm -f $devicemap
 
 info "creating fstab"
 fstab="$rootfs.fs/etc/fstab"
@@ -102,7 +92,19 @@ fstab="$rootfs.fs/etc/fstab"
 echo -e "proc\t\t\t/proc\tproc\tnodev,noexec,nosuid\t0\t0" > $fstab
 echo -e "UUID=$UUID\t/\text4\tdefaults\t0\t2" >> $fstab
 
-#tklpatch-apply $rootfs $BT/patches/azure
+tklpatch-apply $rootfs $BT/patches/azure
+
+grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.fs $loopdev
+
+# remove / add executable perm to os-prober to stop duplicate grub entries
+chroot $rootfs.fs chmod -x /etc/grub.d/30_os-prober
+chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
+chroot $rootfs.fs chmod +x /etc/grub.d/30_os-prober
+
+info "tweaking grub settings"
+sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1UUID=$UUID ro dolvm|" $grubcfg
+#remove temp grub/device.map 
+rm -f $devicemap
 
 info "umounting the jumble..."
 umount $rootfs.fs/proc
@@ -111,9 +113,17 @@ umount $rootfs.fs/dev
 umount $rootfs.fs/
 rmdir $rootfs.fs
 
-info "converting raw image to vhd"
+info "resizing raw image (to align to 1MB)"
 #qemu-img convert -f raw $rootfs.raw -O vmdk -o compat6 $name.vmdk
-qemu-img convert -f raw $rootfs.raw -O vpc -o subformat=fixed $name.vhd
+MB=$((1024*1024))
+old_size=$(qemu-img info -f raw $rootfs.raw | sed -r -n "/virtual/{s/.*\(([0-9]+) bytes.*/\1/p}")
+new_size=$((($old_size/$MB+1)*$MB))
+qemu-img resize -f raw $rootfs.raw $new_size
+
+info "converting raw image to vhd"
+qemu-img convert -f raw $rootfs.raw -O vpc -o subformat=fixed,force_size $name.vhd -p
+
+
 
 info "cleaning up"
 kpartx -d /dev/mapper/`basename $loopdev`p1
