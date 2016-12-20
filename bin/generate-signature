@@ -37,6 +37,9 @@ MD5SUM=$(md5sum $filepath | cut -d " " -f 1)
 info "generating sha1 checksum"
 SHA1SUM=$(sha1sum $filepath | cut -d " " -f 1)
 
+info "generating sha512 checksum"
+SHA512SUM=$(sha512sum $filepath | cut -d " " -f 1)
+
 info "writing signature file"
 cat > $filepath.sig <<EOF
 Two steps are required to cryptographically verify image integrity.
@@ -61,6 +64,9 @@ Two steps are required to cryptographically verify image integrity.
 
     $ sha1sum $(basename $filepath)
       $SHA1SUM
+
+    $ sha512sum $(basename $filepath)
+      $SHA512SUM
 
 EOF
 
