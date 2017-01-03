@@ -42,18 +42,6 @@ done
 [ -n "$appname" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
 
-# install pfff (will be removed once build masters updated)
-if ! $(which pfff >/dev/null); then
-    apt-get -y install cmake
-    git clone https://github.com/livenson/pfff.git /usr/local/src/pfff
-    mkdir /usr/local/src/pfff/build
-    cd /usr/local/src/pfff/build
-    cmake ..
-    make
-    make tests
-    make install
-fi
-
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
@@ -116,23 +104,7 @@ tar -C $rootfs -zcf $stupidname.tar.gz .
 
 $BT/bin/generate-signature $O/$stupidname.tar.gz
 
-info "creating OpenNode container build ($stupidname.ova)"
-$BT/bin/aptconf-tag $rootfs opennode
-
-mkdir opennode-temp
-tar -C $rootfs -zcf opennode-temp/$stupidname.tar.gz .
-
-# generate opennode ovf and bundle
-cd opennode-temp
-$BT/bin/generate-opennode-ovf $O/opennode-temp/$stupidname.tar.gz > $stupidname.ovf
-tar -cf ../$stupidname.ova $stupidname.ovf $stupidname.tar.gz
-cd ..
-
-$BT/bin/generate-signature $O/$stupidname.ova
-pfff -k 6996807 -B $stupidname.ova > $stupidname.ova.pfff
-
 $BT/bin/generate-buildenv container $BT_ISOS/$isofile.sig > $O/$stupidname.tar.gz.buildenv
-$BT/bin/generate-buildenv container $BT_ISOS/$isofile.sig > $O/$stupidname.ova.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -150,6 +122,5 @@ fi
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
-    rm -rf opennode-temp
 fi
 
