@@ -27,10 +27,6 @@ bt-vm ::
     # vmware ovftool
     apt-get install qemu parted kpartx grub-pc zip
 
-bt-container ::
-
-    apt-get install cmake
-
 bt-docker ::
 
     apt-get install aufs-tools
