@@ -42,6 +42,15 @@ bt-xen ::
 config files
 ------------
 
+# Move the example config files into place:
+
+    mv config.example config
+
+# Then adjust them as appropriate. For basic local building, you only need to 
+# adjust build.cfg and common.cfg (you can skip the BT_PUBLISH_* variables).  
+
+# The included files are noted below:
+
 buildtasks/config/build.cfg ::
 
     VERSION=14.1
