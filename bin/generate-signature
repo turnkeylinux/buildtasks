@@ -31,11 +31,11 @@ fi
 
 filepath=$1
 
-info "generating md5 checksum"
-MD5SUM=$(md5sum $filepath | cut -d " " -f 1)
+info "generating sha1sum checksum"
+SHA1SUM=$(sha1sum  $filepath | cut -d " " -f 1)
 
-info "generating sha1 checksum"
-SHA1SUM=$(sha1sum $filepath | cut -d " " -f 1)
+info "generating sha256sum checksum"
+SHA256SUM=$(sha256sum $filepath | cut -d " " -f 1)
 
 info "writing signature file"
 cat > $filepath.sig <<EOF
@@ -56,11 +56,11 @@ Two steps are required to cryptographically verify image integrity.
    same as listed below, you can be sure the image was not corrupted in
    transit or tampered with.
 
-    $ md5sum $(basename $filepath)
-      $MD5SUM
-
     $ sha1sum $(basename $filepath)
       $SHA1SUM
+
+    $ sha256sum $(basename $filepath)
+      $SHA256SUM
 
 EOF
 
