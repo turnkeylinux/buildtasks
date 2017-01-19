@@ -44,10 +44,10 @@ To ensure the image has not been corrupted in transmit or tampered with,
 perform the following two steps to cryptographically verify image integrity:
 
 1. Verify the authenticity of this file by checking that it is signed with our
-   GPG release key::
+   GPG release key:
 
-    $ gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0xA16EB94D
-    $ gpg --list-keys --with-fingerprint 0xA16EB94D
+    $ curl https://keybase.io/turnkeylinux/pgp_keys.asc | gpg --import
+    $ gpg --list-keys --with-fingerprint release@turnkeylinux.com
       pub   2048R/A16EB94D 2008-08-15 [expires: 2023-08-12]
             Key fingerprint = 694C FF26 795A 29BA E07B  4EB5 85C2 5E95 A16E B94D
       uid   Turnkey Linux Release Key <release@turnkeylinux.com>
@@ -55,6 +55,10 @@ perform the following two steps to cryptographically verify image integrity:
     $ gpg --verify $filename.hash
       gpg: Signature made using RSA key ID A16EB94D
       gpg: Good signature from "Turnkey Linux Release Key <release@turnkeylinux.com>"
+
+    For extra credit you can validate the key's authenticity at:
+
+      https://keybase.io/turnkeylinux
 
 2. Recalculate the image hash and make sure it matches your choice of hash below.
 
