@@ -15,7 +15,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 filepath
-Sign signature file (e.g., path/to/file.sig)
+Sign signature file (e.g., path/to/file.hash)
 
 Arguments::
 

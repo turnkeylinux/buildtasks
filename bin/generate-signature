@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2017 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -15,7 +15,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 filepath
-Generate signature template with checksums for filepath (e.g., path/to/iso)
+Generate hash for filepath (e.g., path/to/iso)
 
 Arguments::
 
@@ -31,36 +31,36 @@ fi
 
 filepath=$1
 
-info "generating sha1sum checksum"
-SHA1SUM=$(sha1sum  $filepath | cut -d " " -f 1)
+info "generating sha256sum hash"
 
-info "generating sha256sum checksum"
-SHA256SUM=$(sha256sum $filepath | cut -d " " -f 1)
+info "writing hash file"
+cat > $filepath.hash <<EOF
+To ensure the image has not been corrupted in transmit or tampered with,
+perform the following two steps to cryptographically verify image integrity:
 
-info "writing signature file"
-cat > $filepath.sig <<EOF
-Two steps are required to cryptographically verify image integrity.
-
-1. By verifying the integrity of this signature file, you can be sure that
-   the checksums included in this file are valid.
+1. Verify this hash file is signed with our GPG release key::
 
     $ gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0xA16EB94D
-    $ gpg --list-keys 0xA16EB94D
+    $ gpg --list-keys --with-fingerprint 0xA16EB94D
       pub   2048R/A16EB94D 2008-08-15 [expires: 2023-08-12]
+            Key fingerprint = 694C FF26 795A 29BA E07B  4EB5 85C2 5E95 A16E B94D
       uid   Turnkey Linux Release Key <release@turnkeylinux.com>
 
-    $ gpg --verify $(basename $filepath).sig
-      gpg: Good signature from "Turnkey Linux Release Key"
+    $ gpg --verify $(basename $filepath).hash
+      gpg: Signature made using RSA key ID A16EB94D
+      gpg: Good signature from "Turnkey Linux Release Key <release@turnkeylinux.com>"
 
-2. By calculating the image checksum and validating the hashed value is the
-   same as listed below, you can be sure the image was not corrupted in
-   transit or tampered with.
+2. Recalculate the image hash and make sure it matches the hash below.
 
-    $ sha1sum $(basename $filepath)
-      $SHA1SUM
+   You can do this by hand::
 
     $ sha256sum $(basename $filepath)
-      $SHA256SUM
+      $(sha256sum $filepath | cut -d " " -f 1)  $(basename $filepath)
+
+   Or automatically::
+
+    $ sha256sum -c $filepath.hash
+      $filepath: OK
 
 EOF
 

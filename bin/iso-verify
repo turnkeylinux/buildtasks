@@ -15,7 +15,7 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 isodir version appname
-Verify ISO by getting .sig and verifying (skipped if .sig exists)
+Verify ISO by getting .hash and verifying (skipped if .hash exists)
 
 Arguments::
 
@@ -43,20 +43,20 @@ version=$2
 appname=$3
 
 isofile=turnkey-$appname-$version.iso
-sigfile=turnkey-$appname-$version.iso.sig
-sigpath=$isodir/$sigfile
+hashfile=turnkey-$appname-$version.iso.hash
+hashpath=$isodir/$hashfile
 
-if [ ! -e $sigpath ]; then
-    src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$sigfile
-    wget --read-timeout=60 --tries=10 $src -O $sigpath
+if [ ! -e $hashpath ]; then
+    src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$hashfile
+    wget --read-timeout=60 --tries=10 $src -O $hashpath
 else
-    info "$sigfile already exists, skipping..."
+    info "$hashfile already exists, skipping..."
     exit 0
 fi
 
-if ! $BT/bin/signature-verify $isodir/$isofile $sigpath; then
+if ! $BT/bin/signature-verify $isodir/$isofile $hashpath; then
     mv $isodir/$isofile $isodir/$isofile.corrupt
-    rm $sigpath
-    fatal "$sigfile verification failed"
+    rm $hashpath
+    fatal "$hashfile verification failed"
 fi
 
