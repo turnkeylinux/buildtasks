@@ -32,13 +32,18 @@ fi
 filepath=$1
 
 info "generating sha256sum hash"
+SHA256SUM="$(sha256sum $filepath | cut -d " " -f 1)  $(basename $filepath)"
+
+info "generating sha512sum hash"
+SHA512SUM="$(sha512sum $filepath | cut -d " " -f 1)  $(basename $filepath)"
 
 info "writing hash file"
 cat > $filepath.hash <<EOF
 To ensure the image has not been corrupted in transmit or tampered with,
 perform the following two steps to cryptographically verify image integrity:
 
-1. Verify this hash file is signed with our GPG release key::
+1. Verify the authenticity of this file by checking that it is signed with our
+   GPG release key::
 
     $ gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0xA16EB94D
     $ gpg --list-keys --with-fingerprint 0xA16EB94D
@@ -50,16 +55,20 @@ perform the following two steps to cryptographically verify image integrity:
       gpg: Signature made using RSA key ID A16EB94D
       gpg: Good signature from "Turnkey Linux Release Key <release@turnkeylinux.com>"
 
-2. Recalculate the image hash and make sure it matches the hash below.
-
-   You can do this by hand::
+2. Recalculate the image hash and make sure it matches your choice of hash below.
 
     $ sha256sum $(basename $filepath)
-      $(sha256sum $filepath | cut -d " " -f 1)  $(basename $filepath)
+      $SHA256SUM
 
-   Or automatically::
+    $ sha512sum $(basename $filepath)
+      $SHA512SUM
+
+   Note, you can compare hashes automatically::
 
     $ sha256sum -c $filepath.hash
+      $filepath: OK
+
+    $ sha512sum -c $filepath.hash
       $filepath: OK
 
 EOF
