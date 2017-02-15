@@ -33,7 +33,7 @@ while [ "$1" != "" ]; do
     case $1 in
         --help|-h )  usage;;
         --publish)   opts="--publish";;
-        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
 done
