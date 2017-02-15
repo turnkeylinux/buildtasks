@@ -78,16 +78,17 @@ case "$appname" in
     *)                export VM_MEMORY=512 ;;
 esac
 
-if $(echo $BT_VERSION | grep -q squeeze-i386); then guestos="debian6"; fi
-if $(echo $BT_VERSION | grep -q squeeze-amd64); then guestos="debian6-64"; fi
-if $(echo $BT_VERSION | grep -q wheezy-i386); then guestos="debian7"; fi
-if $(echo $BT_VERSION | grep -q wheezy-amd64); then guestos="debian7-64"; fi
-if $(echo $BT_VERSION | grep -q jessie-i386); then guestos="debian8"; fi
-if $(echo $BT_VERSION | grep -q jessie-amd64); then guestos="debian8-64"; fi
-if $(echo $BT_VERSION | grep -q stretch-i386); then guestos="debian9"; fi
-if $(echo $BT_VERSION | grep -q stretch-amd64); then guestos="debian9-64"; fi
-[ -n "$guestos" ] || fatal "guestos could not be determined"
-export VM_GUESTOS="$guestos"
+case "${codename}-${arch}" in
+    squeeze-i386)  export VM_GUESTOS="debian6" ;;
+    wheezy-i386)   export VM_GUESTOS="debian7" ;;
+    jessie-i386)   export VM_GUESTOS="debian8" ;;
+    stretch-i386)  export VM_GUESTOS="debian9" ;;
+    squeeze-amd64) export VM_GUESTOS="debian6-64" ;;
+    wheezy-amd64)  export VM_GUESTOS="debian7-64" ;;
+    jessie-amd64)  export VM_GUESTOS="debian8-64" ;;
+    stretch-amd64) export VM_GUESTOS="debian9-64" ;;
+    *)             fatal "vm_guestos could not be determined" ;;
+esac
 
 isofile=turnkey-${appname}-${BT_VERSION}.iso
 name=turnkey-${appname}-${BT_VERSION}
