@@ -24,7 +24,7 @@ Arguments::
 
 Options::
 
-    --publish           - if set, image will be devpay'ed and made public
+    --publish           - if set, image and meta files will be published
 
 Environment::
 
@@ -43,13 +43,21 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appver" ] || usage
-[ -n "$publish" ] || warning "--publish was not specified"
-
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
+
+O=$BT_BUILDS/openstack
+mkdir -p $O
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
+fi
 
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
@@ -57,9 +65,6 @@ export BT_VERSION=${appversion}-${codename}-${arch}
 
 os_arch=$(dpkg --print-architecture)
 [ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
-
-O=$BT_BUILDS/openstack
-mkdir -p $O
 
 isofile=turnkey-${appname}-${BT_VERSION}.iso
 name=turnkey-${appname}-${BT_VERSION}

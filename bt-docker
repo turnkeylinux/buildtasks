@@ -52,6 +52,12 @@ export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/docker.cfg
 
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
+fi
+
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}

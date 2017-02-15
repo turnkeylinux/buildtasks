@@ -18,13 +18,17 @@ cat<<EOF
 Syntax: $(basename $0) [ --publish ] appname
 Builds appliance appname (e.g., core) ISO
 
+Arguments::
+
+    appname             - e.g., core-14.2-jessie-amd64
+
 Options::
 
-    --publish               publish iso, release files and tklbam profile
+    --publish           - publish iso, release files and tklbam profile
 
 Environment::
 
-    BT_DEBUG                turn on debugging
+    BT_DEBUG            - turn on debugging
 EOF
 exit 1
 }
@@ -39,13 +43,19 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appname" ] || usage
-[ -n "$publish" ] || warning "--publish was not specified"
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
-. $BT_CONFIG/build.cfg
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+else
+    warning "--publish was not specified"
+fi
 
 if [ ! -e $BT_PRODUCTS/$appname ]; then
     cd $BT_PRODUCTS

@@ -24,7 +24,7 @@ Arguments::
 
 Options::
 
-    --publish           - if set, image and meta files will be published
+    --publish           - if set, images and meta files will be published
 
 Environment::
 
@@ -43,17 +43,11 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appver" ] || usage
-[ -n "$publish" ] || warning "--publish was not specified"
-
 [ -n "$BT_DEBUG" ] && set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
-
-parsed_appname_version=$($BT/bin/parse-appname-version $appver)
-read appname appversion codename arch <<< "$parsed_appname_version"
-export BT_VERSION=${appversion}-${codename}-${arch}
 
 O=$BT_BUILDS/vm
 mkdir -p $O
@@ -61,7 +55,13 @@ mkdir -p $O
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
 fi
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
 
 export VM_URL="https://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"

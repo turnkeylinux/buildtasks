@@ -56,7 +56,6 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appver" ] || usage
-[ -n "$publish" ] || warning "--publish was not specified"
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
@@ -65,6 +64,13 @@ export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/aws.cfg
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    [ -n "$BT_PUBLISH_LOGS" ] || fatal "BT_PUBLISH_LOGS not set"
+else
+    warning "--publish was not specified"
+fi
 
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"

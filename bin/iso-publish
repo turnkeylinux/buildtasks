@@ -19,6 +19,13 @@ usage() {
 cat<<EOF
 Syntax: $(basename $0) iso...isoN
 Publish release ISO and related metafiles
+
+Environment::
+
+    BT_PUBLISH_IMGS
+    BT_PUBLISH_META
+    BT_PUBLISH_PROFILES
+
 EOF
 exit 1
 }
@@ -30,6 +37,10 @@ fi
 export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
 . $BT/config/common.cfg
+
+[ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+[ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+[ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
 
 for f in $FILES; do
     [ -e $f ] || fatal "$f does not exist"
