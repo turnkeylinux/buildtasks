@@ -63,7 +63,7 @@ if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
 fi
 
-export VM_URL="http://www.turnkeylinux.org/$appname"
+export VM_URL="https://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
 
 case "$appname" in
