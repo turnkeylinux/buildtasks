@@ -38,45 +38,10 @@ bt-xen ::
 config files
 ------------
 
-# Move the example config files into place:
+# Copy the example config files into place:
 
-    mv config.example config
+    cp -a config.example config
 
 # Then adjust them as appropriate. For basic local building, you only need to 
-# adjust build.cfg and common.cfg (you can skip the BT_PUBLISH_* variables).  
-
-# The included files are noted below:
-
-buildtasks/config/build.cfg ::
-
-    VERSION=14.1
-    CUR_VER=14.0
-    CODENAME=$(lsb_release -s -c)
-    ARCH=$(dpkg --print-architecture)
-
-    #export VERSION_TAG=rcX
-    export BT_VERSION=${VERSION}${VERSION_TAG}-${CODENAME}-${ARCH}
-    export BT_NEW_VERSION=$BT_VERSION
-    export BT_CUR_VERSION=${CUR_VER}${VERSION_TAG}-${CODENAME}-${ARCH}
-
-    #Note: CUR_VER, BT_NEW_VERSION & BT_CUR_VERSION are only required
-    # for bt-maintence
-
-buildtasks/config/common.cfg ::
-
-    export BT_PUBLISH_LOGS="s3://BUCKET/logs"
-    export BT_PUBLISH_IMGS="s3://BUCKET/images"
-    export BT_PUBLISH_META="s3://BUCKET/metadata"
-    export BT_PUBLISH_PROFILES="s3://BUCKET/profiles"
-    export BT_GPGKEY=A16EB94D
-    export BT_ISOS=/mnt/isos
-    export BT_BUILDS=/mnt/builds
-    export BT_PROFILES=/turnkey/tklbam-profiles
-    export BT_PRODUCTS=/turnkey/fab/products
-
-buildtasks/config/aws.cfg ::
-
-    export AWS_ACCESS_KEY_ID="..."
-    export AWS_SECRET_ACCESS_KEY="..."
-    export AWS_SESSION_TOKEN="..."
+# adjust common.cfg (you can skip the BT_PUBLISH_* variables).
 
