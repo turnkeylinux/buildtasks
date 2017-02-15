@@ -15,8 +15,12 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [ --options ] appname
-Converts appliance appname (e.g., core) to EC2 EBS-backed HVM AMI
+Syntax: $(basename $0) [ --options ] appname-version
+Converts appliance appname-version to EC2 EBS-backed HVM AMI
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
 
 Options::
 
@@ -46,12 +50,12 @@ while [ "$1" != "" ]; do
         --secupdates)  secupdates="yes";;
         --pvmshim)     pvmshim="yes";;
         --pvmregister) ebs_opts+="$1 ";;
-        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        *)             if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
 done
 
-[ -n "$appname" ] || usage
+[ -n "$appver" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
 
@@ -60,15 +64,19 @@ done
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
-. $BT_CONFIG/build.cfg
 . $BT_CONFIG/aws.cfg
 
-[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
+
+os_arch=$(dpkg --print-architecture)
+[ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
 
 O=$BT_BUILDS/ec2
 mkdir -p $O
 
-name=turnkey-$appname-$BT_VERSION
+name=turnkey-${appname}-${BT_VERSION}
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 isofile=$name.iso

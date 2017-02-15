@@ -15,8 +15,12 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish] appname
-Converts appliance appname (e.g., core) to docker
+Syntax: $(basename $0) [--publish] appname-version
+Converts appliance appname-version to docker
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
 
 Options::
 
@@ -33,16 +37,13 @@ while [ "$1" != "" ]; do
     case $1 in
         --help|-h )  usage;;
         --publish)   publish="yes";;
-        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
 done
 
-[ -n "$appname" ] || usage
+[ -n "$appver" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
-
-arch=$(dpkg --print-architecture)
-[ "$arch" == "amd64" ] || fatal "only amd64 is supported"
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -50,16 +51,22 @@ export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 . $BT_CONFIG/docker.cfg
-. $BT_CONFIG/build.cfg
 
-O=$BT_BUILDS/docker
-mkdir -p $O
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
 
-[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+os_arch=$(dpkg --print-architecture)
+[ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
+[ "amd64" == "$os_arch" ] || fatal "only amd64 is supported"
+
 [ -n "$BT_DOCKER_NAME" ] || fatal "BT_DOCKER_NAME not set"
 [ -n "$BT_DOCKER_USER" ] || fatal "BT_DOCKER_USER not set"
 [ -n "$BT_DOCKER_PASS" ] || fatal "BT_DOCKER_PASS not set"
 [ -n "$BT_DOCKER_MAIL" ] || fatal "BT_DOCKER_MAIL not set"
+
+O=$BT_BUILDS/docker
+mkdir -p $O
 
 # hack for cloudtasks issues with pre command
 if [ ! -e /root/docker-setup.done ]; then
@@ -76,8 +83,8 @@ fi
 ports=$(grep "^$appname:" $BT_CONFIG/docker.ports | sed "s|^$appname: ||")
 [ -n "$ports" ] || fatal "no ports defined for $appname"
 
-isofile=turnkey-$appname-$BT_VERSION.iso
-name=turnkey-$appname-$BT_VERSION
+isofile=turnkey-${appname}-${BT_VERSION}.iso
+name=turnkey-${appname}-${BT_VERSION}
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 

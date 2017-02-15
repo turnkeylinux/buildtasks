@@ -15,19 +15,18 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish] appname
-Converts appliance appname (e.g., core) to xen
+Syntax: $(basename $0) [--publish] appname-version
+Converts appliance appname-version to xen
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
 
 Options::
 
     --publish           - if set, image and meta files will be published
 
 Environment::
-
-    BT_VERSION          - appliance version (e.g., 11.2-lucid-x86)
-
-    BT_PUBLISH_IMGS     - publish destination for release image
-    BT_PUBLISH_META     - publish destination for release meta files
 
     BT_DEBUG            - turn on debugging
 EOF
@@ -36,14 +35,14 @@ exit 1
 
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h )     usage;;
+        --help|-h )  usage;;
         --publish)   publish="yes";;
-        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
 done
 
-[ -n "$appname" ] || usage
+[ -n "$appver" ] || usage
 [ -n "$publish" ] || warning "--publish was not specified"
 
 [ -n "$BT_DEBUG" ] && set -x
@@ -51,20 +50,21 @@ done
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
-. $BT_CONFIG/build.cfg
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
 
 O=$BT_BUILDS/xen
 mkdir -p $O
-
-[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
 
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
 fi
 
-isofile=turnkey-$appname-$BT_VERSION.iso
-name=turnkey-$appname-$BT_VERSION
+isofile=turnkey-${appname}-${BT_VERSION}.iso
+name=turnkey-${appname}-${BT_VERSION}
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 
