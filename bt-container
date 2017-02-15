@@ -59,11 +59,6 @@ export BT_VERSION=${appversion}-${codename}-${arch}
 os_arch=$(dpkg --print-architecture)
 [ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
 
-export ARCHITECTURE=$(dpkg --print-architecture)
-
-O=$BT_BUILDS/container
-mkdir -p $O
-
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
@@ -81,16 +76,21 @@ case "$appname" in
     *)                export ON_MEMORY=0.25 ;;
 esac
 
+case "$codename" in
+    squeeze) debianversion="debian-6" ;;
+    wheezy)  debianversion="debian-7" ;;
+    jessie)  debianversion="debian-8" ;;
+    stretch) debianversion="debian-9" ;;
+    *)       fatal "debianversion could not be determined" ;;
+esac
+
+O=$BT_BUILDS/container
+mkdir -p $O
+
 isofile=turnkey-${appname}-${BT_VERSION}.iso
 name=turnkey-${appname}-${BT_VERSION}
 rootfs=$name.rootfs
 cdroot=$name.cdroot
-
-if $(echo $BT_VERSION | grep -q squeeze); then debianversion="debian-6"; fi
-if $(echo $BT_VERSION | grep -q wheezy); then debianversion="debian-7"; fi
-if $(echo $BT_VERSION | grep -q jessie); then debianversion="debian-8"; fi
-if $(echo $BT_VERSION | grep -q stretch); then debianversion="debian-9"; fi
-[ -n "$debianversion" ] || fatal "debianversion could not be determined"
 
 $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
@@ -105,7 +105,7 @@ $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs proxmox
 
 # bundle proxmox tarball using stupid naming convention
-stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${ARCHITECTURE}"
+stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${arch}"
 info "creating Proxmox container build ($stupidname.tar.gz)"
 tar -C $rootfs -zcf $stupidname.tar.gz .
 
