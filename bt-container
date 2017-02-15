@@ -118,12 +118,8 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/proxmox/
     $BT/bin/publish-files $O/$stupidname.tar.gz
 
-    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/opennode/
-    $BT/bin/publish-files $O/$stupidname.{ova,ova.pfff}
-
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$stupidname.{tar.gz.sig,tar.gz.buildenv}
-    $BT/bin/publish-files $O/$stupidname.{ova.sig,ova.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
