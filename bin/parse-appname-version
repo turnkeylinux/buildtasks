@@ -1,0 +1,54 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2017 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo -e "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+
+usage() {
+cat<<EOF
+Syntax: $0 appname-version
+Verify and parse appname-version
+Echoes space-delimeted if valid: appname appversion codename arch
+
+Arguments::
+
+    appname-version     - appname-appversion-codename-arch
+                          e.g., core-14.2-jessie-amd64
+                          
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+if [[ $1 =~ ^([a-z0-9-]+)-([0-9\.]+)-([a-z]+)-([a-z0-9]+)$ ]]; then
+    appname=${BASH_REMATCH[1]}
+    appversion=${BASH_REMATCH[2]}
+    codename=${BASH_REMATCH[3]}
+    architecture=${BASH_REMATCH[4]}
+else
+    syntax="Syntax: appname-appversion-codename-arch"
+    fatal "appname-version incorrect syntax\n$syntax"
+fi
+
+case $codename in
+    squeeze|wheezy|jessie|stretch) ;;
+    *) fatal "unrecognized codename: $codename" ;;
+esac
+
+case $architecture in
+    i386|amd64) ;;
+    *) fatal "unrecognized architecture: $architecture" ;;
+esac
+
+echo $appname $appversion $codename $architecture
+

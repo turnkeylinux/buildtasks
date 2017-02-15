@@ -1,0 +1,48 @@
+#!/bin/bash -e
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0
+Test appname-version parsing
+EOF
+exit 1
+}
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+
+appver="core-14.2-jessie-amd64"
+info "1: should pass ($appver)"
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+[ "$appname" == "core" ] || fatal "appname failure: $appname"
+[ "$appversion" == "14.2" ] || fatal "appversion failure: $appversion"
+[ "$codename" == "jessie" ] || fatal "codename failure: $codename"
+[ "$arch" == "amd64" ] || fatal "arch failure: $arch"
+
+appver="nginx-php-fastcgi-13.0-wheezy-i386"
+info "2: should pass ($appver)"
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+[ "$appname" == "nginx-php-fastcgi" ] || fatal "appname failure: $appname"
+[ "$appversion" == "13.0" ] || fatal "appversion failure: $appversion"
+[ "$codename" == "wheezy" ] || fatal "codename failure: $codename"
+[ "$arch" == "i386" ] || fatal "arch failure: $arch"
+
+appver="core-14.2"
+info "3: should fail ($appver)"
+$BT/bin/parse-appname-version $appver && fatal "should have failed"
+
+appver="core-14.2-xxxxxxx-amd64"
+info "4: should fail ($appver)"
+$BT/bin/parse-appname-version $appver && fatal "should have failed"
+
+appver="core-14.2-jessie-xxxxx"
+info "5: should fail ($appver)"
+$BT/bin/parse-appname-version $appver && fatal "should have failed"
+
+echo
+info "all tests passed"
+
