@@ -15,8 +15,12 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) [--publish] appname
+Syntax: $(basename $0) [--publish] appname-version
 Wrapper script for all optimized builds
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
 
 Options::
 
@@ -34,16 +38,16 @@ while [ "$1" != "" ]; do
     shift
 done
 
-[ -n "$appname" ] || usage
+[ -n "$appver" ] || usage
 
 BT=$(dirname $(readlink -f $0))
 ARCH=$(dpkg --print-architecture)
 
-$BT/bt-vm $opts $appname
-$BT/bt-container $opts $appname
-$BT/bt-openstack $opts $appname
-$BT/bt-xen $opts $appname
-[ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appname
+$BT/bt-vm $opts $appver
+$BT/bt-container $opts $appver
+$BT/bt-openstack $opts $appver
+$BT/bt-xen $opts $appver
+[ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appver
 
 exit 0
 
