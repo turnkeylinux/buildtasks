@@ -5,8 +5,18 @@ echo
 echo "############################# [ SSH FINGERPRINTS ] ###############################"
 echo
 
-for hostkey in /etc/ssh/ssh_host_*.pub; 
-    do ssh-keygen -l -f $hostkey; 
+for hostkey in /etc/ssh/ssh_host_*.pub; do
+	sha256=$(awk '{print $2}' $hostkey |
+		 base64 -d | sha256sum |
+		 xxd -r -p | base64)
+
+	md5fingerprint=$(ssh-keygen -l -f $hostkey)
+	sha256fingerprint=$(echo $md5fingerprint |
+			    sed -r 's|(.*) [0-9a-f:]+ (.*)|\1 '"$sha256"' \2|')
+
+	echo $sha256fingerprint
+	echo $md5fingerprint
+
 done
 
 echo
