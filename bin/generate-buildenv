@@ -19,12 +19,12 @@ Print build environment related to target build type
 Targets::
 
     iso         appname
-    vm          path/to/iso.sig
-    ec2         path/to/iso.sig
-    xen         path/to/iso.sig
-    docker      path/to/iso.sig
-    container   path/to/iso.sig
-    openstack   path/to/iso.sig
+    vm          path/to/iso.hash
+    ec2         path/to/iso.hash
+    xen         path/to/iso.hash
+    docker      path/to/iso.hash
+    container   path/to/iso.hash
+    openstack   path/to/iso.hash
 
 EOF
 exit 1
@@ -54,10 +54,10 @@ _common() {
 }
 
 _optimized() {
-    # get sha1 from sig (supports yet-to-be signed iso sigs)
-    sigpath=$1
-    sigsha1=$(grep -A 1 sha1sum $sigpath | tail -n 1 | sed "s/^ *//")
-    echo "$(basename $sigpath) $sigsha1"
+    # get sha1 from hash file (supports yet-to-be signed iso hash files)
+    hashpath=$1
+    hashsha1=$(grep -A 1 sha1sum $hashpath | tail -n 1 | sed "s/^ *//")
+    echo "$(basename $hashpath) $hashsha1"
 
     echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"
 }

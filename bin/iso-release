@@ -53,7 +53,7 @@ appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 
 if [ "$force" == "yes" ]; then
     rm -f $O/$name.iso
-    rm -f $O/$name.iso.sig
+    rm -f $O/$name.iso.hash
     rm -f $O/$name.iso.buildenv
     rm -f $O/$name.manifest
     rm -f $O/$name.changelog
@@ -62,7 +62,7 @@ if [ "$force" == "yes" ]; then
 fi
 
 [ -e $O/$name.iso ] && fatal "$O/$name.iso already exists"
-[ -e $O/$name.iso.sig ] && fatal "$O/$name.iso.sig already exists"
+[ -e $O/$name.iso.hash ] && fatal "$O/$name.iso.hash already exists"
 [ -e $O/$name.iso.buildenv ] && fatal "$O/$name.iso.buildenv already exists"
 [ -e $O/$name.manifest ] && fatal "$O/$name.manifest already exists"
 [ -e $O/$name.changelog ] && fatal "$O/$name.changelog already exists"
