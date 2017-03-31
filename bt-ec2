@@ -127,7 +127,7 @@ umount -l $rootfs/proc || true
 $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs ec2
 $BT/bin/ec2/ebs.py $ebs_opts $rootfs
-$BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.sig > $O/$name.ec2.buildenv
+$BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$name.ec2.buildenv
 
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/

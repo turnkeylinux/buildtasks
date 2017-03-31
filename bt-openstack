@@ -88,7 +88,7 @@ $BT/bin/openstack-bundle $rootfs
 
 $BT/bin/generate-signature $O/$name-openstack.qcow2
 
-$BT/bin/generate-buildenv openstack $BT_ISOS/$isofile.sig > $O/$name-openstack.qcow2.buildenv
+$BT/bin/generate-buildenv openstack $BT_ISOS/$isofile.hash > $O/$name-openstack.qcow2.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -96,7 +96,7 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$name-openstack.qcow2
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name-openstack.{qcow2.sig,qcow2.buildenv}
+    $BT/bin/publish-files $O/$name-openstack.{qcow2.hash,qcow2.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

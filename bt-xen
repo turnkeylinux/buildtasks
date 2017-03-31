@@ -89,7 +89,7 @@ tar -C $rootfs -jcf $name-xen.tar.bz2 .
 
 $BT/bin/generate-signature $O/$name-xen.tar.bz2
 
-$BT/bin/generate-buildenv xen $BT_ISOS/$isofile.sig > $O/$name-xen.tar.bz2.buildenv
+$BT/bin/generate-buildenv xen $BT_ISOS/$isofile.hash > $O/$name-xen.tar.bz2.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -97,7 +97,7 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$name-xen.tar.bz2
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name-xen.{tar.bz2.sig,tar.bz2.buildenv}
+    $BT/bin/publish-files $O/$name-xen.{tar.bz2.hash,tar.bz2.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
