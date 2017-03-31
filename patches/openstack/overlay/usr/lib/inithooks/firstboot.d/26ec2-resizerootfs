@@ -1,0 +1,129 @@
+#!/usr/bin/python
+# Author: Alon Swartz <alon@turnkeylinux.org>
+
+import os
+import sys
+
+if '_TURNKEY_INIT' in os.environ:
+    sys.exit(0)
+
+import stat
+import statvfs
+import tempfile
+
+from executil import system, ExecError
+
+def get_mounts(mounts_file="/proc/mounts"):
+    """
+    Given a mounts file (e.g., /proc/mounts), generate dicts with the
+    following keys:
+
+     - device: The device file which is mounted.
+     - mount-point: The path at which the filesystem is mounted.
+     - filesystem: The filesystem type.
+     - total-space: The capacity of the filesystem in kbytes.
+    """
+    for line in open(mounts_file):
+
+        try:
+            device, mount_point, filesystem = line.split()[:3]
+            mount_point = mount_point.decode("string-escape")
+        except ValueError:
+            continue
+
+        stats = os.statvfs(mount_point)
+        block_size = stats[statvfs.F_BSIZE]
+        total_space = (stats[statvfs.F_BLOCKS] * block_size) / 1024
+
+        yield { "device": device,
+                "mount-point": mount_point,
+                "filesystem": filesystem,
+                "total-space": int(total_space) }
+
+def get_partitions(partitions_file="/proc/partitions"):
+    """
+    Given a partitions file (e.g., /proc/partitions), generate dicts with the
+    following keys:
+
+     - major: Major block
+     - minor: Minor block
+     - blocks: Amount of blocks
+     - name: Partition name
+    """
+    for line in open(partitions_file):
+
+        try:
+            major, minor, blocks, name = line.split()
+            blocks = int(blocks)
+        except ValueError:
+            continue
+
+        yield { "major": major,
+                "minor": minor,
+                "blocks": blocks,
+                "name": name }
+
+class RootFS:
+    SUPPORTED_FILESYSTEMS = ('ext2', 'ext3', 'ext4')
+
+    def __init__(self, mountpoint):
+        self.mountpoint = mountpoint
+
+        m = self._get_mount(self.mountpoint)
+        self.device = m['device']
+        self.filesystem = m['filesystem']
+        self.filesystem_size = float(m['total-space'])
+
+        p = self._get_partition(self.device)
+        self.partition_size = float(p['blocks'])
+
+        self.fs_gb = round(self.filesystem_size / (1024 * 1024))
+        self.pt_gb = round(self.partition_size / (1024 * 1024))
+
+    @staticmethod
+    def _get_mount(mountpoint):
+        for m in get_mounts():
+            if m['device'].startswith('/dev/') and m['mount-point'] == mountpoint:
+                return m
+
+    @staticmethod
+    def _get_partition(device_name):
+        for p in get_partitions():
+            if p['name'] == device_name.replace('/dev/', ''):
+                return p
+
+    @property
+    def has_unused_space(self):
+        return True if self.pt_gb > self.fs_gb else False
+
+    @property
+    def has_supported_filesystem(self):
+        return True if self.filesystem in self.SUPPORTED_FILESYSTEMS else False
+
+    def resize_filesystem(self):
+        fd, devpath = tempfile.mkstemp(dir=self.mountpoint)
+        os.unlink(devpath)
+        os.close(fd)
+
+        st_dev = os.stat(self.mountpoint).st_dev
+        dev = os.makedev(os.major(st_dev), os.minor(st_dev))
+        os.mknod(devpath, 0400 | stat.S_IFBLK, dev)
+
+        try:
+            system("resize2fs", devpath)
+        except ExecError:
+            os.unlink(devpath)
+            raise
+
+        os.unlink(devpath)
+
+
+def main():
+    rootfs = RootFS(mountpoint="/")
+    if rootfs.has_unused_space and rootfs.has_supported_filesystem:
+        print "Resizing %s: %sG to %sG" % (rootfs.device, rootfs.fs_gb, rootfs.pt_gb)
+        rootfs.resize_filesystem()
+
+if __name__ == "__main__":
+    main()
+

@@ -33,6 +33,8 @@ rootfs=$1
 name=$(echo $rootfs | sed 's/.rootfs//')
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 
+
+
 case "$appname" in
     canvas)           loopsize_padding=786432 ;;
     ejabberd)         loopsize_padding=524288 ;;
@@ -46,29 +48,79 @@ loopsize=$[$rootsize + $loopsize_padding]
 
 info "creating sparse loopback"
 dd if=/dev/null of=$rootfs.img bs=1 seek=${loopsize}K
-mkfs.ext4 -F -j $rootfs.img
 
-mkdir $rootfs.img.mount
-mount -o loop $rootfs.img $rootfs.img.mount
+info "creating partition"
+#inspired by package openstack-debian-images
+PARTED=/sbin/parted
+AMI_NAME=$rootfs.img
+${PARTED} -s ${AMI_NAME} mktable msdos
+${PARTED} -s -a optimal ${AMI_NAME} mkpart primary ext3 1Mi 100%
+${PARTED} -s ${AMI_NAME} set 1 boot on
+install-mbr ${AMI_NAME}
+RESULT_KPARTX=`kpartx -asv ${AMI_NAME} 2>&1`
+
+if echo "${RESULT_KPARTX}" | grep "^add map" ; then
+    LOOP_DEVICE=`echo ${RESULT_KPARTX} | cut -d" " -f3`
+    info "kpartx mounted using: ${LOOP_DEVICE}"
+else
+    fatal "It seems kpartx didn't mount the image correctly: exiting."
+fi
+
+cleanup(){
+    error=$?
+    [ ! -d "${MOUNT_DIR}" ] && return
+    echo
+    echo "error $error, umounting $MOUNT_DIR"
+    chroot ${MOUNT_DIR} umount /proc || true
+    chroot ${MOUNT_DIR} umount /sys || true
+    umount ${MOUNT_DIR}
+    rmdir ${MOUNT_DIR}
+    kpartx -d ${AMI_NAME}
+    exit $error
+}
+trap "cleanup" EXIT TERM INT
+
+mkfs.ext4 -F -j /dev/mapper/${LOOP_DEVICE}
+# No fsck because of X days without checks
+tune2fs -i 0 /dev/mapper/${LOOP_DEVICE}
+
+MOUNT_DIR=`mktemp -d -t build-debimg.XXXXXX`
+mount -o loop /dev/mapper/${LOOP_DEVICE} ${MOUNT_DIR}
 
 info "syncing rootfs to loopback"
-rsync -a -t -r -S -I -H $rootfs/ $rootfs.img.mount
+rsync -a -t -r -S -I -H $rootfs/ ${MOUNT_DIR}
+
+info "install extlinux"
+mkdir -p ${MOUNT_DIR}/boot/extlinux 
+echo "default linux
+timeout 1
+label linux
+kernel /vmlinuz
+append initrd=/initrd.img root=/dev/vda1 biosdevname=0 net.ifnames=0 console=tty0 console=ttyS0,115200 ro" > ${MOUNT_DIR}/boot/extlinux/extlinux.conf
+extlinux --install ${MOUNT_DIR}/boot/extlinux
 
 info "umount loopback"
-umount -d $rootfs.img.mount
-rmdir $rootfs.img.mount
+umount -d ${MOUNT_DIR}
+rmdir ${MOUNT_DIR}
 
-info "setting up image directory"
-mkdir $name
-mv $rootfs.img $name/$name.img
-cp $rootfs/boot/vmlinuz-* $name/$name-kernel
-cp $rootfs/boot/initrd.img-* $name/$name-initrd
+fsck.ext3 -f /dev/mapper/${LOOP_DEVICE} || true
 
-info "creating $name-openstack.tar.gz"
-tar --sparse -zcvf $name-openstack.tar.gz $name
+#the next command failed once, so
+sync
+kpartx -d ${AMI_NAME}
+
+info "creating qcow2 image"
+QCOW2_NAME=$name-openstack.qcow2
+QEMU_VERSION=`qemu-img --help | head -n 1 | cut -d" " -f3 | cut -d"," -f1`
+if dpkg --compare-versions ${QEMU_VERSION} gt 1.0 ; then
+    OTHER_QEMU_IMG_OPTIONS=" -o compat=0.10"
+else
+    OTHER_QEMU_IMG_OPTIONS=""
+fi
+
+qemu-img convert -c -f raw ${AMI_NAME}${OTHER_QEMU_IMG_OPTIONS} -O qcow2 ${QCOW2_NAME}
 
 if [ -z "$BT_DEBUG" ]; then
     info "removing directory"
     rm -rf $name
 fi
-
