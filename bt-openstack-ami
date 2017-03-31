@@ -75,7 +75,7 @@ $BT/bin/openstack-bundle-ami $rootfs
 
 $BT/bin/generate-signature $O/$name-openstack.tar.gz
 
-$BT/bin/generate-buildenv openstack $BT_ISOS/$isofile.sig > $O/$name-openstack.tar.gz.buildenv
+$BT/bin/generate-buildenv openstack $BT_ISOS/$isofile.hash > $O/$name-openstack.tar.gz.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -83,7 +83,7 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$name-openstack.tar.gz
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name-openstack.{tar.gz.sig,tar.gz.buildenv}
+    $BT/bin/publish-files $O/$name-openstack.{tar.gz.hash,tar.gz.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then

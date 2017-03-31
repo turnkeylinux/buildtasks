@@ -111,7 +111,7 @@ appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
 dockername=$BT_DOCKER_USER/${appname}-${appversion}
 $BT/bin/docker-bundle $rootfs $dockername $ports
 
-$BT/bin/generate-buildenv docker $BT_ISOS/$isofile.sig > $O/$name.docker.buildenv
+$BT/bin/generate-buildenv docker $BT_ISOS/$isofile.hash > $O/$name.docker.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then

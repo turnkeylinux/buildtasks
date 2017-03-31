@@ -111,7 +111,7 @@ tar -C $rootfs -zcf $stupidname.tar.gz .
 
 $BT/bin/generate-signature $O/$stupidname.tar.gz
 
-$BT/bin/generate-buildenv container $BT_ISOS/$isofile.sig > $O/$stupidname.tar.gz.buildenv
+$BT/bin/generate-buildenv container $BT_ISOS/$isofile.hash > $O/$stupidname.tar.gz.buildenv
 
 # publish if specified
 if [ "$publish" == "yes" ]; then
@@ -119,7 +119,7 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$stupidname.tar.gz
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$stupidname.{tar.gz.sig,tar.gz.buildenv}
+    $BT/bin/publish-files $O/$stupidname.{tar.gz.hash,tar.gz.buildenv}
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
