@@ -46,3 +46,8 @@ if ! which install-mbr >/dev/null; then
     install "mbr"
 fi
 
+if ! which extlinux >/dev/null; then
+    info "installing extlinux"
+    install "extlinux"
+fi
+
