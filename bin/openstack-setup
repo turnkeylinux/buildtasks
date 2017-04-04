@@ -41,13 +41,27 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install $1
 }
 
+pkgs=""
+
 if ! which install-mbr >/dev/null; then
-    info "installing mbr"
-    install "mbr"
+    info "need to install mbr"
+    pkgs="$pkgs mbr"
 fi
 
 if ! which extlinux >/dev/null; then
-    info "installing extlinux"
-    install "extlinux"
+    info "need to install extlinux"
+    pkgs="$pkgs extlinux"
 fi
 
+if ! which parted >/dev/null; then
+    info "need to install parted"
+    pkgs="$pkgs parted"
+fi
+
+if ! which kpartx >/dev/null; then
+    info "need to install kpartx"
+    pkgs="$pkgs kpartx"
+fi
+
+info "installing required packages"
+install "$pkgs"
