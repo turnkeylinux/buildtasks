@@ -58,5 +58,10 @@ if ! which parted >/dev/null; then
     pkgs="$pkgs parted"
 fi
 
+if ! which kpartx >/dev/null; then
+    info "need to install kpartx"
+    pkgs="$pkgs kpartx"
+fi
+
 info "installing required packages"
 install "$pkgs"
