@@ -59,6 +59,13 @@ else
     warning "--publish was not specified"
 fi
 
+# hack for cloudtasks issues with pre command
+if [ ! -e /root/openstack-setup.done ]; then
+    /turnkey/buildtasks/bin/openstack-setup
+    touch /root/openstack-setup.done
+fi
+
+
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}
