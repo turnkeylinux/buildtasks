@@ -63,5 +63,10 @@ if ! which kpartx >/dev/null; then
     pkgs="$pkgs kpartx"
 fi
 
+if ! which qemu-img >/dev/null; then
+    info "need to install qemu-utils"
+    pkgs="$pkgs qemu-utils"
+fi
+
 info "installing required packages"
 install "$pkgs"
