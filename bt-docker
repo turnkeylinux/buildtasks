@@ -81,7 +81,7 @@ if [ ! -e /root/docker-setup.done ]; then
 fi
 
 # make sure docker daemon is running
-docker service start
+service docker start
 
 ports=$(grep "^$appname:" $BT_CONFIG/docker.ports | sed "s|^$appname: ||")
 [ -n "$ports" ] || fatal "no ports defined for $appname"
