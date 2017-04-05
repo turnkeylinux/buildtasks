@@ -81,10 +81,7 @@ if [ ! -e /root/docker-setup.done ]; then
 fi
 
 # make sure docker daemon is running
-if ! pidof docker >/dev/null; then
-    info "docker daemon not running, starting it"
-    docker -d &
-fi
+docker service start
 
 ports=$(grep "^$appname:" $BT_CONFIG/docker.ports | sed "s|^$appname: ||")
 [ -n "$ports" ] || fatal "no ports defined for $appname"
