@@ -80,7 +80,7 @@ cleanup(){
 }
 trap "cleanup" EXIT TERM INT
 
-mkfs.ext4 -F -j /dev/mapper/${LOOP_DEVICE}
+mkfs.ext4 -F -j -L root /dev/mapper/${LOOP_DEVICE}
 # No fsck because of X days without checks
 tune2fs -i 0 /dev/mapper/${LOOP_DEVICE}
 
@@ -91,13 +91,16 @@ info "syncing rootfs to loopback"
 rsync -a -t -r -S -I -H $rootfs/ ${MOUNT_DIR}
 
 info "install extlinux"
-mkdir -p ${MOUNT_DIR}/boot/extlinux 
+mkdir -p ${MOUNT_DIR}/boot/extlinux
 echo "default linux
 timeout 1
 label linux
 kernel /vmlinuz
-append initrd=/initrd.img root=/dev/vda1 biosdevname=0 net.ifnames=0 console=tty0 console=ttyS0,115200 ro" > ${MOUNT_DIR}/boot/extlinux/extlinux.conf
+append initrd=/initrd.img root=LABEL=root biosdevname=0 net.ifnames=0 console=tty0 console=ttyS0,115200 ro" > ${MOUNT_DIR}/boot/extlinux/extlinux.conf
+rm ${MOUNT_DIR}/extlinux.conf || true
+ln ${MOUNT_DIR}/boot/extlinux/extlinux.conf ${MOUNT_DIR}/extlinux.conf
 extlinux --install ${MOUNT_DIR}/boot/extlinux
+
 
 info "umount loopback"
 umount -d ${MOUNT_DIR}
@@ -109,6 +112,11 @@ fsck.ext3 -f /dev/mapper/${LOOP_DEVICE} || true
 sync
 kpartx -d ${AMI_NAME}
 
+if [ -z "$BT_DEBUG" ]; then
+    info "removing directory"
+    rm -rf $name
+fi
+
 info "creating qcow2 image"
 QCOW2_NAME=$name-openstack.qcow2
 QEMU_VERSION=`qemu-img --help | head -n 1 | cut -d" " -f3 | cut -d"," -f1`
@@ -118,9 +126,4 @@ else
     OTHER_QEMU_IMG_OPTIONS=""
 fi
 
-qemu-img convert -c -f raw ${AMI_NAME}${OTHER_QEMU_IMG_OPTIONS} -O qcow2 ${QCOW2_NAME}
-
-if [ -z "$BT_DEBUG" ]; then
-    info "removing directory"
-    rm -rf $name
-fi
+qemu-img convert -f raw ${AMI_NAME}${OTHER_QEMU_IMG_OPTIONS} -O qcow2 ${QCOW2_NAME}
