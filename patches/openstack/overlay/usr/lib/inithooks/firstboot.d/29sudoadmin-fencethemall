@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#because cloud-init may create multiple users
+for username in `ls /home`; do
+  root_profiled=/root/.profile.d/turnkey-init-fence
+  user_profiled=/home/${username}/.profile.d/turnkey-init-fence
+  if [ -e $root_profiled ]; then
+    if [ $username != "root" ]; then
+      mkdir -p $(dirname $user_profiled)
+      cp $root_profiled $user_profiled
+      sed -i "s|^|sudo |" $user_profiled
+      sed -i "s|/root|/home\/${username}|g" $user_profiled
+      chown -R $username:$username $(dirname $user_profiled)
+    fi
+  fi
+done

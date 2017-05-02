@@ -1,0 +1,18 @@
+#!/bin/bash
+
+[ -z "$_TURNKEY_INIT" ] && exit 0; # ONLY run from within turnkey-init
+
+if [ -x /etc/init.d/turnkey-init-fence ]; then
+
+    update-rc.d turnkey-init-fence remove; 
+    /etc/init.d/turnkey-init-fence stop;
+
+fi
+
+for home in /root `find /home/*`; do
+    [ -e $home/.profile.d/turnkey-init-fence ] && chmod -x $home/.profile.d/turnkey-init-fence;
+done
+
+chmod -x /usr/lib/inithooks/firstboot.d/??turnkey-init-fence*
+
+echo 'turnkey-init-fence is down'

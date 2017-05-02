@@ -63,7 +63,7 @@ if [ ! -e $BT_PRODUCTS/$appname ]; then
     cd $BT_PRODUCTS/$appname
 else
     cd $BT_PRODUCTS/$appname
-    git pull
+    #git pull
 fi
 
 deck -D build/root.sandbox || true

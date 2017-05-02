@@ -77,8 +77,8 @@ kpartx -as $loopdev
 
 pvcreate /dev/mapper/$(basename $loopdev)p2
 vgcreate $VG /dev/mapper/$(basename $loopdev)p2
-lvcreate -L $VM_PARTED_LVM_ROOT -n root $VG
-lvcreate -L $VM_PARTED_LVM_SWAP -n swap_1 $VG
+lvcreate -Zn -L $VM_PARTED_LVM_ROOT -n root $VG
+lvcreate -Zn -L $VM_PARTED_LVM_SWAP -n swap_1 $VG
 vgscan
 vgchange -a y
 
