@@ -1,0 +1,73 @@
+#!/bin/bash -e
+# Copyright (c) 2017 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) buildtype1 [buildtype2 ...]  appname-version
+Cleans local storage of appname-version appliance of specified buildtype(s)
+
+Can be useful to avoid running out of space when batch processing
+
+Arguments::
+
+    buildtype           - container|openstack|vm|xen
+                          (multiple builds to be space separated)
+
+    appname-version     - e.g., core-14.2-jessie-amd64
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        iso)         iso=y;;
+        container)   container=y;;
+        openstack)   openstack=y;;
+        vm)          vm=y;;
+        xen)         xen=y;;
+        --help|-h )  usage;;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appver" ] || usage
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+remove() {
+    rm_app=turnkey-$1
+    rm_build=$2
+    if [ "$rm_build" = "iso" ]; then
+        basepath=$BT_ISOS
+    else
+        basepath=$BT_BUILDS/$rm_build
+    fi
+    rm -rf $basepath/$rm_app*
+}
+
+[ "$iso" = "y" ] && remove $appver iso
+[ "$container" = "y" ] && remove $appver container
+[ "$openstack" = "y" ] && remove $appver openstack
+[ "$vm" = "y" ] && remove $appver vm
+[ "$xen" = "y" ] && remove $appver xen
+
