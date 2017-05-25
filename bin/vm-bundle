@@ -234,7 +234,10 @@ sed -i "/OperatingSystemSection ovf:id/ s|\"1\".*|\"102\">|" $name.ovf
 SHA=$(openssl sha1 $name.ovf)
 sed -i "s|.*$name.ovf.*|$SHA|" $name.mf
 
-ovftool $name.ovf ../$name.ova
+# SHA256 is default for ovftool v4.2, but =<6.0 vSphere/ESX only supports SHA1
+# as it's not a security issue (we hash the ova itself with SHA256 and sign the
+# hash file) we will accommodatw that for now.
+ovftool --shaAlgorithm=SHA1 $name.ovf ../$name.ova
 cd ../
 
 if [ -z "$BT_DEBUG" ]; then
