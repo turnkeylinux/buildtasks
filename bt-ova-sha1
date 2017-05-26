@@ -1,0 +1,111 @@
+#!/bin/bash -e
+
+# script to reprocess existing v14.2 OVAs so that they only contain
+# a SHA1 checksum (SHA256 checksums were problematic for some users)
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+install-ovftool() {
+    if $(which ovftool > /dev/null); then
+        info "ovftool already installed, skipping..."
+    else
+        [ -n "$OVFTOOL_URL" ] || fatal "OVFTOOL_URL not set"
+        [ -n "$OVFTOOL_256" ] || fatal "OVFTOOL_256 not set"
+        echo "$OVFTOOL_256  /tmp/ovftool.bundle" > /tmp/ovftool.bundle.sha256sum
+        wget $OVFTOOL_URL -O /tmp/ovftool.bundle
+        sha256sum -c /tmp/ovftool.bundle.sha256sum
+        chmod +x /tmp/ovftool.bundle
+        /tmp/ovftool.bundle --console --eulas-agreed
+        rm /tmp/ovftool.bundle /tmp/ovftool.bundle.sha256sum
+    fi
+}
+
+ova-download() {
+    outdir=$1
+    ovafile=$2
+
+    if [ -e $outdir/$ovafile ]; then
+        info "$ovafile already exists, skipping..."
+        return 0
+    fi
+
+    mkdir -p $outdir
+    images="http://mirror.turnkeylinux.org/turnkeylinux/images"
+    wget --read-timeout=60 --tries=10 $images/ova/$ovafile -O $outdir/$ovafile
+}
+
+ova-verify() {
+    [ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+
+    outdir=$1
+    appver=$2
+
+    parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+    read appname appversion codename arch <<< "$parsed_appname_version"
+
+    hashfile=turnkey-$appver.ova.hash
+    hashpath=$outdir/$hashfile
+
+    if [ ! -e $hashpath ]; then
+        src=http://releases.turnkeylinux.org/turnkey-$appname/$appversion-$codename-$arch/$hashfile
+        wget --read-timeout=60 --tries=10 $src -O $hashpath
+    else
+        info "$hashfile already exists, skipping..."
+        return 0
+    fi
+
+    if ! $BT/bin/signature-verify $outdir/$ovafile $hashpath; then
+        mv $outdir/$ovafile $outdir/$ovafile.corrupt
+        rm $hashpath
+        fatal "$hashfile verification failed"
+    fi
+}
+
+mini-buildenv() {
+    # get sha1 from ova hash file
+    hashpath=$1
+    hash256=$(grep -A 1 -m 1 sha256sum $hashpath | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
+    echo "$(basename $hashpath) $hash256"
+    
+    echo "ovftool $(ovftool --version)"
+}
+
+[ -n "$1" ] || fatal "must supply appver"
+appver=$1
+[ -n "$BT_DEBUG" ] && set -x
+
+install-ovftool
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+ovas=$BT_BUILDS/vm
+TMP=$ovas/tmp
+mkdir -p $TMP
+
+[ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+[ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+[ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+
+ovafile=turnkey-$appver.ova
+
+ova-download $TMP $ovafile
+ova-verify $TMP $appver
+
+ovftool --shaAlgorithm=SHA1 $TMP/$ovafile $ovas/$ovafile
+
+$BT/bin/generate-signature $ovas/$ovafile
+mini-buildenv $TMP/$ovafile.hash > $ovas/$ovafile.mini-buildenv
+
+export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ova/
+$BT/bin/publish-files $ovas/$ovafile
+
+export PUBLISH_DEST=${BT_PUBLISH_META}/
+$BT/bin/publish-files $ovas/$ovafile.{hash,mini-buildenv}
+
+if [ -z "$BT_DEBUG" ]; then
+    rm -rf $TMP
+fi
