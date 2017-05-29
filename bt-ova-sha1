@@ -1,26 +1,16 @@
 #!/bin/bash -e
 
 # script to reprocess existing v14.2 OVAs so that they only contain
-# a SHA1 checksum (SHA256 checksums were problematic for some users)
+# a SHA1 checksum. SHA256 checksums were problematic for some users
+# of older VMware products. As we are hashing the OVA itself with
+# SHA256 (and signing the hashfile) there is no security issues (so
+# long as users check the sig of the hashfile and check the SHA256
+# sums of the OVA itself).
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
-install-ovftool() {
-    if $(which ovftool > /dev/null); then
-        info "ovftool already installed, skipping..."
-    else
-        [ -n "$OVFTOOL_URL" ] || fatal "OVFTOOL_URL not set"
-        [ -n "$OVFTOOL_256" ] || fatal "OVFTOOL_256 not set"
-        echo "$OVFTOOL_256  /tmp/ovftool.bundle" > /tmp/ovftool.bundle.sha256sum
-        wget $OVFTOOL_URL -O /tmp/ovftool.bundle
-        sha256sum -c /tmp/ovftool.bundle.sha256sum
-        chmod +x /tmp/ovftool.bundle
-        /tmp/ovftool.bundle --console --eulas-agreed
-        rm /tmp/ovftool.bundle /tmp/ovftool.bundle.sha256sum
-    fi
-}
 
 ova-download() {
     outdir=$1
@@ -37,13 +27,12 @@ ova-download() {
 }
 
 ova-verify() {
-    [ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
-
     outdir=$1
     appver=$2
-
-    parsed_appname_version=$($BT/bin/parse-appname-version $appver)
-    read appname appversion codename arch <<< "$parsed_appname_version"
+    appname=$3
+    appversion=$4
+    codename=$5
+    arch=$6
 
     hashfile=turnkey-$appver.ova.hash
     hashpath=$outdir/$hashfile
@@ -63,20 +52,10 @@ ova-verify() {
     fi
 }
 
-mini-buildenv() {
-    # get sha1 from ova hash file
-    hashpath=$1
-    hash256=$(grep -A 1 -m 1 sha256sum $hashpath | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
-    echo "$(basename $hashpath) $hash256"
-    
-    echo "ovftool $(ovftool --version)"
-}
-
 [ -n "$1" ] || fatal "must supply appver"
 appver=$1
 [ -n "$BT_DEBUG" ] && set -x
-
-install-ovftool
+which ovftool > /dev/null || fatal "ovftool not found"
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
@@ -91,20 +70,39 @@ mkdir -p $TMP
 [ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
 
 ovafile=turnkey-$appver.ova
+ovffile=$appver.ovf
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
 
 ova-download $TMP $ovafile
-ova-verify $TMP $appver
+ova-verify $TMP $appver $appname $appversion $codename $arch
 
-ovftool --shaAlgorithm=SHA1 $TMP/$ovafile $ovas/$ovafile
+ovftool $TMP/$ovafile $TMP/$ovffile
+
+cp $BT/templates/ovf-productinfo $TMP/productinfo.tmp
+
+cd $TMP
+sed -i "s|@@APP@@|$appname|; \
+        s|@@VERSION@@|$appversion|; \
+        s|@@FULL_VERSION@@|$appver|; \
+        s|@@URL@@|https://www.turnkeylinux.org/$appname| \
+        " productinfo.tmp
+
+sed -e "/<\/Name>/r./productinfo.tmp" $ovffile > turnkey-$ovffile
+cd -
+
+rm $TMP/*.mf
+ovftool --shaAlgorithm=SHA1 $TMP/turnkey-$ovffile $ovas/$ovafile
 
 $BT/bin/generate-signature $ovas/$ovafile
-mini-buildenv $TMP/$ovafile.hash > $ovas/$ovafile.mini-buildenv
+$BT/bin/generate-buildenv vm $TMP/$ovafile.hash > $ovas/$ovafile.buildenv
 
 export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ova/
 $BT/bin/publish-files $ovas/$ovafile
 
 export PUBLISH_DEST=${BT_PUBLISH_META}/
-$BT/bin/publish-files $ovas/$ovafile.{hash,mini-buildenv}
+$BT/bin/publish-files $ovas/$ovafile.{hash,buildenv}
 
 if [ -z "$BT_DEBUG" ]; then
     rm -rf $TMP
