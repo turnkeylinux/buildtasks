@@ -224,20 +224,30 @@ ovftool $name.vmx $name.ovf
 rm $name.vmx $name.vmdk
 
 info "tweaking ovf & generating ova"
+mv $name.ovf $name.ovf.tmp
+
 # fix vm name (otherwise defaults to "vm" in VBox)
-sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf
+sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf.tmp
 
-# fix OSType: 102 = "other64" (1 = other)
-sed -i "/OperatingSystemSection ovf:id/ s|\"1\".*|\"102\">|" $name.ovf
+# add additional product info (displays in VMware and VirtualBox)
+cp $BT/templates/ovf-productinfo productinfo.tmp
+sed -i "s|@@APP@@|$appname|; \
+        s|@@VERSION@@|$appversion|; \
+        s|@@FULL_VERSION@@|$appver|; \
+        s|@@URL@@|https://www.turnkeylinux.org/$appname| \
+        " productinfo.tmp
+sed -e "/<\/Name>/r./productinfo.tmp" $name.ovf.tmp > $name.ovf
 
-# update SHA of fixed ovf
-SHA=$(openssl sha1 $name.ovf)
-sed -i "s|.*$name.ovf.*|$SHA|" $name.mf
+# remove invalid ovf manifest
+# (SHA sums won't match due to tweaked OVF; ovftool auto generates a new
+#  manifest when creating an OVA)
+rm $name.mf
 
 # SHA256 is default for ovftool v4.2, but =<6.0 vSphere/ESX only supports SHA1
 # as it's not a security issue (we hash the ova itself with SHA256 and sign the
 # hash file) we will accommodatw that for now.
 ovftool --shaAlgorithm=SHA1 $name.ovf ../$name.ova
+
 cd ../
 
 if [ -z "$BT_DEBUG" ]; then
