@@ -54,7 +54,7 @@ _common() {
 }
 
 _optimized() {
-    # get sha1 from hash file (supports yet-to-be signed iso hash files)
+    # get sha from hash file (supports yet-to-be signed iso hash files)
     hashpath=$1
     hash256=$(grep -A 1 -m 1 sha256sum $hashpath | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
     echo "$(basename $hashpath) $hash256"
