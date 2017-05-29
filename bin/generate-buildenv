@@ -85,7 +85,7 @@ bt_ec2() {
 
 bt_vm() {
     echo "ovftool $(ovftool --version)"
-    echo "qemu $(qemu --version)"
+    echo "qemu-img $(qemu-img --version)"
 }
 
 bt_docker() {
