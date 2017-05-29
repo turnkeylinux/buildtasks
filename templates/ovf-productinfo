@@ -1,0 +1,9 @@
+      <ProductSection >
+        <Info>TurnKey Linux virtual appliance</Info>
+        <Product>TurnKey - @@APP@@</Product>
+        <Vendor>TurnKey GNU/Linux</Vendor>
+        <Version>@@VERSION@@</Version>
+        <FullVersion>@@FULL_VERSION@@</FullVersion>
+        <ProductUrl>@@URL@@</ProductUrl>
+        <VendorUrl>https://www.turnkeylinux.org/</VendorUrl>
+      </ProductSection>
