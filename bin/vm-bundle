@@ -39,6 +39,8 @@ fi
 
 rootfs=$1
 name=$(basename $rootfs .rootfs)
+parsed_appname_version=$($BT/bin/parse-appname-version ${name#turnkey-})
+read appname appversion codename arch <<< "$parsed_appname_version"
 
 [ -n "$VM_URL" ] || fatal "VM_URL not set"
 [ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
@@ -233,8 +235,8 @@ sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf.tmp
 cp $BT/templates/ovf-productinfo productinfo.tmp
 sed -i "s|@@APP@@|$appname|; \
         s|@@VERSION@@|$appversion|; \
-        s|@@FULL_VERSION@@|$appver|; \
-        s|@@URL@@|https://www.turnkeylinux.org/$appname| \
+        s|@@FULL_VERSION@@|$name|; \
+        s|@@URL@@|$VM_URL| \
         " productinfo.tmp
 sed -e "/<\/Name>/r./productinfo.tmp" $name.ovf.tmp > $name.ovf
 
