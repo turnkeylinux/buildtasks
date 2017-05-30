@@ -85,7 +85,7 @@ cp $BT/templates/ovf-productinfo $TMP/productinfo.tmp
 cd $TMP
 sed -i "s|@@APP@@|$appname|; \
         s|@@VERSION@@|$appversion|; \
-        s|@@FULL_VERSION@@|$appver|; \
+        s|@@FULL_VERSION@@|turnkey-$appver|; \
         s|@@URL@@|https://www.turnkeylinux.org/$appname| \
         " productinfo.tmp
 
