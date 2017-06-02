@@ -103,6 +103,6 @@ fi
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
-    [ "$publish" == "yes" ] && $BT/bt-clean xen $name
+    [ "$publish" == "yes" ] && $BT/bt-clean xen $appver
 fi
 

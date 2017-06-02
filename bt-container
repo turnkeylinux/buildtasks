@@ -125,6 +125,6 @@ fi
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
-    [ "$publish" == "yes" ] && $BT/bt-clean container $stupidname
+    [ "$publish" == "yes" ] && $BT/bt-clean container $appver
 fi
 

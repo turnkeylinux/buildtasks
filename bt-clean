@@ -61,6 +61,18 @@ remove() {
         basepath=$BT_ISOS
     else
         basepath=$BT_BUILDS/$rm_build
+        if [ "$rm_build" = "container" ]; then
+            parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+            read appname appversion codename arch <<< "$parsed_appname_version"
+            case "$codename" in
+                wheezy)  debianversion="debian-7" ;;
+                jessie)  debianversion="debian-8" ;;
+                stretch) debianversion="debian-9" ;;
+                buster)  debianversion="debian-10" ;;
+                *)       fatal "debianversion could not be determined" ;;
+            esac
+            rm_app="${debianversion}-turnkey-${appname}_${appversion}-1_${arch}"
+        fi
     fi
     rm -rf $basepath/$rm_app*
 }
@@ -70,4 +82,6 @@ remove() {
 [ "$openstack" = "y" ] && remove $appver openstack
 [ "$vm" = "y" ] && remove $appver vm
 [ "$xen" = "y" ] && remove $appver xen
+
+exit 0
 
