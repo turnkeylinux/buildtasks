@@ -65,7 +65,7 @@ parted --script -- $rootfs.raw mkpart primary $VM_PARTED_LVM
 parted --script -- $rootfs.raw set 1 boot on
 parted --script -- $rootfs.raw set 1 LVM on
 
-info "setting up loop device ($loopdev) and checking that it's mounted"
+info "setting up loop device and checking that it's mounted"
 loopdev=$(kpartx -avs $rootfs.raw | cut -d' ' -f3)
 for i in {1..11}; do
     if ls /dev/mapper/$loopdev >/dev/null 2>&1; then
