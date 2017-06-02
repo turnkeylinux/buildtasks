@@ -65,10 +65,20 @@ parted --script -- $rootfs.raw mkpart primary $VM_PARTED_LVM
 parted --script -- $rootfs.raw set 1 boot on
 parted --script -- $rootfs.raw set 1 LVM on
 
-info "setting up loop device and LVM"
-kpartx -as $rootfs.raw
-loopdev=$(kpartx -l $rootfs.raw | cut -d' ' -f1)
+info "setting up loop device ($loopdev) and checking that it's mounted"
+loopdev=$(kpartx -avs $rootfs.raw | cut -d' ' -f3)
+for i in {1..11}; do
+    if ls /dev/mapper/$loopdev >/dev/null 2>&1; then
+        info "success - $loopdev is mounted (waited $(( i - 1)) seconds(s))"
+        break
+    elif [ "$i" -eq 11 ]; then
+        fatal "$loopdev is NOT mounted (waited 10 seconds)"
+    else
+        sleep 1
+    fi
+done
 
+info "setting up LVM"
 pvcreate /dev/mapper/$loopdev
 vgcreate $VG /dev/mapper/$loopdev
 lvcreate -L $VM_PARTED_LVM_ROOT -n root $VG
@@ -76,7 +86,7 @@ lvcreate -L $VM_PARTED_LVM_SWAP -n swap_1 $VG
 vgscan
 vgchange -a y
 
-info "creating filesystems (boot, root, swap)"
+info "creating filesystems (root & swap)"
 mkfs.ext4 /dev/mapper/$VG-root
 mkswap /dev/mapper/$VG-swap_1
 
@@ -116,6 +126,7 @@ umount $rootfs.vm/
 info "cleaning up volume groups and mounts"
 vgchange -a n $VG
 kpartx -dv $rootfs.raw
+dmsetup remove_all
 rmdir $rootfs.vm
 rm -f /etc/lvm/backup/$VG
 
