@@ -18,6 +18,9 @@ cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
 # disable confconsole init script
 update-rc.d -f confconsole disable
 
+# disable networking options in confconsole
+sed -i "/networking/ s|true|false|" /etc/confconsole/confconsole.conf
+
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
