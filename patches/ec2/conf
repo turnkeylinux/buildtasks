@@ -22,4 +22,4 @@ chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
 
 # enable sudoadmin in rootfs
 turnkey-sudoadmin on --disable-setpass
-
+passwd -l admin
