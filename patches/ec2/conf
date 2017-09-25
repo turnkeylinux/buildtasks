@@ -27,6 +27,6 @@ turnkey-sudoadmin on --disable-setpass
 passwd -l admin
 if [ $(cat /etc/passwd | cut -d: -f1 | grep ansible) ]; then
     passwd -l ansible
-    ansible-init=/usr/lib/inithooks/firstboot.d/50ansible-key
-    sed -i.bak "/.ssh/ s|root|home/admin|" $ansible-init
+    ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
+    sed -i "/.ssh/ s|root|home/admin|" $ansible_init
 fi
