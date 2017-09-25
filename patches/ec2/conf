@@ -22,4 +22,9 @@ chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
 
 # enable sudoadmin in rootfs
 turnkey-sudoadmin on --disable-setpass
+
+# provide for AWSMP requirment of "no default passwords"
 passwd -l admin
+if [ $(cat /etc/passwd | cut -d: -f1 | grep ansible) ]; then
+    passwd -l ansible
+fi
