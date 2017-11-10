@@ -30,3 +30,4 @@ if [ $(cat /etc/passwd | cut -d: -f1 | grep ansible) ]; then
     ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
     sed -i "/.ssh/ s|root|home/admin|" $ansible_init
 fi
+rm -f /etc/mysql/debian.cnf
