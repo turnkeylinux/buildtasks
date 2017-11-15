@@ -33,6 +33,7 @@ fi
 
 if [ -x /usr/bin/mysql ]; then
     rm /etc/mysql/debian.cnf
+    update-rc.d -f mysql remove
 else
     rm /usr/lib/inithooks/firstboot.d/20regen-mysql-secrets
 fi
