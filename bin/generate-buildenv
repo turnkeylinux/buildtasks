@@ -34,7 +34,7 @@ BT=$(dirname $(dirname $(readlink -f $0)))
 BT_CONFIG=$BT/config
 . $BT/config/common.cfg
 
-[ -n "$RELEASE" ] || CODENAME=$(basename $RELEASE)
+[ -z "$RELEASE" ] || CODENAME=$(basename $RELEASE)
 [ -n "$CODENAME" ] || CODENAME=$(lsb_release -s -c)
 [ -n "$ARCH" ] || ARCH=$(dpkg --print-architecture)
 
