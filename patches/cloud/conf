@@ -21,6 +21,9 @@ update-rc.d -f confconsole disable
 # disable networking options in confconsole
 sed -i "/networking/ s|true|false|" /etc/confconsole/confconsole.conf
 
+# uncomment eth1 in interfaces file (commented out in common - see #952)
+sed -i "/eth1/ s|^#||" /etc/network/interfaces
+
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
