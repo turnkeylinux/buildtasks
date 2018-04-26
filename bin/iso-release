@@ -40,13 +40,13 @@ done
 
 [ -e changelog ] || fatal "changelog not found"
 [ -e build/product.iso ] || fatal "build/product.iso not found"
-[ -e build/root.patched ] || fatal "build/root.patched not found"
+[ -e build/root.sandbox ] || fatal "build/root.sandbox not found"
 
 export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
 . $BT/config/common.cfg
 
-rootfs=build/root.patched
+rootfs=build/root.sandbox
 name=$(cat $rootfs/etc/turnkey_version)
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
 [ -n "$name" ] || fatal "could not identify name"

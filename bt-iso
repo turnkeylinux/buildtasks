@@ -82,7 +82,7 @@ mkdir -p $BT_ISOS
 $BT/bin/iso-release --force $BT_ISOS
 
 if [ "$publish" == "yes" ]; then
-    name=$(cat build/root.patched/etc/turnkey_version)
+    name=$(cat build/root.sandbox/etc/turnkey_version)
     $BT/bin/iso-publish $BT_ISOS/$name.iso
 fi
 
