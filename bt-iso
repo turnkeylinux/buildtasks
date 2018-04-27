@@ -49,7 +49,7 @@ done
 if [ -n "$(grep jessie /etc/turnkey_version)" ]; then
     export RELEASE="debian/stretch"
     GPGKEY="A16EB94D"
-    IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
+    IMAGES="http://131.188.12.211/turnkeylinux/images"
     BOOTSTRAP_NAME="bootstrap-stretch-$(dpkg --print-architecture)"
     BOOTSTRAP_PATH="$FAB_PATH/bootstraps/stretch"
     if [ ! -d $BOOTSTRAP_PATH ]; then
