@@ -10,7 +10,7 @@ install() {
 }
 
 # install required packages
-install quota sysvinit-core systemd-shim
+install quota
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
@@ -47,9 +47,6 @@ touch /etc/resolv.conf
 
 # remove ntp daemon
 dpkg --purge ntp || true
-
-# remove systemd (sysvinit used in container)
-dpkg --purge systemd-sysv systemd || true
 
 # disable ttys, enable openvz_console
 sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
