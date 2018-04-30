@@ -9,6 +9,7 @@
 # option) any later version.
 
 
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 fatal() { echo -e "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 
 usage() {
@@ -31,17 +32,29 @@ if [[ "$#" != "1" ]]; then
 fi
 
 if [[ $1 =~ ^([a-z0-9-]+)-([0-9\.]+)-([a-z]+)-([a-z0-9]+)$ ]]; then
+    # "normal" release
+
     appname=${BASH_REMATCH[1]}
     appversion=${BASH_REMATCH[2]}
     codename=${BASH_REMATCH[3]}
     architecture=${BASH_REMATCH[4]}
+
+elif [[ $1 =~ ^([a-z0-9-]+)-([0-9\.]+)rc([0-9])-([a-z]+)-([a-z0-9]+)$ ]]; then
+    # "rc" release
+
+    appname=${BASH_REMATCH[1]}
+    appversion=${BASH_REMATCH[2]}rc${BASH_REMATCH[3]}
+    codename=${BASH_REMATCH[4]}
+    architecture=${BASH_REMATCH[5]}
+    raise_warning="release candidate version detected"
+
 else
     syntax="Syntax: appname-appversion-codename-arch"
     fatal "appname-version incorrect syntax\n$syntax"
 fi
 
 case $codename in
-    squeeze|wheezy|jessie|stretch) ;;
+    squeeze|wheezy|jessie|stretch|buster) ;;
     *) fatal "unrecognized codename: $codename" ;;
 esac
 
@@ -51,4 +64,4 @@ case $architecture in
 esac
 
 echo $appname $appversion $codename $architecture
-
+[ -n "$raise_warning" ] && warning "$raise_warning"
