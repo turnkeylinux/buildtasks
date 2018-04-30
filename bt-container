@@ -81,6 +81,7 @@ case "$codename" in
     wheezy)  debianversion="debian-7" ;;
     jessie)  debianversion="debian-8" ;;
     stretch) debianversion="debian-9" ;;
+    buster)  debianversion="debian-10" ;;
     *)       fatal "debianversion could not be determined" ;;
 esac
 
