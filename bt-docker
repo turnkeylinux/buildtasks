@@ -25,6 +25,8 @@ Arguments::
 Options::
 
     --publish           - if set, image will be uploaded to docker index
+                          and metadata will be publish
+    --docker-publish    - if set, image will be uploaded to docker index
 
 Environment::
 
@@ -37,6 +39,7 @@ while [ "$1" != "" ]; do
     case $1 in
         --help|-h )  usage;;
         --publish)   publish="yes";;
+        --docker-publish)   docker_publish="yes"
         *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
@@ -111,15 +114,17 @@ $BT/bin/docker-bundle $rootfs $dockername $ports
 $BT/bin/generate-buildenv docker $BT_ISOS/$isofile.hash > $O/$name.docker.buildenv
 
 # publish if specified
-if [ "$publish" == "yes" ]; then
+if [ "$publish" == "yes" ] || [ "$docker_publish" == "yes" ]; then
     while true; do
         docker push $dockername && break
         echo "autoresume push: sleeping for 5 seconds"
         sleep 5
     done
 
-    export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name.docker.buildenv
+    if [ "$publish" == "yes" ]; then
+        export PUBLISH_DEST=${BT_PUBLISH_META}/
+        $BT/bin/publish-files $O/$name.docker.buildenv
+    fi
 fi
 
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
