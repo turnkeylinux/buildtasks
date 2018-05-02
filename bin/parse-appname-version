@@ -64,4 +64,7 @@ case $architecture in
 esac
 
 echo $appname $appversion $codename $architecture
-[ -n "$raise_warning" ] && warning "$raise_warning"
+
+if [ -n "$raise_warning" ]; then
+    warning "$raise_warning"
+fi
