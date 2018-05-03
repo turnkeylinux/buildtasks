@@ -39,7 +39,7 @@ while [ "$1" != "" ]; do
     case $1 in
         --help|-h )  usage;;
         --publish)   publish="yes";;
-        --docker-publish)   docker_publish="yes"
+        --docker-publish)   docker_publish="yes";;
         *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
