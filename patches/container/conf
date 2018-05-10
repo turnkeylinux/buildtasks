@@ -42,10 +42,6 @@ mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 # remove ntp daemon
 dpkg --purge ntp || true
 
-# disable ttys, enable openvz_console
-sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
-echo "1:2345:respawn:/sbin/getty 38400 tty1" >> /etc/inittab
-
 update-rc.d -f confconsole disable
 
 # modprobe doesn't work in openvz
