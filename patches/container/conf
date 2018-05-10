@@ -1,17 +1,6 @@
 #!/bin/bash -ex
 # Author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
 
-install() {
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get -y \
-        -o DPkg::Options::=--force-confdef \
-        -o DPkg::Options::=--force-confold \
-        install $@
-}
-
-# install required packages
-install quota
-
 # remove kernel
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in
