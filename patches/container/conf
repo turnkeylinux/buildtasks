@@ -1,5 +1,6 @@
 #!/bin/bash -ex
-# Author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
+# Original author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
+# Since modified by: TurnKey Linux (c)2014-2018
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
@@ -33,7 +34,7 @@ dpkg --purge ntp || true
 
 systemctl disable confconsole
 
-# modprobe doesn't work in openvz
+# modprobe doesn't work in lxc
 mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
 
