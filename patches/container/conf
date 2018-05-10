@@ -31,7 +31,7 @@ mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 # remove ntp daemon
 dpkg --purge ntp || true
 
-update-rc.d -f confconsole disable
+systemctl disable confconsole
 
 # modprobe doesn't work in openvz
 mv /sbin/modprobe /sbin/modprobe.orig
