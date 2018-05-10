@@ -29,6 +29,9 @@ DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 rm /usr/sbin/update-grub
 mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
+# stop auto-secupdates complaining
+mkdir -p /lib/modules
+
 # remove ntp daemon
 dpkg --purge ntp || true
 
