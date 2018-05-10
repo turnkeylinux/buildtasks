@@ -39,12 +39,6 @@ DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 rm /usr/sbin/update-grub
 mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
-# remove resolvconf
-rm -rf /var/run/resolvconf
-dpkg --purge resolvconf
-rm -f /etc/resolv.conf*
-touch /etc/resolv.conf
-
 # remove ntp daemon
 dpkg --purge ntp || true
 
