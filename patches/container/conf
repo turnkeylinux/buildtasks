@@ -43,3 +43,5 @@ chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
+# clean up unrequired package(s)
+apt autoremove -y
