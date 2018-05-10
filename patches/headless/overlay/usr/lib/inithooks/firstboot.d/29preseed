@@ -5,11 +5,18 @@
 
 [ -e $INITHOOKS_CONF ] && exit 0
 
+# double check that openssl is installed, else fail loudly
+if ! which openssl > /dev/null; then
+    # possibly overkill, but send to both stdout & stderr
+    echo "FATAL [$0]: openssl not installed" | tee /dev/stderr
+    exit 1
+fi
+
 # generate (pseudo) random 8 char base64 string & check that it meets
 # complexity requirments (at least one uppercase, lowercase & number).
 unset check
 while [ -z "$check" ]; do
-    MASTERPASS="$(openssl rand -base64 6)"
+    MASTERPASS="$(openssl rand -base64 6)" || sleep 1
     [[ "$MASTERPASS" == *[A-Z]* && \
         "$MASTERPASS" == *[a-z]* && \
         "$MASTERPASS" == *[0-9]* ]] \
