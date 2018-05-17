@@ -1,16 +1,6 @@
 #!/bin/bash -ex
-# Author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
-
-install() {
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get -y \
-        -o DPkg::Options::=--force-confdef \
-        -o DPkg::Options::=--force-confold \
-        install $@
-}
-
-# install required packages
-install quota sysvinit-core systemd-shim
+# Original author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
+# Since modified by: TurnKey Linux (c)2014-2018
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
@@ -39,25 +29,15 @@ DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 rm /usr/sbin/update-grub
 mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
-# remove resolvconf
-rm -rf /var/run/resolvconf
-dpkg --purge resolvconf
-rm -f /etc/resolv.conf*
-touch /etc/resolv.conf
+# stop auto-secupdates complaining
+mkdir -p /lib/modules
 
 # remove ntp daemon
 dpkg --purge ntp || true
 
-# remove systemd (sysvinit used in container)
-dpkg --purge systemd-sysv systemd || true
+systemctl disable confconsole
 
-# disable ttys, enable openvz_console
-sed -i '/^[^#]:[2-5]*:respawn:*/s/^/# /' /etc/inittab
-echo "1:2345:respawn:/sbin/getty 38400 tty1" >> /etc/inittab
-
-update-rc.d -f confconsole disable
-
-# modprobe doesn't work in openvz
+# modprobe doesn't work in lxc
 mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
 
@@ -67,3 +47,5 @@ chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
+# clean up unrequired package(s)
+apt autoremove -y
