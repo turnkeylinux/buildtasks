@@ -12,15 +12,17 @@ if ! which openssl > /dev/null; then
     exit 1
 fi
 
-# generate (pseudo) random 8 char base64 string & check that it meets
-# complexity requirments (at least one uppercase, lowercase & number).
-unset check
+# generate (pseudo) random 12 char base64 password string
+unset check response
 while [ -z "$check" ]; do
-    MASTERPASS="$(openssl rand -base64 6)" || sleep 1
-    [[ "$MASTERPASS" == *[A-Z]* && \
-        "$MASTERPASS" == *[a-z]* && \
-        "$MASTERPASS" == *[0-9]* ]] \
-    && check=good
+    response="$(openssl rand -base64 9 2>/dev/null || true)"
+    if [ ${#response} -ge 12 ]; then
+        MASTERPASS=${response#\'}
+        check=good
+    else
+        echo "opensll responded with something unexpected, so sleeping 1 sec, then retrying"
+        sleep 1
+    fi
 done
 
 cat>$INITHOOKS_CONF<<EOF
