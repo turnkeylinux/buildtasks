@@ -8,10 +8,7 @@ install() {
         install $@
 }
 
-install ebsmount sudo parted gdisk tklamq # hubclient
-
-# temp workaround for broken hubclient pkg
-dpkg -i /root/hubclient_0.1+32+g8d7e846_all.deb
+install hubclient ebsmount sudo parted gdisk
 
 # grub tweaks
 DEFAULT=/etc/default/grub
