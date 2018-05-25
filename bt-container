@@ -104,6 +104,7 @@ tklpatch-apply $rootfs $BT/patches/container
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs proxmox
+$BT/bin/build-tag $rootfs proxmox
 
 # bundle proxmox tarball using stupid naming convention
 stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${arch}"

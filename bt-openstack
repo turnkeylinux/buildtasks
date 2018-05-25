@@ -90,6 +90,7 @@ tklpatch-apply $rootfs $BT/patches/openstack
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs openstack
+$BT/bin/build-tag $rootfs openstack
 
 $BT/bin/openstack-bundle $rootfs
 

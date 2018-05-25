@@ -105,6 +105,7 @@ tklpatch-apply $rootfs $BT/patches/docker
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs docker
+$BT/bin/build-tag $rootfs docker
 
 # create docker image
 appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
