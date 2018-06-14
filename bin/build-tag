@@ -1,0 +1,56 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs tag
+Tag the build within the filesystem with build info
+
+Arguments::
+
+    rootfs      - root filesystem path
+    tag         - the build tag
+EOF
+exit 1
+}
+
+if [[ "$#" != "2" ]]; then
+    usage
+fi
+
+rootfs=$1
+tag=$2
+
+if [[ -z $tag ]]; then
+    tag="iso"
+fi
+
+case $tag in
+    proxmox)
+        unit="lxc"
+    ;;
+    xen)
+        unit="xen"
+    ;;
+    *)
+        # openstack, docker, ec2 and vm
+        unit="default"
+    ;;
+esac
+
+TKL_INFO=$rootfs/var/lib/turnkey-info
+
+rm -rf $TKL_INFO
+mkdir -p $TKL_INFO/inithooks.service
+touch $TKL_INFO/inithooks.service/$unit

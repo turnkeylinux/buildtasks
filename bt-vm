@@ -105,6 +105,7 @@ tklpatch-apply $rootfs $BT/patches/vm
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs vm
+$BT/bin/build-tag $rootfs vm
 
 $BT/bin/vm-bundle $O/$rootfs
 

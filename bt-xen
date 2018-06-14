@@ -77,15 +77,17 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 tklpatch-apply $rootfs $BT/patches/headless
 
 mount --bind --make-rslave /dev $rootfs/dev
+
 tklpatch-apply $rootfs $BT/patches/xen
 umount $rootfs/dev
 
 $BT/bin/rootfs-cleanup $rootfs
 
 $BT/bin/aptconf-tag $rootfs xen
+$BT/bin/build-tag $rootfs xen
 
 info "creating $name-xen.tar.bz2"
-tar -C $rootfs -jcf $name-xen.tar.bz2 .
+tar --numeric-owner -C $rootfs -jcf $name-xen.tar.bz2 .
 
 $BT/bin/generate-signature $O/$name-xen.tar.bz2
 
