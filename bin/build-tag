@@ -1,8 +1,8 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+# Copyright (c) 2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
@@ -15,12 +15,18 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $0 rootfs tag
-Tag the build within the filesystem with build info
+Tag the build within the filesystem with build info. This info is then used by
+the inithooks package to force usage of an lternate inithook unit file (e.g.
+inithooks-lxc.service).
+
+Note: iso builds are not tagged and will always use the default inithook unit
+file (i.e. inithooks.service).
 
 Arguments::
 
     rootfs      - root filesystem path
-    tag         - the build tag
+    tag         - the build tag, currently supports:
+                  proxmox|xen|openstack|docker|ec2|vm
 EOF
 exit 1
 }
@@ -32,25 +38,31 @@ fi
 rootfs=$1
 tag=$2
 
-if [[ -z $tag ]]; then
-    tag="iso"
-fi
+[[ ! -d "$rootfs" ]] && fatal "$rootfs does not exist or is not a directory"
 
 case $tag in
     proxmox)
+        # explictly use inithooks-lxc.service
         unit="lxc"
-    ;;
+        ;;
     xen)
+        # explictly use inithooks-xen.service
         unit="xen"
-    ;;
-    *)
-        # openstack, docker, ec2 and vm
+        ;;
+    openstack|docker|ec2|vm)
+        # builds that can use the default inithooks.service
         unit="default"
-    ;;
+        ;;
+    *)
+        echo "unknown buildtype $tag"
+        usage
+        ;;
 esac
 
 TKL_INFO=$rootfs/var/lib/turnkey-info
 
-rm -rf $TKL_INFO
+rm -rf $TKL_INFO/inithooks.service
 mkdir -p $TKL_INFO/inithooks.service
 touch $TKL_INFO/inithooks.service/$unit
+
+exit 0
