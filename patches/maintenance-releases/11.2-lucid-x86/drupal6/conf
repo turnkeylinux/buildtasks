@@ -1,6 +1,0 @@
-#!/bin/bash
-
-# patch install schema to not display drupal footer by default
-SYSTEM_INSTALL=/usr/share/drupal6/modules/system/system.install
-sed --in-place "s/1, 10, 'footer'/0, 10, ''/" $SYSTEM_INSTALL
-
