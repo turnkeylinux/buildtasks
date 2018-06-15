@@ -55,7 +55,7 @@ AMI_NAME=$rootfs.img
 ${PARTED} -s ${AMI_NAME} mktable msdos
 ${PARTED} -s -a optimal ${AMI_NAME} mkpart primary ext3 1Mi 100%
 ${PARTED} -s ${AMI_NAME} set 1 boot on
-install-mbr ${AMI_NAME}
+install-mbr --force ${AMI_NAME}
 RESULT_KPARTX=`kpartx -asv ${AMI_NAME} 2>&1`
 
 if echo "${RESULT_KPARTX}" | grep "^add map" ; then
@@ -87,7 +87,7 @@ MOUNT_DIR=`mktemp -d -t build-debimg.XXXXXX`
 mount -o loop /dev/mapper/${LOOP_DEVICE} ${MOUNT_DIR}
 
 info "syncing rootfs to loopback"
-rsync -a -t -r -S -I -H $rootfs/ ${MOUNT_DIR}
+cp -a $rootfs/ ${MOUNT_DIR}
 
 info "install extlinux"
 mkdir -p ${MOUNT_DIR}/boot/extlinux
@@ -118,7 +118,7 @@ fi
 
 info "creating qcow2 image"
 QCOW2_NAME=$name-openstack.qcow2
-QEMU_VERSION=`qemu-img --help | head -n 1 | cut -d" " -f3 | cut -d"," -f1`
+QEMU_VERSION=`qemu-img --help | head -n 1 | cut -d" " -f3 | cut -d"," -f1 | cut -d"(" -f1`
 if dpkg --compare-versions ${QEMU_VERSION} gt 1.0 ; then
     OTHER_QEMU_IMG_OPTIONS=" -o compat=0.10"
 else

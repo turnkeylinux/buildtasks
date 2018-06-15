@@ -110,6 +110,7 @@ fi
 if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $rootfs
     rm -rf $cdroot
+    rm -f $rootfs.img
     [ "$publish" == "yes" ] && $BT/bin/clean openstack $appver
 fi
 
