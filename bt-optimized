@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -24,7 +24,14 @@ Arguments::
 
 Options::
 
-    --publish           - if set, image and meta files will be published
+    --publish           - if set, image and meta files will be published,
+                          each local build will be removed after publishing
+                          (unless BT_DEBUG set)
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+
 EOF
 exit 1
 }
@@ -42,6 +49,7 @@ while [ "$1" != "" ]; do
 done
 
 [ -n "$appver" ] || usage
+[ -n "$BT_DEBUG" ] && unset clean
 
 BT=$(dirname $(readlink -f $0))
 ARCH=$(dpkg --print-architecture)
