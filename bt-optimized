@@ -47,13 +47,13 @@ BT=$(dirname $(readlink -f $0))
 ARCH=$(dpkg --print-architecture)
 
 $BT/bt-vm $opts $appver
-[ "$clean" = "y" ] && $BT/bt-clean vm $appver
+[ "$clean" = "y" ] && $BT/bin/clean vm $appver
 $BT/bt-container $opts $appver
-[ "$clean" = "y" ] && $BT/bt-clean container $appver
+[ "$clean" = "y" ] && $BT/bin/clean container $appver
 $BT/bt-openstack $opts $appver
-[ "$clean" = "y" ] && $BT/bt-clean openstack $appver
+[ "$clean" = "y" ] && $BT/bin/clean openstack $appver
 $BT/bt-xen $opts $appver
-[ "$clean" = "y" ] && $BT/bt-clean xen $appver
+[ "$clean" = "y" ] && $BT/bin/clean xen $appver
 [ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appver
 
 exit 0
