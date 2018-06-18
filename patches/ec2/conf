@@ -30,12 +30,3 @@ if [ $(cat /etc/passwd | cut -d: -f1 | grep ansible) ]; then
     ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
     sed -i "/.ssh/ s|root|home/admin|" $ansible_init
 fi
-
-FIRSTBOOT_D=/usr/lib/inithooks/firstboot.d
-if [ -x /usr/bin/mysql ]; then
-    rm /etc/mysql/debian.cnf
-    update-rc.d -f mysql remove
-    mv $FIRSTBOOT_D/20regen-mysql-secrets $FIRSTBOOT_D/19regen-mysql-secrets
-else
-    rm $FIRSTBOOT_D/20regen-mysql-secrets
-fi
