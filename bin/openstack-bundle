@@ -87,7 +87,7 @@ MOUNT_DIR=`mktemp -d -t build-debimg.XXXXXX`
 mount -o loop /dev/mapper/${LOOP_DEVICE} ${MOUNT_DIR}
 
 info "syncing rootfs to loopback"
-cp -a $rootfs/ ${MOUNT_DIR}
+cp -a $rootfs/* ${MOUNT_DIR}
 
 info "install extlinux"
 mkdir -p ${MOUNT_DIR}/boot/extlinux
