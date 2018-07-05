@@ -37,6 +37,9 @@ dpkg --purge ntp || true
 
 systemctl disable confconsole
 
+# remove /etc/fstab - workaround #1139
+rm -rf /etc/fstab
+
 # modprobe doesn't work in lxc
 mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
