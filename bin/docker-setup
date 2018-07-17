@@ -48,7 +48,7 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install $1
 }
 
-if ! which lxc >/dev/null; then
+if ! which lxc-create >/dev/null; then
     info "installing lxc & xz-utils"
     install "lxc xz-utils"
 fi
@@ -64,11 +64,11 @@ if [ ! -e /etc/apt/sources.list.d/docker.list ]; then
     install apt-transport-https
     info "importing docker repo key and creating docker apt repo entry"
     GPG_FINGERPRINT=9DC858229FC7DD38854AE2D88D81803C0EBFCD88
-    gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys $FINGERPRINT
-    gpg --output /usr/share/keyrings/docker.gpg --export $FINGERPRINT
+    gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys $GPG_FINGERPRINT
+    gpg --output /usr/share/keyrings/docker.gpg --export $GPG_FINGERPRINT
     
     cat > /etc/apt/sources.list.d/docker.list <<EOF
-deb [signed-by=/usr/share/keyrings/docker.gpg,arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable
+deb [signed-by=/usr/share/keyrings/docker.gpg ,arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable
 EOF
     REPO_ORIGIN="apt.dockerproject.org"
     cat > /etc/apt/preferences.d/docker<<EOF
