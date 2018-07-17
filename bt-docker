@@ -27,6 +27,8 @@ Options::
     --publish           - if set, image will be uploaded to docker index
                           and metadata will be publish
     --docker-publish    - if set, image will be uploaded to docker index
+    --mark-as-latest    - if set, the :latest tag will point to the
+                          newly build image
 
 Environment::
 
@@ -40,6 +42,7 @@ while [ "$1" != "" ]; do
         --help|-h )  usage;;
         --publish)   publish="yes";;
         --docker-publish)   docker_publish="yes";;
+        --mark-as-latest)   mark_as_latest="yes";;
         *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
     esac
     shift
@@ -109,7 +112,7 @@ $BT/bin/build-tag $rootfs docker
 
 # create docker image
 appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
-dockername=$BT_DOCKER_USER/${appname}-${appversion}
+dockername=$BT_DOCKER_USER/${appname}:${appversion}
 $BT/bin/docker-bundle $rootfs $dockername $ports
 
 $BT/bin/generate-buildenv docker $BT_ISOS/$isofile.hash > $O/$name.docker.buildenv
@@ -117,9 +120,18 @@ $BT/bin/generate-buildenv docker $BT_ISOS/$isofile.hash > $O/$name.docker.builde
 # publish if specified
 if [ "$publish" == "yes" ] || [ "$docker_publish" == "yes" ]; then
     while true; do
-        docker push $dockername && break
-        echo "autoresume push: sleeping for 5 seconds"
-        sleep 5
+        if docker push $dockername; then
+            if [ "$mark_as_latest" == "yes" ]; then
+                docker tag $dockername "$BT_DOCKER_USER/${appname}:latest"
+                docker push "$BT_DOCKER_USER/${appname}:latest"
+                break
+            else
+                break
+            fi
+        else
+            echo "autoresume push: sleeping for 5 seconds"
+            sleep 5
+        fi
     done
 
     if [ "$publish" == "yes" ]; then
