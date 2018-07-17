@@ -9,6 +9,7 @@
 # option) any later version.
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -50,8 +51,16 @@ _git_state() {
 _common() {
     _git_state $BT
     echo "turnkey_version $(cat /etc/turnkey_version)"
-    echo "ami-id $(which ec2metadata >/dev/null && ec2metadata --ami-id || echo none)"
-    echo "awscli $(python -c 'import awscli; print awscli.__version__')"
+    if which ec2metadata >/dev/null; then
+        if ping -c1 169.254.169.254 >/dev/null; then
+            echo "ami-id $(ec2metadata --ami-id)"
+        else
+            echo "ami-id unknown - could not connect to 169.254.169.254"
+        fi
+    else
+        echo "ami-id unknown - ec2metadata not installed"
+    fi
+    echo "awscli $(python -c 'import awscli; print awscli.__version__' 2>/dev/null || echo not-installed)"
 }
 
 _optimized() {
