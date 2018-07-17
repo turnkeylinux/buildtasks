@@ -25,7 +25,8 @@ Arguments::
 Options::
 
     --publish           - if set, image will be uploaded to docker index
-                          and metadata will be publish
+                          and metadata will be publish; also assumes
+                          '--mark-as-latest'.
     --docker-publish    - if set, image will be uploaded to docker index
     --mark-as-latest    - if set, the :latest tag will point to the
                           newly build image
@@ -40,7 +41,7 @@ exit 1
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )  usage;;
-        --publish)   publish="yes";;
+        --publish)   publish="yes"; mark_as_latest="yes";;
         --docker-publish)   docker_publish="yes";;
         --mark-as-latest)   mark_as_latest="yes";;
         *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
