@@ -91,7 +91,6 @@ bt_vm() {
 
 bt_docker() {
     echo "docker $(docker --version)"
-    echo "aufs-tools $(dpkg -s aufs-tools | grep Version | cut -d ' ' -f 2)"
 }
 
 if [[ "$#" != "2" ]]; then
