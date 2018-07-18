@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -57,6 +57,11 @@ if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
 else
     warning "--publish was not specified"
+fi
+
+if [ ! -e /root/vm-setup.done ]; then
+    $BT/bin/vm-setup
+    touch /root/vm-setup.done
 fi
 
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)

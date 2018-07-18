@@ -1,0 +1,66 @@
+#!/bin/bash -e
+# Copyright (c) 2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0)
+Setup/update system ready for bt-vm
+
+Environment::
+
+    BT_DEBUG                turn on debugging
+
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        *)             usage;;
+    esac
+    shift
+done
+
+[ -n "$BT_DEBUG" ] && set -x
+
+OVFTOOL_URL='https://my.vmware.com/group/vmware/details?downloadGroup=OVFTOOL430&productId=742'
+
+install() {
+    info "installing $@"
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
+}
+
+declare -A PKGS
+PKGS=( [qemu]=qemu-img [parted]=parted [kpartx]=kpartx \
+    [grub-pc]=grub-bios-setup [zip]=zip )
+
+unset pkgs_to_install
+for pkg in ${!PKGS[@]}; do
+    if ! which ${PKGS[pkg]} >/dev/null; then
+        pkgs_to_install="${pkgs_to_install} ${pkg}"
+    fi
+done
+[[ -z ${pkgs_to_install} ]] || install ${pkgs_to_install}
+
+if ! which ovftool >/dev/null; then
+    msg="VMWare OFVTool not installed.\n\n"
+    msg="${msg}Please download and install 'VMware OVF Tool for Linux 64-bit'. "
+    msg="${msg}It can be downloaded from:\n\n\t${OVFTOOL_URL}\n\nand installed with:\n"
+    msg="${msg}\n\tpath/to/VMware-ovftool-VER-lin.x86_64.bundle --console --eulas-agreed"
+    msg="$(echo -e $msg)"
+    fatal "$msg"
+fi
