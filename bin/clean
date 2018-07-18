@@ -50,8 +50,8 @@ done
 [ -n "$appver" ] || usage
 [ -n "$BT_DEBUG" ] && set -x
 
-export BT=$(dirname $(readlink -f $0))
-export BT_CONFIG=$BT/config
+BT=$(dirname $(dirname $(readlink -f $0)))
+BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 
 remove() {
@@ -84,4 +84,3 @@ remove() {
 [ "$xen" = "y" ] && remove $appver xen
 
 exit 0
-
