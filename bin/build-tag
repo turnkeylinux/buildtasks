@@ -49,7 +49,11 @@ case $tag in
         # explictly use inithooks-xen.service
         unit="xen"
         ;;
-    openstack|docker|ec2|vm)
+    openstack)
+        # explicitly use the inithooks-openstack.service
+        unit="openstack"
+        ;;
+    docker|ec2|vm)
         # builds that can use the default inithooks.service
         unit="default"
         ;;
