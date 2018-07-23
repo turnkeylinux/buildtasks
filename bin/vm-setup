@@ -50,7 +50,7 @@ PKGS=( [qemu]=qemu-img [parted]=parted [kpartx]=kpartx \
 
 unset pkgs_to_install
 for pkg in ${!PKGS[@]}; do
-    if ! which ${PKGS[pkg]} >/dev/null; then
+    if ! which ${PKGS[${pkg}]} >/dev/null; then
         pkgs_to_install="${pkgs_to_install} ${pkg}"
     fi
 done
