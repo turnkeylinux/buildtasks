@@ -125,6 +125,8 @@ umount $rootfs.vm/dev
 umount $rootfs.vm/
 
 info "cleaning up volume groups and mounts"
+# udev seems to be holding files open on occasion?!
+systemctl restart systemd-udevd.service
 vgchange -a n $VG
 kpartx -dv $rootfs.raw
 dmsetup remove_all
