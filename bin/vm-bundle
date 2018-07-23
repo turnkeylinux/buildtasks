@@ -118,6 +118,7 @@ echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" > $fstab
 echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
 
 info "umounting the jumble..."
+sync # ensure everything is written from cache before trying to umount
 umount $rootfs.vm/proc
 grep $rootfs.vm/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
 umount $rootfs.vm/dev
