@@ -35,6 +35,9 @@ mkdir -p /lib/modules
 # remove ntp daemon
 dpkg --purge ntp || true
 
+# disable tklbam fixclock-hook - can't set time in a container (closes #1170)
+chmod -x /etc/tklbam/hooks.d/fixclock
+
 systemctl disable confconsole
 
 # remove /etc/fstab - workaround #1139
