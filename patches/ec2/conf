@@ -24,9 +24,11 @@ chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
 turnkey-sudoadmin on --disable-setpass
 
 # provide for AWSMP requirment of "no default passwords"
-passwd -l admin
-if [ $(cat /etc/passwd | cut -d: -f1 | grep ansible) ]; then
-    passwd -l ansible
-    ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
-    sed -i "/.ssh/ s|root|home/admin|" $ansible_init
-fi
+additional_users=$(grep ":[1-9][0-9][0-9][0-9]:" /etc/passwd | cut -d: -f1)
+for user in $additional_users; do
+    passwd -l $user
+    if [[ $user = "ansible" ]]; then
+        ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
+        sed -i "/.ssh/ s|root|home/admin|" $ansible_init
+    fi
+done
