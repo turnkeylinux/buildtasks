@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -10,6 +10,7 @@
 
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -41,10 +42,16 @@ if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
     gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0x$BT_GPGKEY
 fi
 
-
 info "verifying gpg signature"
-if ! gpg --verify $hashpath; then
-    fatal "$hashpath gpg verification failed"
+if ! output=$(gpg --verify $hashpath 2>&1); then
+    if [ "${output%%$'\n'*}" = "gpg: no valid OpenPGP data found." ]; then
+        warning "hash file is not signed by gpg - this is expected if building locally and/or the hash file is unsigned"
+    else
+        echo "$output"
+        fatal "$hashpath gpg verification failed"
+    fi
+else
+    echo "$output"
 fi
 
 info "verifying checksum"

@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -46,12 +46,16 @@ isofile=turnkey-$appname-$version.iso
 hashfile=turnkey-$appname-$version.iso.hash
 hashpath=$isodir/$hashfile
 
+. $BT_CONFIG/aws.cfg &>/dev/null || true
+
 if [ ! -e $hashpath ]; then
-    src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$hashfile
-    wget --read-timeout=60 --tries=10 $src -O $hashpath
+    mirror_src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$hashfile
+    bucket_src=s3://turnkeylinux-builds/metadata/$hashfile
+    wget --read-timeout=60 --tries=10 $mirror_src -O $hashpath \
+        || aws s3 cp $bucket_src $hashpath \
+        || fatal "$hashfile download failed"
 else
-    info "$hashfile already exists, skipping..."
-    exit 0
+    info "$hashfile already exists, skipping download..."
 fi
 
 if ! $BT/bin/signature-verify $isodir/$isofile $hashpath; then
@@ -59,4 +63,3 @@ if ! $BT/bin/signature-verify $isodir/$isofile $hashpath; then
     rm $hashpath
     fatal "$hashfile verification failed"
 fi
-

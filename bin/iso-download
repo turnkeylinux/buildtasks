@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -37,11 +37,15 @@ appname=$3
 isofile=turnkey-$appname-$version.iso
 
 if [ -e $outdir/$isofile ]; then
-    info "$isofile already exists, skipping..."
+    info "$isofile already exists, skipping download..."
     exit 0
 fi
 
-mkdir -p $outdir
-images="http://mirror.turnkeylinux.org/turnkeylinux/images"
-wget --read-timeout=60 --tries=10 $images/iso/$isofile -O $outdir/$isofile
+. $BT_CONFIG/aws.cfg &>/dev/null || true
 
+mkdir -p $outdir
+mirror_images="http://mirror.turnkeylinux.org/turnkeylinux/images"
+bucket_images="s3://turnkeylinux-builds/images"
+wget --read-timeout=60 --tries=10 $mirror_images/iso/$isofile -O $outdir/$isofile \
+    || aws s3 cp $bucket_images/iso/$isofile $outdir/$isofile \
+    || fatal "$isofile download failed"
