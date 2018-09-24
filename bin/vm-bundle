@@ -136,6 +136,11 @@ rm -f /etc/lvm/backup/$VG
 info "converting raw image to vmdk"
 qemu-img convert -f raw $rootfs.raw -O vmdk -o compat6 $name.vmdk
 
+if [ -z "$BT_DEBUG" ]; then
+    info "cleaning up $rootfs.raw as it's no longer needed"
+    rm -f $rootfs.raw
+fi
+
 info "creating vmx"
 cat > $name.vmx<<EOF 
 #!/usr/bin/vmware
@@ -229,8 +234,7 @@ ovftool --shaAlgorithm=SHA1 $name.ovf ../$name.ova
 cd ../
 
 if [ -z "$BT_DEBUG" ]; then
-    info "performing final cleanup"
+    info "cleaning up vm temp files"
     rm -rf $name
-    rm -f $rootfs.raw
 fi
 
