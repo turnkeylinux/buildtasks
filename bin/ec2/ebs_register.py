@@ -31,6 +31,7 @@ import getopt
 import utils
 
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
+import boto3
 
 log = utils.get_logger('ebs-register')
 
@@ -86,14 +87,19 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=Fal
     block_device_map[ephemeral_device_name] = ephemeral
 
     log.debug('registering image - %s', name)
-    ami_id = conn.register_image(
-        name=name,
-        description=desc,
-        kernel_id=kernel_id,
-        architecture=ec2_arch,
-        root_device_name=rootfs_device_name,
-        block_device_map=block_device_map,
-        virtualization_type=virt)
+    client3 = utils.connect_boto3(region)
+    
+    response = client3.register_image(
+        Name=name,
+        Description=desc,
+        KernelId=kernel_id,
+        Architecture=ec2_arch,
+        RootDeviceName=rootfs_device_name,
+        BlockDeviceMap=block_device_map,
+        VirtualizationType=virt,
+        EnaSupport=True)
+
+    ami_id = response['ImageId']
 
     log.info('registered image - %s %s %s', ami_id, name, region)
     return ami_id, name
