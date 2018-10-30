@@ -35,7 +35,7 @@ def connect_boto3(region=None):
     return boto3.client('ec2',
         region_name = region,
         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_ACCESS_KEY_ID'))
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
 
 def get_turnkey_version(rootfs):
     return file(os.path.join(rootfs, "etc/turnkey_version")).read().strip()

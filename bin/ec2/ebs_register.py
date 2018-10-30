@@ -91,11 +91,22 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=Fal
     
     response = client3.register_image(
         Name=name,
-        Description=desc,
-        KernelId=kernel_id,
         Architecture=ec2_arch,
         RootDeviceName=rootfs_device_name,
-        BlockDeviceMap=block_device_map,
+        BlockDeviceMappings=[
+            {
+                'DeviceName': '/dev/xvda',
+                'Ebs': {
+                    'DeleteOnTermination': True,
+                    'VolumeSize': size,
+                    'SnapshotId': snapshot_id,
+                },
+            },
+            {
+                'DeviceName': '/dev/xvdb',
+                'VirtualName': 'ephemeral0',
+            }
+        ],
         VirtualizationType=virt,
         EnaSupport=True)
 
