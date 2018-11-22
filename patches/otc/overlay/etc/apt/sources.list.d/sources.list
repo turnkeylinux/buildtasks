@@ -1,0 +1,5 @@
+deb http://archive.turnkeylinux.org/debian stretch main
+
+deb http://deb.debian.org/debian stretch main multiverse
+deb http://deb.debian.org/debian stretch contrib
+deb http://deb.debian.org/debian stretch non-free

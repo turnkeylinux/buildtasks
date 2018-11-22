@@ -1,0 +1,120 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [--publish] appname-version
+Converts appliance appname-version to openstack image
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
+
+Options::
+
+    --publish           - if set, image and meta files will be published
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appver" ] || usage
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+O=$BT_BUILDS/otc
+mkdir -p $O
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
+fi
+
+# hack for cloudtasks issues with pre command
+if [ ! -e /root/openstack-setup.done ]; then
+    /turnkey/buildtasks/bin/openstack-setup
+    touch /root/openstack-setup.done
+fi
+
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
+
+os_arch=$(dpkg --print-architecture)
+[ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
+
+isofile=turnkey-${appname}-${BT_VERSION}.iso
+name=turnkey-${appname}-${BT_VERSION}
+rootfs=$name.rootfs
+cdroot=$name.cdroot
+
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+#$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+
+cd $O
+tklpatch-extract-iso $BT_ISOS/$isofile
+
+tklpatch-apply $rootfs $BT/patches/headless
+tklpatch-apply $rootfs $BT/patches/cloud
+tklpatch-apply $rootfs $BT/patches/openstack
+
+echo "applying OTC patches ..."
+tklpatch-apply $rootfs $BT/patches/otc
+
+$BT/bin/rootfs-cleanup $rootfs
+
+$BT/bin/aptconf-tag $rootfs openstack
+$BT/bin/build-tag $rootfs openstack
+
+$BT/bin/openstack-bundle $rootfs
+
+$BT/bin/generate-signature $O/$name-openstack.qcow2
+
+$BT/bin/generate-buildenv openstack $BT_ISOS/$isofile.hash > $O/$name-openstack.qcow2.buildenv
+
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/openstack/
+    $BT/bin/publish-files $O/$name-openstack.qcow2
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$name-openstack.{qcow2.hash,qcow2.buildenv}
+fi
+
+if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    rm -rf $rootfs
+    rm -rf $cdroot
+    rm -f $rootfs.img
+    [ "$publish" == "yes" ] && $BT/bin/clean openstack $appver
+fi
+

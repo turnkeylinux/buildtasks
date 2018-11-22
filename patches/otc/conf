@@ -1,0 +1,22 @@
+#!/bin/bash -ex
+
+install() {
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+echo "OTC: installing cloud-init package"
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
+  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
+  install cloud-init
+
+DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
+  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
+  install sudo
+
+
+
