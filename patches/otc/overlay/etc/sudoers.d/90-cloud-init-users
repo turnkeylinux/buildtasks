@@ -1,0 +1,4 @@
+# Created by cloud-init v. 18.3-0-g108452bf-1~bddeb on Tue, 06 Nov 2018 11:17:38 +0000
+
+# User rules for linux
+linux ALL=(ALL) NOPASSWD:ALL
