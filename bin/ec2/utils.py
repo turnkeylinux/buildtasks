@@ -20,6 +20,7 @@ import executil
 import ec2metadata
 
 from boto.ec2 import connect_to_region
+import boto3
 
 def connect(region=None):
     region = region if region else get_region()
@@ -28,6 +29,13 @@ def connect(region=None):
         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
         security_token=os.environ.get('AWS_SESSION_TOKEN', None))
+
+def connect_boto3(region=None):
+    region = region if region else get_region()
+    return boto3.client('ec2',
+        region_name = region,
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
 
 def get_turnkey_version(rootfs):
     return file(os.path.join(rootfs, "etc/turnkey_version")).read().strip()
