@@ -20,7 +20,7 @@ Builds appliance appname (e.g., core) ISO
 
 Arguments::
 
-    appname             - e.g., core-14.2-jessie-amd64
+    appname             - e.g., core
 
 Options::
 
