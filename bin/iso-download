@@ -46,8 +46,8 @@ fi
 mkdir -p $outdir
 mirror_images="http://mirror.turnkeylinux.org/turnkeylinux/images"
 bucket_images="s3://turnkeylinux-builds/images"
-if ! wget --read-timeout=60 --tries=10 $mirror_images/iso/$isofile \
-        -O $outdir/$isofile; then
+if ! curl --fail --max-time 60 --retry 10 --retry-delay 1 --retry-max-time 90 \
+        $mirror_images/iso/$isofile -O $outdir/$isofile; then
     if ! aws s3 cp $bucket_images/iso/$isofile $outdir/$isofile; then
         fatal "$isofile download failed"
     fi
