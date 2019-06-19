@@ -13,4 +13,4 @@ fi
 
 service postfix restart
 
-chmod -x /var/lib/inithooks/firstboot.d/35postfix-unprivileged
+chmod -x /usr/lib/inithooks/firstboot.d/35postfix-unprivileged
