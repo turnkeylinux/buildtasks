@@ -1,0 +1,15 @@
+#!/bin/bash
+# remove read/write access to /var/spool/postfix/dev/{u,random}
+# as well as prevents it from being recreated
+
+appname="$(turnkey-version | sed 's/^turnkey-\(.*\)-[0-9]\+.[0-9]\+-.*-amd64/\1/g')"
+if [[ "$appname" != "openldap" ]]; then
+    rm -rf /var/spool/postfix/dev/{u,}random
+    touch /var/spool/postfix/dev/{u,}random
+    chown root:root /var/spool/postfix/dev/{u,}random
+    chmod 000 /var/spool/postfix/dev/{u,}random
+    chattr +i /var/spool/postfix/dev/{u,}random
+fi
+
+service postfix restart
+
