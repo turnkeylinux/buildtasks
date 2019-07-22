@@ -78,7 +78,9 @@ case "$appname" in
     odoo)             export VM_MEMORY=1024 ;;
     openvas)          export VM_MEMORY=1024 ;;
     tkldev)           export VM_MEMORY=768 ;;
+    magento)          export VM_MEMORY=768 ;;
     moodle)           export VM_MEMORY=768 ;;
+    nextcloud)        export VM_MEMORY=768 ;;
     tomcat-apache)    export VM_MEMORY=768 ;;
     *)                export VM_MEMORY=512 ;;
 esac
