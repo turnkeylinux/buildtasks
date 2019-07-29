@@ -72,8 +72,8 @@ export VM_URL="https://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
 
 case "$appname" in
-    canvas)           export VM_MEMORY=1024 ;;
-    gitlab)           export VM_MEMORY=1024 ;;
+    canvas)           export VM_MEMORY=2048 ;;
+    gitlab)           export VM_MEMORY=2048 ;;
     jenkins)          export VM_MEMORY=1024 ;;
     odoo)             export VM_MEMORY=1024 ;;
     openvas)          export VM_MEMORY=1024 ;;
