@@ -21,3 +21,7 @@ DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
 
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
+
+# workaround https://github.com/turnkeylinux/tracker/issues/1340
+# proper fix is in confconsole package
+systemctl enable inithooks-openstack.service
