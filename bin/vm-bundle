@@ -28,7 +28,7 @@ Environment::
     VM_MEMORY     - Amount of memory - integer ($VM_MEMORY)
     VM_FULLNAME   - Display name of image ($VM_FULLNAME)
     VM_GUESTOS    - Guest OS of image ($VM_GUESTOS)
-
+    BT_DEBUG      - turn on debugging
 EOF
 exit 1
 }
@@ -36,6 +36,8 @@ exit 1
 if [[ "$#" != "1" ]]; then
     usage
 fi
+
+[ -n "$BT_DEBUG" ] && set -x
 
 rootfs=$1
 name=$(basename $rootfs .rootfs)
@@ -108,7 +110,11 @@ cat > $devicemap <<EOF
 (hd0)   /dev/${loopdev%p1}
 EOF
 
+# work around edge case bug by manually starting/stopping lvm2-lvmetad service
+# Note: this works within a chroot via the sysv-init script (/etc/init.d/lvm2-lvmetad)
+chroot $rootfs.vm service lvm2-lvmetad start
 chroot $rootfs.vm grub-mkconfig -o /boot/grub/grub.cfg
+chroot $rootfs.vm service lvm2-lvmetad stop
 grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.vm /dev/${loopdev%p1}
 rm -f $devicemap
 
@@ -126,7 +132,19 @@ umount $rootfs.vm/
 
 info "cleaning up volume groups and mounts"
 # udev seems to be holding files open on occasion?!
-systemctl restart systemd-udevd.service
+# workaround weird issue where systemd-networkd was locking the lv?!
+# this covers both cases
+if locked=$(grep $VG /proc/*/mounts); then
+    pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
+    for pid in $pids; do
+        comm=$(ps -p $pid -o comm | tail -1)
+        if [[ comm =~ ^systemd- ]]; then
+            systemctl restart $comm
+        else
+            fatal "Process $comm locking volume group; unsure how to proceed"
+        fi
+    done
+fi
 vgchange -a n $VG
 kpartx -dv $rootfs.raw
 dmsetup remove_all
