@@ -29,11 +29,11 @@ if [[ "$#" != "1" ]]; then
     usage
 fi
 
+[ -n "$BT_DEBUG" ] && set -x
+
 rootfs=$1
 name=$(echo $rootfs | sed 's/.rootfs//')
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
-
-
 
 case "$appname" in
     canvas)           loopsize_padding=786432 ;;
