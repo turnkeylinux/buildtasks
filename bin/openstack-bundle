@@ -30,7 +30,7 @@ if [[ "$#" != "1" ]]; then
     usage
 fi
 
-set -x
+[[ -n "BT_DEBUG" ]] && set -x
 
 rootfs=$1
 name=$(echo $rootfs | sed 's/.rootfs//')
@@ -100,7 +100,6 @@ append initrd=/initrd.img root=LABEL=root biosdevname=0 net.ifnames=0 console=tt
 rm ${MOUNT_DIR}/extlinux.conf || true
 ln ${MOUNT_DIR}/boot/extlinux/extlinux.conf ${MOUNT_DIR}/extlinux.conf
 extlinux --install ${MOUNT_DIR}/boot/extlinux
-
 
 info "umount loopback"
 umount -d ${MOUNT_DIR}
