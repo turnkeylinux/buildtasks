@@ -109,18 +109,21 @@ fsck.ext3 -f /dev/mapper/${LOOP_DEVICE} || true
 
 debug_umount() {
     resource=$1
+    dmsetup ls
+    losetup -a
+    kpartx -l ${LOOP_DEVICE}
     if locked=$(grep $resource /proc/*/mounts); then
         pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
         for pid in $pids; do
             ps -p $pid -o cmd
         done
     fi
-    exit 1
+    kpartx -v -d $resource || exit 1
 }
 
 #the next command failed once, so
 sync
-kpartx -d ${AMI_NAME} || debug_umount ${AMI_NAME}
+kpartx -v -d ${AMI_NAME} || debug_umount ${AMI_NAME}
 
 if [ -z "$BT_DEBUG" ]; then
     info "removing directory"
