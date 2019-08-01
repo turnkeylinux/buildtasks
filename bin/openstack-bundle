@@ -10,6 +10,7 @@
 
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@" 1>&2; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -107,19 +108,18 @@ rmdir ${MOUNT_DIR}
 
 fsck.ext3 -f /dev/mapper/${LOOP_DEVICE} || true
 
-#the next command failed once, so
 sync
-for i in {1..11}; do
-    if kpartx -v -d ${AMI_NAME}; then
-        info "success - ${AMI_NAME} is unmounted (waited $(( i - 1)) seconds(s))"
+for i in {1..10}; do
+    sleep 1
+    kpartx -v -d ${AMI_NAME} || true
+    losetup_msg=$(losetup -a)
+    if [[ -z "$losetup_msg" ]]; then
+        info "Success - ${AMI_NAME} is unmounted (after $i attempt(s))."
         break
-    elif [ "$i" -eq 11 ]; then
-        fatal "${AMI_NAME} is NOT unmounted (retried 10 times over 10 seconds)"
+    elif [ "$i" -eq 10 ]; then
+        fatal "${AMI_NAME} is NOT unmounted (retried 10 times over 10 seconds)."
     else
-        dmsetup ls
-        losetup -a
-        kpartx -l ${LOOP_DEVICE%p1} || true
-        sleep 1
+        warning "Attempt #$i to unmount ${AMI_NAME} failed - waiting a second then retrying."
     fi
 done
 
