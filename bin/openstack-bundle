@@ -107,23 +107,21 @@ rmdir ${MOUNT_DIR}
 
 fsck.ext3 -f /dev/mapper/${LOOP_DEVICE} || true
 
-debug_umount() {
-    resource=$1
-    dmsetup ls
-    losetup -a
-    kpartx -l ${LOOP_DEVICE}
-    if locked=$(grep $resource /proc/*/mounts); then
-        pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
-        for pid in $pids; do
-            ps -p $pid -o cmd
-        done
-    fi
-    kpartx -v -d $resource || exit 1
-}
-
 #the next command failed once, so
 sync
-kpartx -v -d ${AMI_NAME} || debug_umount ${AMI_NAME}
+for i in {1..11}; do
+    if kpartx -v -d ${AMI_NAME}; then
+        info "success - ${AMI_NAME} is unmounted (waited $(( i - 1)) seconds(s))"
+        break
+    elif [ "$i" -eq 11 ]; then
+        fatal "${AMI_NAME} is NOT unmounted (retried 10 times over 10 seconds)"
+    else
+        dmsetup ls
+        losetup -a
+        kpartx -l ${LOOP_DEVICE%p1} || true
+        sleep 1
+    fi
+done
 
 if [ -z "$BT_DEBUG" ]; then
     info "removing directory"
