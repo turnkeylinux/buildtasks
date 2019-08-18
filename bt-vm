@@ -86,14 +86,10 @@ case "$appname" in
 esac
 
 case "${codename}-${arch}" in
-    squeeze-i386)  export VM_GUESTOS="debian6" ;;
-    wheezy-i386)   export VM_GUESTOS="debian7" ;;
-    jessie-i386)   export VM_GUESTOS="debian8" ;;
-    stretch-i386)  export VM_GUESTOS="debian9" ;;
-    squeeze-amd64) export VM_GUESTOS="debian6-64" ;;
-    wheezy-amd64)  export VM_GUESTOS="debian7-64" ;;
-    jessie-amd64)  export VM_GUESTOS="debian8-64" ;;
-    stretch-amd64) export VM_GUESTOS="debian9-64" ;;
+    stretch-i386)   export VM_GUESTOS="debian9" ;;
+    stretch-amd64)  export VM_GUESTOS="debian9-64" ;;
+    buster-amd64)   export VM_GUESTOS="debian10-64" ;;
+    bullseye-amd64) export VM_GUESTOS="debian11-64" ;;
     *)             fatal "vm_guestos could not be determined" ;;
 esac
 
