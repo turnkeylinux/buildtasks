@@ -110,12 +110,14 @@ cat > $devicemap <<EOF
 (hd0)   /dev/${loopdev%p1}
 EOF
 
-# work around edge case bug by manually starting/stopping lvm2-lvmetad service
-# Note: this works within a chroot via the sysv-init script (/etc/init.d/lvm2-lvmetad)
-chroot $rootfs.vm service lvm2-lvmetad start
+# lvm-metadata service no longer exists in Buster but without /run/udev, it
+# hangs forever; mounting /run/udev from host resolves that
+mkdir -p $rootfs.vm/run/udev
+mount --rbind --make-rslave /run/udev $rootfs.vm/run/udev
 chroot $rootfs.vm grub-mkconfig -o /boot/grub/grub.cfg
-chroot $rootfs.vm service lvm2-lvmetad stop
 grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.vm /dev/${loopdev%p1}
+umount $rootfs.vm/run/udev
+rm -rf $rootfs.vm/run/udev
 rm -f $devicemap
 
 info "creating fstab"
