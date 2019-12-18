@@ -55,3 +55,12 @@ sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
 # clean up unrequired package(s)
 apt autoremove -y
+
+# remove postfix /dev/[u]random
+# unless it's openldap because it breaks ldap/postfix integration see issue #855
+# this is permanantly locked in an overlay but cannot be done here because it
+# makes the rootfs itself impossible to remove
+appname="$(turnkey-version | sed 's/^turnkey-\(.*\)-[0-9]\+.[0-9]\+-.*-amd64/\1/g')"
+if [[ "$appname" != "openldap" ]]; then
+    rm -rf /var/spool/postfix/dev/{u,}random
+fi
