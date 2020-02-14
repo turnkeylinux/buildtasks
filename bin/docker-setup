@@ -48,10 +48,21 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install $1
 }
 
-if ! which lxc-create >/dev/null; then
-    info "installing lxc & xz-utils"
-    install "lxc xz-utils"
-fi
+unset pkgs
+reqd_binaries="lxc-create xz dirmngr"
+for binary in $reqd_binaries; do
+    if ! which $binary >/dev/null; then
+        if [[ "$binary" == "lxc-create" ]]; then
+            pkgs="$pkgs lxc"
+        elif [[ "$binary" == "xz" ]]; then
+            pkgs="$pkgs xz-utils"
+        else
+            pkgs="$pkgs $binary"
+        fi
+    fi
+done
+info "installing $pkgs"
+install "$pkgs"
 
 if ! grep -qs /sys/fs/cgroup /etc/fstab; then
     info "setting up cgroups"
