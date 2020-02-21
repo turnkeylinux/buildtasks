@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2017 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -21,6 +21,11 @@ Arguments::
 
     filepath        - path to file to be signed
 
+Environment::
+
+    RELEASE         - RELEASE to build for in the format DISTRO/CODENAME.
+                      If not set, defaults to host system.
+                      Example: debian/buster
 EOF
 exit 1
 }
@@ -32,11 +37,24 @@ fi
 filepath=$1
 filename=$(basename $1)
 
+[[ -n "$RELEASE" ]] || fatal "RELEASE not set"
+CODENAME=$(basename $RELEASE)
+
 info "generating sha256sum hash"
 SHA256SUM="$(sha256sum $filepath | cut -d " " -f 1)  $filename"
 
 info "generating sha512sum hash"
 SHA512SUM="$(sha512sum $filepath | cut -d " " -f 1)  $filename"
+
+TKL_KEY=tkl-$CODENAME-images.asc
+KEY_EMAIL=release-$CODENAME-images@turnkeylinux.org
+KEY_URL=https://raw.githubusercontent.com/turnkeylinux/common/master/keys/$TKL_KEY
+TMP_KEYRING=/tmp/temp.gpg
+GPG_COMMAND="gpg --no-default-keyring --keyring $TMP_KEYRING"
+curl $KEY_URL | $GPG_COMMAND --import
+GPG_LISTKEYS=$($GPG_COMMAND --list-keys --with-fingerprint $KEY_EMAIL | sed "s|^|      |g")
+UID_INFO=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | grep $KEY_EMAIL | sed "s|^.*::\(.*\):$|\1|")
+FINGERPRINT=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | awk -F: '$1 == "fpr" {print $10;}' | head -1)
 
 info "writing hash file"
 cat > $filepath.hash <<EOF
@@ -46,19 +64,12 @@ perform the following two steps to cryptographically verify image integrity:
 1. Verify the authenticity of this file by checking that it is signed with our
    GPG release key:
 
-    $ curl https://keybase.io/turnkeylinux/pgp_keys.asc | gpg --import
-    $ gpg --list-keys --with-fingerprint release@turnkeylinux.com
-      pub   2048R/A16EB94D 2008-08-15 [expires: 2023-08-12]
-            Key fingerprint = 694C FF26 795A 29BA E07B  4EB5 85C2 5E95 A16E B94D
-      uid   Turnkey Linux Release Key <release@turnkeylinux.com>
-
+    $ curl $KEY_URL | gpg --import
+    $ gpg --list-keys --with-fingerprint $KEY_EMAIL
+$GPG_LISTKEYS
     $ gpg --verify $filename.hash
-      gpg: Signature made using RSA key ID A16EB94D
-      gpg: Good signature from "Turnkey Linux Release Key <release@turnkeylinux.com>"
-
-    For extra credit you can validate the key's authenticity at:
-
-      https://keybase.io/turnkeylinux
+      gpg: Signature made using RSA key ID $FINGERPRINT
+      gpg: Good signature from "$UID_INFO"
 
 2. Recalculate the image hash and make sure it matches your choice of hash below.
 
@@ -76,5 +87,7 @@ perform the following two steps to cryptographically verify image integrity:
     $ sha512sum -c $filename.hash
       $filename: OK
 
-EOF
+    Final note, when checking SHAs automatically, please ignore warning noting that some lines are improperly formatted.
 
+EOF
+rm -f $TMP_KEYRING*
