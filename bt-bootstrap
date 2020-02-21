@@ -58,7 +58,7 @@ export BT_CONFIG=$BT/config
 
 O=$BT_BUILDS/bootstrap
 mkdir -p $O
-env
+
 if [[ -z "$RELEASE" ]]; then
     info "RELEASE not set, determining from system."
     distrib_ID=$(lsb_release -si)
