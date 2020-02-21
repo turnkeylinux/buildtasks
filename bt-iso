@@ -45,32 +45,6 @@ done
 [ -n "$appname" ] || usage
 [ -n "$BT_DEBUG" ] && set -x
 
-# temporary hack for building v15.0rc isos on v14.2 TKLDev
-if [ -n "$(grep jessie /etc/turnkey_version)" ]; then
-    export RELEASE="debian/stretch"
-    GPGKEY="A16EB94D"
-    IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-    BOOTSTRAP_NAME="bootstrap-stretch-$(dpkg --print-architecture)"
-    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/stretch"
-    if [ ! -d $BOOTSTRAP_PATH ]; then
-        info "downloading $BOOTSTRAP_NAME"
-        mkdir -p $(dirname $BOOTSTRAP_PATH)
-        cd $(dirname $BOOTSTRAP_PATH)
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash
-
-        info "verifying $BOOTSTRAP_NAME"
-        gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0x$GPGKEY
-        gpg --verify $BOOTSTRAP_NAME.tar.gz.hash
-
-        info "unpacking $BOOTSTRAP_NAME"
-        mkdir $BOOTSTRAP_PATH
-        tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
-
-        cd -
-    fi
-fi
-
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
@@ -83,15 +57,53 @@ else
     warning "--publish was not specified"
 fi
 
+# temporary hack for building v16.0rc isos on v15.0 TKLDev - inc bootstrap
+if [ -n "$(grep stretch /etc/turnkey_version)" ]; then
+    warning "stretch host detected, attempting to build for buster"
+    export CODENAME="buster"
+    export RELEASE="debian/$CODENAME"
+    GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
+    IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
+    BOOTSTRAP_NAME="bootstrap-$CODENAME-$(dpkg --print-architecture)"
+    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$CODENAME"
+    if [ ! -d $BOOTSTRAP_PATH ]; then
+        info "Attempting to download $BOOTSTRAP_NAME"
+        mkdir -p $(dirname $BOOTSTRAP_PATH)
+        cd $(dirname $BOOTSTRAP_PATH)
+        exit_code=0
+        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
+        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
+        if [[ "$exit_code" -eq 0 ]]; then
+            info "verifying $BOOTSTRAP_NAME"
+            gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys $GPGKEY
+            gpg --verify $BOOTSTRAP_NAME.tar.gz.hash
+
+            info "unpacking $BOOTSTRAP_NAME"
+            mkdir $BOOTSTRAP_PATH
+            tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
+            cd -
+        else
+            warning "Downloading bootstrap failed - Attempting to build bootstrap."
+            unset PUBLISH
+            [[ "$publish" != "yes" ]] || PUBLISH="--publish"
+            $BT/bt-bootstrap $PUBLISH --no-clean --force || fatal "Building bootstrap failed... :("
+            rsync --delete -Hac $(dirname $FAB_PATH)/bootstrap/build/bootstrap/ $FAB_PATH/bootstraps/$CODENAME/
+        fi
+    fi
+fi
+
 if [ ! -e $BT_PRODUCTS/$appname ]; then
+    info "Attempting to clone repo"
     cd $BT_PRODUCTS
     git clone https://github.com/turnkeylinux-apps/$appname.git
     cd $BT_PRODUCTS/$appname
 else
+    info "Repo found, attempting to update"
     cd $BT_PRODUCTS/$appname
     git pull
 fi
 
+info "Building appliance"
 deck -D build/root.sandbox || true
 make clean || true
 make || true
@@ -116,4 +128,3 @@ if [ -z "$BT_DEBUG" ]; then
     deck -D build/root.sandbox
     make clean
 fi
-
