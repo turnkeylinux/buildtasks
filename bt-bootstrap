@@ -131,6 +131,6 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $O/$BOOTSTRAP_TARBALL{.manifest,.hash,.buildenv}
 fi
 
-if [[ -z "$BT_DEBUG" ]] || [[ "$clean" != "no" ]]; then
+if [[ -z "$BT_DEBUG" ]] && [[ "$clean" != "no" ]]; then
     make clean
 fi
