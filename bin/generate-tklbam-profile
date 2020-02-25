@@ -75,7 +75,7 @@ class MountISO:
         executil.system("mount -o loop", iso, cdroot)
         self.cdroot = cdroot
 
-        executil.system("mount -o loop", join(cdroot, "casper/10root.squashfs"), rootfs)
+        executil.system("mount -o loop", join(cdroot, "live/10root.squashfs"), rootfs)
         self.rootfs = rootfs
 
     def __del__(self):
