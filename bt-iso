@@ -61,6 +61,8 @@ clone_or_pull() {
     # If $dir doesn't exist, clone $repo. If it does, update from origin master
     dir=$1
     repo=$2
+    [[ -n "$dir" ]] && [[ -n "$repo" ]] \
+        || fatal "One or more empty values passed to function: $FUNCNAME."
     if [ ! -e $dir ]; then
         info "Attempting to clone repo $repo to $dir."
         cd $(dirname $dir)
@@ -110,19 +112,26 @@ if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
             tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
             cd -
         else
-            warning "Downloading bootstrap failed - Attempting to build bootstrap."
+            warning "Downloading bootstrap failed."
+            info "Attempting to build bootstrap."
             unset PUBLISH
+            BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
             [[ "$publish" != "yes" ]] || PUBLISH="--publish"
-            $BT/bt-bootstrap $PUBLISH --no-clean --force || fatal "Building bootstrap failed... :("
-            rsync --delete -Hac $(dirname $FAB_PATH)/bootstrap/build/bootstrap/ $FAB_PATH/bootstraps/$CODENAME/
+            $BT/bt-bootstrap $PUBLISH --no-clean --force \
+                || fatal "Building bootstrap failed... :("
+            rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
+                $FAB_PATH/bootstraps/$CODENAME/
             # create symlinks so bin/generate-buildenv completes successfully
-            ln -s $BT_BUILDS/$BOOTSTRAP_NAME.tar.gz $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
-            ln -s $BT_BUILDS/$BOOTSTRAP_NAME.tar.gz.hash $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
+            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz \
+                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
+            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash \
+                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
         fi
     fi
 fi
 
-info "Building appliance"
+info "Preperation done. Building appliance $appname."
+cd $BT_PRODUCTS/$appname
 deck -D build/root.sandbox || true
 make clean || true
 make || true
@@ -132,7 +141,7 @@ if [ ! -e build/product.iso ]; then
         deck -D build/root.sandbox >/dev/null 2>&1 || true
         make clean >/dev/null 2>&1 || true
     fi
-    fatal "build failed..."
+    fatal "Build failed..."
 fi
 
 mkdir -p $BT_ISOS
