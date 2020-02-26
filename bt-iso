@@ -75,9 +75,17 @@ clone_or_pull() {
     fi
 }
 
+get_version() {
+    pkg=$1
+    pkg_info=$(dpkg -l | grep ^ii | tr -s [[:blank:]] ' ' | cut -d' ' -f2,3 \
+        | grep "^$pkg[ |:]")
+    echo $pkg_info | cut -d' ' -f2
+}
+
 # ensure important repos are cloned and at latest commit
 clone_or_pull $BT_PRODUCTS/$appname turnkeylinux-apps/$appname.git
 clone_or_pull $FAB_PATH/common turnkeylinux/common.git
+clone_or_pull $FAB_PATH/cdroots turnkeylinux/cdroots.git
 clone_or_pull $BT_PROFILES turnkeylinux/tklbam-profiles.git
 
 # if v16.x (buster) being built on v15.x (stretch) get/build right bootstrap
@@ -85,13 +93,24 @@ TKL_VER=$(head -1 $BT_PRODUCTS/$appname/changelog | cut -d' ' -f1)
 MAJ_VER_NO=$(basename $(echo $TKL_VER | tr '-' '/') | cut -d'.' -f1)
 if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
     && [[ $MAJ_VER_NO -eq 16 ]]; then
-    warning "stretch host detected, attempting to build for buster"
+    warning "Stretch host detected, attempting to build for Buster."
     RC="rc1"
-    info "Assuming RC build. Nominating $RC"
+    info "Assuming RC build. Nominating $RC."
     export VERSION_TAG=$RC
     export CODENAME="buster"
     export RELEASE="debian/$CODENAME"
-    GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
+    fab_ver=$(get_version fab)
+    if [[ "$fab_ver" != "8.0"* ]]; then
+        warning "Fab v$fab_ver detected; v0.8 required, attempting install."
+        fab_pkg=fab_0.8_stretch_amd64.deb
+        gh_url=https://github.com/turnkeylinux/fab/releases/download/v0.8
+        wget $gh_url/$fab_pkg
+        apt install ./$fab_pkg
+        rm -f $fab_pkg
+    else
+        info "Fab v$fab_ver detected; continuing..."
+    fi
+    export GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
     IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
     BOOTSTRAP_NAME="bootstrap-$CODENAME-$(dpkg --print-architecture)"
     BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$CODENAME"
