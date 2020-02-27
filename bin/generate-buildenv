@@ -19,6 +19,7 @@ Print build environment related to target build type
 
 Targets::
 
+    bootstrap   path/to/bootstrap_src_dir
     iso         appname
     vm          path/to/iso.hash
     ec2         path/to/iso.hash
@@ -72,6 +73,10 @@ _optimized() {
     echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"
 }
 
+bt_bootstrap() {
+    _git_state $1
+}
+
 bt_iso() {
     appname=$1
 
@@ -108,6 +113,7 @@ fi
 
 target=$1
 case $target in
+    bootstrap)  _common; bt_bootstrap $2;;
     iso)        _common; bt_iso $2;;
     ec2)        _common; _optimized $2; bt_ec2;;
     vm)         _common; _optimized $2; bt_vm;;
@@ -117,4 +123,3 @@ case $target in
     xen)        _common; _optimized $2;;
     *)          fatal "unrecognized build target";;
 esac
-

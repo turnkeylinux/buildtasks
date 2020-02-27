@@ -1,0 +1,136 @@
+#!/bin/bash -e
+# Copyright (c) 2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [ --publish ]
+Builds appliance bootstrap-CODENAME-ARCH.tar.gz
+
+Options::
+
+    --force             - delete existing bootstrap tarball & release files in
+                          outdir if they exist.
+    --publish           - publish bootstrap tarball and release files.
+    --no-clean          - DO NOT run 'make clean' on completion.
+
+Environment::
+
+    RELEASE             - RELEASE to build for in the format DISTRO/CODENAME.
+                          If not set, defaults to host system.
+                          Example: debian/buster
+    BT_DEBUG            - Turn on debugging.
+    FAB_ARCH            - If not set defaults to system architecture.
+    FAB_PATH            - Base Fab path (set by default on TKLDev)
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h)  usage;;
+        --force)    force="yes";;
+        --publish)  publish="yes";;
+        --no-clean) clean="no";;
+        *)          fatal "Unknown argument '$1'.";;
+    esac
+    shift
+done
+
+[[ -z "$BT_DEBUG" ]] || set -x
+[[ -n "$FAB_PATH" ]] || fatal "FAB_PATH not set"
+[[ -n "$FAB_ARCH" ]] || export FAB_ARCH=$(dpkg --print-architecture)
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+O=$BT_BUILDS/bootstrap
+mkdir -p $O
+
+if [[ -z "$RELEASE" ]]; then
+    info "RELEASE not set, determining from system."
+    distrib_ID=$(lsb_release -si)
+    codename=$(lsb_release -sc)
+    case ${distrib_ID,,} in # all lower case
+        turnkey|debian)
+            distrib_ID=debian;;
+        *)
+            usage
+            fatal "Distro '$distrib_ID' currently unsupported.";;
+    esac
+    export RELEASE=$distrib_ID/$codename
+fi
+export CODENAME=$(basename $RELEASE)
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
+fi
+
+BOOTSTRAP_TARBALL="bootstrap-$CODENAME-$FAB_ARCH.tar.gz"
+
+if [[ "$force" == "yes" ]]; then
+    rm -f $O/$BOOTSTRAP_TARBALL{,.manifest,.hash,.buildenv}
+else
+    unset _files
+    for _file in $(ls $O/$BOOTSTRAP_TARBALL{,.manifest,.hash,.buildenv} 2>/dev/null); do
+        if [[ -e "$_file" ]]; then
+            _files="$_files $_file"
+        fi
+        [[ -z "$_files" ]] || \
+            fatal "Files: $_files exist - please try again with --force."
+    done
+fi
+
+_PATH=$(dirname $FAB_PATH)
+if [ ! -e $_PATH/bootstrap ]; then
+    cd $_PATH
+    git clone https://github.com/turnkeylinux/bootstrap.git
+    cd $_PATH/bootstrap
+else
+    cd $_PATH/bootstrap
+    git pull
+fi
+
+make clean || true
+make || true
+
+ls -l build
+
+if [[ ! -e build/bootstrap.tar.gz ]]; then
+    if [[ -z "$BT_DEBUG" ]]; then
+        make clean >/dev/null 2>&1 || true
+    fi
+    fatal "Build failed..."
+fi
+
+mv build/bootstrap.tar.gz $O/$BOOTSTRAP_TARBALL
+$BT/bin/generate-manifest build/bootstrap > $O/$BOOTSTRAP_TARBALL.manifest
+$BT/bin/generate-signature $O/$BOOTSTRAP_TARBALL
+$BT/bin/generate-buildenv bootstrap . > $O/$BOOTSTRAP_TARBALL.buildenv
+
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/bootstrap/
+    $BT/bin/publish-files $O/$BOOTSTRAP_TARBALL
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$BOOTSTRAP_TARBALL{.manifest,.hash,.buildenv}
+fi
+
+if [[ -z "$BT_DEBUG" ]] && [[ "$clean" != "no" ]]; then
+    make clean
+fi

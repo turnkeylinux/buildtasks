@@ -39,7 +39,7 @@ isopath=$1
 hashpath=$2
 
 if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-    gpg --keyserver hkp://pool.sks-keyservers.net --recv-keys 0x$BT_GPGKEY
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY
 fi
 
 info "verifying gpg signature"

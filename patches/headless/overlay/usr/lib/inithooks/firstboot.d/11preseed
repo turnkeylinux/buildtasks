@@ -20,7 +20,7 @@ while [ -z "$check" ]; do
         MASTERPASS=${response#\'}
         check=good
     else
-        echo "opensll responded with something unexpected, so sleeping 1 sec, then retrying"
+        echo "openssl responded with something unexpected, so sleeping 1 sec, then retrying"
         sleep 1
     fi
 done

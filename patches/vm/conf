@@ -1,17 +1,17 @@
 #!/bin/bash -ex
 
+warn() { echo "[WARN] $0 $@" >2 ; }
+
 install() {
-    apt-get update
+    apt-get update || warn "'apt update' non zero exit code ($?) - continuing anyway..."
     DEBIAN_FRONTEND=noninteractive apt-get -y \
         -o DPkg::Options::=--force-confdef \
         -o DPkg::Options::=--force-confold \
         install $@
 }
 
-apt-get -y update
-
 # install open-vm-tools and modules
-install open-vm-tools open-vm-tools-dkms linux-headers-amd64
+install open-vm-tools
 service open-vm-tools stop || true
 
 # disable udev persistent net generation
