@@ -100,7 +100,7 @@ if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
     export CODENAME="buster"
     export RELEASE="debian/$CODENAME"
     fab_ver=$(get_version fab)
-    if [[ "$fab_ver" != "8.0"* ]]; then
+    if [[ "$fab_ver" != "0.8"* ]]; then
         warning "Fab v$fab_ver detected; v0.8 required, attempting install."
         fab_pkg=fab_0.8_stretch_amd64.deb
         gh_url=https://github.com/turnkeylinux/fab/releases/download/v0.8
