@@ -45,6 +45,9 @@ done
 [ -n "$appname" ] || usage
 [ -n "$BT_DEBUG" ] && set -x
 
+REQ_FAB_V=0.8
+REQ_DBOOT_V=1.0.114
+
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
@@ -82,6 +85,14 @@ get_version() {
     echo $pkg_info | cut -d' ' -f2
 }
 
+install_pkg() {
+    _pkg=$1
+    _url=$2
+    wget -O /tmp/$_pkg $_url/$_pkg
+    apt install /tmp/$_pkg
+    rm -rf /tmp/$_pkg
+}
+
 # ensure important repos are cloned and at latest commit
 clone_or_pull $BT_PRODUCTS/$appname turnkeylinux-apps/$appname.git
 clone_or_pull $FAB_PATH/common turnkeylinux/common.git
@@ -99,16 +110,12 @@ if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
     export VERSION_TAG=$RC
     export CODENAME="buster"
     export RELEASE="debian/$CODENAME"
-    fab_ver=$(get_version fab)
-    if [[ "$fab_ver" != "0.8"* ]]; then
-        warning "Fab v$fab_ver detected; v0.8 required, attempting install."
-        fab_pkg=fab_0.8_stretch_amd64.deb
-        gh_url=https://github.com/turnkeylinux/fab/releases/download/v0.8
-        wget $gh_url/$fab_pkg
-        apt install ./$fab_pkg
-        rm -f $fab_pkg
-    else
-        info "Fab v$fab_ver detected; continuing..."
+    info "Fab v$(get_version fab) detected."
+    if [[ "$(get_version fab)" != "$REQ_FAB_V"* ]]; then
+        warning "Fab v$REQ_FAB_V required, attempting install."
+        fab_pkg=fab_${REQ_FAB_V}_stretch_amd64.deb
+        fab_url=https://github.com/turnkeylinux/fab/releases/download/v${REQ_FAB_V}
+        install_pkg $fab_pkg $fab_url
     fi
     export GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
     IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
@@ -133,6 +140,13 @@ if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
         else
             warning "Downloading bootstrap failed."
             info "Attempting to build bootstrap."
+            info "Debootstrap v$(get_version debootstrap) detected."
+            if [[ "$(get_version debootstrap)" != "$REQ_DBOOT_V"* ]]; then
+                warning "Debootstrap v$REQ_DBOOT_V required, attempting install."
+                dboot_pkg=debootstrap_${REQ_DBOOT_V}_all.deb
+                dboot_url=http://deb.debian.org/debian/pool/main/d/debootstrap/
+                install_pkg $dboot_pkg $dboot_url
+            fi
             unset PUBLISH
             BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
             [[ "$publish" != "yes" ]] || PUBLISH="--publish"
