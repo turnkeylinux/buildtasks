@@ -26,8 +26,12 @@ Options::
 
     --name=             - use as name basis (default: turnkey-version)
     --copy              - if set, image will be copied to all other regions
+                          (ignored if non-stable version, unless --force set)
     --publish           - if set, image will be made public and log published
     --marketplace       - if set, image will be shared for marketplace
+                          (ignored if non-stable version, unless --force set)
+    --force             - --copy &/or --marketplace honored, even if non-stable
+                          (otherwise --copy & --marketplace ignored)
     --secupdates        - install security updates before building image
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
     --pvmregister       - register pvm-virtualized snapshot, too
@@ -47,6 +51,7 @@ while [ "$1" != "" ]; do
         --copy)        ebs_opts+="$1 ";;
         --marketplace) ebs_opts+="$1 ";;
         --publish)     ebs_opts+="$1 "; publish="yes";;
+        --force)       force="yes";;
         --secupdates)  secupdates="yes";;
         --pvmshim)     pvmshim="yes";;
         --pvmregister) ebs_opts+="$1 ";;
@@ -74,6 +79,21 @@ fi
 
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
+
+# if non stable version, ensure that --marketplace and --copy switches are
+# ignored, unless --force is set
+if [[ ! "$appversion" =~ ^([0-9.]+)$ ]]; then
+    msg="non-stable version detected"
+    if [[ "$force" != "yes" ]]; then
+        msg="$msg - ignoring"
+        ebs_opts="${ebs_opts//--marketplace }"
+        ebs_opts="${ebs_opts//--copy }"
+    else
+        msg="$msg & --force set - honoring"
+    fi
+    warning "$msg --marketplace &/or --copy (if set)"
+fi
+
 export BT_VERSION=${appversion}-${codename}-${arch}
 
 os_arch=$(dpkg --print-architecture)
@@ -137,4 +157,3 @@ if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name.ec2.buildenv
 fi
-

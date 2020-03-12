@@ -15,8 +15,9 @@ install ec2metadata
 INITHOOKS=/usr/lib/inithooks
 cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
 
-# disable confconsole init script
-update-rc.d -f confconsole disable
+# disable systemd confconsole.service (as of v16.0 it's no longer a stand
+# alone service, hence why I've also added ' || true').
+systemctl disable confconsole || true
 
 # disable networking options in confconsole
 sed -i "/networking/ s|true|false|" /etc/confconsole/confconsole.conf
@@ -26,4 +27,3 @@ sed -i "/eth1/ s|^#||" /etc/network/interfaces
 
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
-
