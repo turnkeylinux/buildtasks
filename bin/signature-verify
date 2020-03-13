@@ -15,50 +15,83 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
 cat<<EOF
-Syntax: $0 isofile hashfile
-Verify GPG signature and checksum
+Syntax: $0 file hashfile [-f|--force-gpg]
+Verify GPG signature of hashfile and checksum of file (from hashfile)
 
 Arguments::
 
-    isofile         - path to iso file
-    hashfile        - path to hash file
+    file            - Path to file to verify.
+    hashfile        - Path to hash file.
+
+Options::
+
+    -f|--force-gpg  - Force GPG signiture check of hash file. Exit with
+                      non-zero exit code if not signed by BT_GPGKEY.
+                      Default is to only display a warning and continue.
+    -h|--help       - Display this usage info and exit.
 
 Environment::
 
-    BT_GPGKEY       - gpg key id used to sign the signature file
+    BT_GPGKEY       - [Required] GPG key id used to sign the hash file.
+    BT_DEBUG        - Make output verbose.
 
 EOF
 exit 1
 }
 
-if [[ "$#" != "2" ]]; then
-    usage
-fi
+[[ -z "$BT_DEBUG" ]] || set -x
 
-isopath=$1
-hashpath=$2
+unset filepath hashpath
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h)
+            usage;;
+        --force-gpg|-f)
+            force_gpg="yes";;
+        *)
+            if [[ -z "$filepath" ]]; then
+                filepath=$1
+            elif [[ -z "$hashpath" ]]; then
+                hashpath=$1
+            else
+                usage
+            fi;;
+    esac
+    shift
+done
+
+[[ -n "$filepath" ]] && [[ -n "$hashpath" ]] \
+    || fatal "file and hashfile must be set. See '--help' for more info."
 
 if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY
+    info "Downloading GPG key: $BT_GPGKEY"
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY \
+        || fatal "failed to download GPG key $BT_GPGKEY"
 fi
 
-info "verifying gpg signature"
+info "Verifying GPG signature"
 if ! output=$(gpg --verify $hashpath 2>&1); then
-    if [ "${output%%$'\n'*}" = "gpg: no valid OpenPGP data found." ]; then
-        warning "hash file is not signed by gpg - this is expected if building locally and/or the hash file is unsigned"
+    if [[ "${output%%$'\n'*}" == "gpg: no valid OpenPGP data found." ]]; then
+        msg="$hashpath is not signed by GPG"
+        if [[ "$force_gpg" == "yes" ]]; then
+            fatal "$msg - exiting because '--force-gpg' set."
+        else
+            warning "$msg - this is expected if building locally and/or the hash file is unsigned."
+        fi
     else
         echo "$output"
-        fatal "$hashpath gpg verification failed"
+        fatal "$hashpath GPG verification failed"
     fi
 else
     echo "$output"
+    info "GPG verification success."
 fi
 
-info "verifying checksum"
-sum1=$(sha256sum $isopath | cut -d " " -f 1)
+info "Verifying checksum."
+sum1=$(sha256sum $filepath | cut -d " " -f 1)
 sum2=$(grep -A 1 sha256sum $hashpath | head -n 2 | tail -n 1 | sed "s/^ *//; s/ .*//")
 if [ ! "$sum1" == "$sum2" ]; then
-    fatal "$isopath checksum verification failed"
+    fatal "$filepath checksum verification failed."
 fi
 
-info "verified successfully"
+info "Checksum verification success."
