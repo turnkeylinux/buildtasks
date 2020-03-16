@@ -105,7 +105,7 @@ MAJ_VER_NO=$(basename $(echo $TKL_VER | tr '-' '/') | cut -d'.' -f1)
 if [[ -n "$(grep stretch /etc/turnkey_version)" ]] \
     && [[ $MAJ_VER_NO -eq 16 ]]; then
     warning "Stretch host detected, attempting to build for Buster."
-    RC="rc1"
+    RC="rc2"
     info "Assuming RC build. Nominating $RC."
     export VERSION_TAG=$RC
     export CODENAME="buster"

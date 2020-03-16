@@ -67,6 +67,7 @@ fi
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
 
 export VM_URL="https://www.turnkeylinux.org/$appname"
 export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
@@ -136,4 +137,3 @@ if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
     rm -rf $cdroot
     [ "$publish" == "yes" ] && $BT/bin/clean vm $appver
 fi
-

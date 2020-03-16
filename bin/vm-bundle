@@ -165,7 +165,7 @@ info "creating vmx"
 cat > $name.vmx<<EOF 
 #!/usr/bin/vmware
 config.version = "8"
-virtualHW.version = "7"
+virtualHW.version = "8"
 memsize = "$VM_MEMORY"
 Ethernet0.present = "TRUE"
 Ethernet0.connectionType = "bridged"
