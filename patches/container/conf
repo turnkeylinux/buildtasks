@@ -38,7 +38,7 @@ dpkg --purge ntp || true
 # disable tklbam fixclock-hook - can't set time in a container (closes #1170)
 chmod -x /etc/tklbam/hooks.d/fixclock
 
-systemctl disable confconsole
+systemctl disable confconsole || true
 
 # remove /etc/fstab - workaround #1139
 rm -rf /etc/fstab
