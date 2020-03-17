@@ -65,6 +65,9 @@ done
 
 [ -n "$BT_DEBUG" ] && set -x
 
+REQ_TKLPATCH_V=0.94
+HOST_VER=$(lsb_release -sr | cut -d. -f1)
+
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
@@ -77,8 +80,35 @@ else
     warning "--publish was not specified"
 fi
 
+get_version() {
+    pkg=$1
+    pkg_info=$(dpkg -l | grep ^ii | tr -s [[:blank:]] ' ' | cut -d' ' -f2,3 \
+        | grep "^$pkg[ |:]")
+    echo $pkg_info | cut -d' ' -f2 
+}
+
+install_pkg() {
+    _pkg=$1
+    _url=$2
+    wget -O /tmp/$_pkg $_url/$_pkg
+    apt install /tmp/$_pkg
+    rm -rf /tmp/$_pkg
+}
+
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
+
+# hack to ensure that current version of tklpatch is installed (only applies
+# to building on v15.x).
+if [[ "$HOST_VER" -eq 9 ]] && [[ "$appversion" =~ "16"* ]]; then
+    info "TKLPatch v$(get_version tklpatch) detected."
+    if [[ "$(get_version tklpatch)" != "$REQ_TKLPATCH_V"* ]]; then
+        warning "TKLPatch v$REQ_TKLPATCH_V required, attempting install."
+        tklpatch_pkg=tklpatch_${REQ_TKLPATCH_V}_stretch_amd64.deb
+        tklpatch_url=https://github.com/turnkeylinux/tklpatch/releases/download/v${REQ_TKLPATCH_V}
+        install_pkg $tklpatch_pkg $tklpatch_url
+    fi
+fi
 
 # if non stable version, ensure that --marketplace and --copy switches are
 # ignored, unless --force is set
