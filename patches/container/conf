@@ -54,7 +54,7 @@ chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
 # clean up unrequired package(s)
-apt autoremove -y
+apt-get autoremove -y
 
 # remove postfix /dev/[u]random
 # unless it's openldap because it breaks ldap/postfix integration see issue #855
