@@ -1,0 +1,69 @@
+#!/bin/bash -e
+# Copyright (c) 2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+PKGS="di-live live-boot live-tools live-boot-initramfs-tools"
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) path_to_rootfs [--no-default] [package-1 package-2
+                                                        ... package-N]
+Purge Debian packages from specified rootfs.
+
+Arguments::
+
+    path_to_rootfs  - Absolute or relative path to rootfs.
+
+    package-1 [package-2 ... package-N]
+
+                    - Additional package(s) to purge (or alternative package(s)
+                      to purge if used with --no-default).
+
+Options::
+
+    --no-default|-n - Do NOT purge the default packages. Only packages
+                      specified as args.
+                      Default packages:
+                        "$PKGS"
+
+Environment::
+
+    BT_DEBUG        - turn on debugging
+EOF
+exit 1
+}
+
+path_to_rootfs=$1
+shift
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --no-default|-n)
+            PKGS=""
+            shift;;
+        --help|-h)
+            usage;;
+        -*)
+            fatal "Unknown switch '$1'.";;
+        *)
+            pkgs="$pkgs $1"
+            shift;;
+    esac
+done
+
+[[ -n "$BT_DEBUG" ]] && set -x
+
+pkgs=$(echo "$pkgs $PKGS" | tr -s ' ')
+[[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
+
+info "Purging packages: $pkgs"
+fab-chroot $path_to_rootfs "apt purge -y $pkgs"

@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -164,6 +164,7 @@ mount --bind --make-rslave /proc $rootfs/proc
 mount --bind --make-rslave /sys $rootfs/sys
 mount --bind --make-rslave /dev $rootfs/dev
 
+$BT/bin/purge-pkgs $rootfs
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2

@@ -84,6 +84,7 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
+$BT/bin/purge-pkgs $rootfs
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/openstack
