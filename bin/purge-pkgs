@@ -66,4 +66,4 @@ pkgs=$(echo "$pkgs $PKGS" | tr -s ' ')
 [[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
 
 info "Purging packages: $pkgs"
-fab-chroot $path_to_rootfs "apt purge -y $pkgs"
+fab-chroot $path_to_rootfs "apt-get purge -y --autoremove $pkgs"
