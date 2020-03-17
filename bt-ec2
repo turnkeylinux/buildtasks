@@ -104,7 +104,7 @@ if [[ "$HOST_VER" -eq 9 ]] && [[ "$appversion" =~ "16"* ]]; then
     info "TKLPatch v$(get_version tklpatch) detected."
     if [[ "$(get_version tklpatch)" != "$REQ_TKLPATCH_V"* ]]; then
         warning "TKLPatch v$REQ_TKLPATCH_V required, attempting install."
-        tklpatch_pkg=tklpatch_${REQ_TKLPATCH_V}_stretch_amd64.deb
+        tklpatch_pkg=tklpatch_${REQ_TKLPATCH_V}_stretch_all.deb
         tklpatch_url=https://github.com/turnkeylinux/tklpatch/releases/download/v${REQ_TKLPATCH_V}
         install_pkg $tklpatch_pkg $tklpatch_url
     fi
