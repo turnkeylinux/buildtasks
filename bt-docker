@@ -68,6 +68,7 @@ fi
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
 
 os_arch=$(dpkg --print-architecture)
 [ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"

@@ -62,6 +62,7 @@ fi
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
 
 isofile=turnkey-${appname}-${BT_VERSION}.iso
 name=turnkey-${appname}-${BT_VERSION}
