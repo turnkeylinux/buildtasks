@@ -91,7 +91,7 @@ install_pkg() {
     _pkg=$1
     _url=$2
     wget -O /tmp/$_pkg $_url/$_pkg
-    apt install /tmp/$_pkg
+    apt-get install /tmp/$_pkg
     rm -rf /tmp/$_pkg
 }
 
