@@ -1,0 +1,40 @@
+#!/bin/bash -e
+# Copyright (c) 2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) path_to_rootfs
+Upgrade all Debian packages in specified rootfs.
+
+Arguments::
+
+    path_to_rootfs  - Absolute or relative path to rootfs.
+
+Environment::
+
+    BT_DEBUG        - turn on debugging
+EOF
+exit 1
+}
+
+path_to_rootfs=$1
+shift
+
+[[ -n "$BT_DEBUG" ]] && set -x
+
+[[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
+
+info "Updating package lists."
+fab-chroot $path_to_rootfs "apt-get update -qq"
+info "Upgrading all packages."
+fab-chroot $path_to_rootfs "apt-get dist-upgrade -y --no-remove || apt-get upgrade -y"

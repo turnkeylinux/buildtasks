@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-202020urnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2011-2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -104,6 +104,7 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
+[[ "$appversion" == *"rc"* ]] && $BT/bin/upgrade-pkgs $rootfs
 
 $BT/bin/purge-pkgs $rootfs
 tklpatch-apply $rootfs $BT/patches/vm

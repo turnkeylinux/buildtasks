@@ -65,10 +65,10 @@ if [ ! -e /root/openstack-setup.done ]; then
     touch /root/openstack-setup.done
 fi
 
-
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
 
 os_arch=$(dpkg --print-architecture)
 [ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
@@ -83,6 +83,7 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
+[[ "$appversion" == *"rc"* ]] && $BT/bin/upgrade-pkgs $rootfs
 
 $BT/bin/purge-pkgs $rootfs
 tklpatch-apply $rootfs $BT/patches/headless
