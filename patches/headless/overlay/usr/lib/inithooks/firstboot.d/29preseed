@@ -1,9 +1,9 @@
 #!/bin/bash -e
 # generic preseeding of inithooks.conf if it doesn't exist
 
-[ -n "$_TURNKEY_INIT" ] && exit 0
+[[ -n "$_TURNKEY_INIT" ]] && exit 0
 
-[ -e $INITHOOKS_CONF ] && exit 0
+[[ -e "$INITHOOKS_CONF" ]] && exit 0
 
 # double check that openssl is installed, else fail loudly
 if ! which openssl > /dev/null; then
@@ -16,7 +16,7 @@ fi
 unset check response
 while [ -z "$check" ]; do
     response="$(openssl rand -base64 9 2>/dev/null || true)"
-    if [ ${#response} -ge 12 ]; then
+    if [[ "${#response}" -ge 12 ]]; then
         MASTERPASS=${response#\'}
         check=good
     else
@@ -37,4 +37,3 @@ export SEC_UPDATES=SKIP
 EOF
 
 chmod +x /usr/lib/inithooks/firstboot.d/??turnkey-init-fence*
-
