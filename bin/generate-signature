@@ -37,7 +37,8 @@ fi
 filepath=$1
 filename=$(basename $1)
 
-[[ -n "$RELEASE" ]] || fatal "RELEASE not set"
+# if release not set, assume same as host
+RELEASE=${RELEASE:-debian/$(lsb_release -sc)}
 CODENAME=$(basename $RELEASE)
 
 info "generating sha256sum hash"
