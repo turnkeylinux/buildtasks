@@ -36,7 +36,7 @@ done
 
 [ -n "$BT_DEBUG" ] && set -x
 
-OVFTOOL_URL='https://my.vmware.com/group/vmware/details?downloadGroup=OVFTOOL430&productId=742'
+OVFTOOL_URL='https://my.vmware.com/group/vmware/details?downloadGroup=OVFTOOL440&productId=974'
 
 install() {
     info "installing $@"
@@ -45,7 +45,7 @@ install() {
 }
 
 declare -A PKGS
-PKGS=( [qemu]=qemu-img [parted]=parted [kpartx]=kpartx \
+PKGS=( [qemu-utils]=qemu-img [parted]=parted [kpartx]=kpartx \
     [grub-pc]=grub-bios-setup [zip]=zip )
 
 unset pkgs_to_install
