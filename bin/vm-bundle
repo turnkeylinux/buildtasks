@@ -11,6 +11,7 @@
 
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@" 1>&2; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -105,17 +106,22 @@ mount --rbind --make-rslave /proc $rootfs.vm/proc
 info "installing and configuring grub"
 grubcfg=$rootfs.vm/boot/grub/grub.cfg
 devicemap=$rootfs.vm/boot/grub/device.map
-
 cat > $devicemap <<EOF
 (hd0)   /dev/${loopdev%p1}
 EOF
 
 # lvm-metadata service no longer exists in Buster but without /run/udev, it
-# hangs forever; mounting /run/udev from host resolves that
+# hangs forever; mounting /run/udev from host resolves that.
+# Update - unfortunately, this hack only seems to work on a Stretch TKLDev :(
 mkdir -p $rootfs.vm/run/udev
 mount --rbind --make-rslave /run/udev $rootfs.vm/run/udev
+
+# Generate config; ensuring that host isn't included as a boot option.
+chmod -x $rootfs.vm/etc/grub.d/30_os-prober
 chroot $rootfs.vm grub-mkconfig -o /boot/grub/grub.cfg
+chmod +x $rootfs.vm/etc/grub.d/30_os-prober
 grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.vm /dev/${loopdev%p1}
+
 umount $rootfs.vm/run/udev
 rm -rf $rootfs.vm/run/udev
 rm -f $devicemap
@@ -140,8 +146,12 @@ if locked=$(grep $VG /proc/*/mounts); then
     pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
     for pid in $pids; do
         comm=$(ps -p $pid -o comm | tail -1)
-        if [[ comm =~ ^systemd- ]]; then
+        if [[ $comm =~ ^systemd- ]]; then
             systemctl restart $comm
+        elif [[ $comm = ntpd ]]; then
+            systemctl restart ntp
+        elif [[ $comm = COMMAND ]]; then
+            warning "Couldn't determine name of process. Trying to ignore it."
         else
             fatal "Process $comm locking volume group; unsure how to proceed"
         fi
