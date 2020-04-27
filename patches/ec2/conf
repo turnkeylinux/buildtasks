@@ -32,3 +32,10 @@ for user in $additional_users; do
         sed -i "/.ssh/ s|root|home/admin|" $ansible_init
     fi
 done
+
+# init fence now launches confconsole with full options, so autolaunch disabled
+# on other headless builds. However, we want it on Hub builds, except tkldev.
+if [[ "$(turnkey-version --name)" != "tkldev" ]]; then
+    confconsole_auto='/root/.bashrc.d/confconsole-auto'
+    [[ -f "$confconsole_auto" ]] && chmod -x "$confconsole_auto"
+fi

@@ -7,3 +7,7 @@ DEBIAN_FRONTEND=noninteractive apt-get -y \
     -o DPkg::Options::=--force-confold \
     install dtach inithooks
 
+# init fence now launches confconsole with full options, so autolaunch not
+# required, or desired.
+confconsole_auto='/root/.bashrc.d/confconsole-auto'
+[[ -x "$confconsole_auto" ]] && chmod -x "$confconsole_auto"
