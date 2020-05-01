@@ -11,6 +11,7 @@
 
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@" 1>&2; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
@@ -97,56 +98,102 @@ mkdir $rootfs.vm
 mount /dev/mapper/$VG-root $rootfs.vm
 rsync -a -t -r -S -I -H $rootfs/ $rootfs.vm
 
-info "mount binding dev and proc"
-mount --rbind --make-rslave /dev $rootfs.vm/dev
-mount --rbind --make-rslave /sys $rootfs.vm/sys
-mount --rbind --make-rslave /proc $rootfs.vm/proc
+# In Buster a bug somewhere (in udev? lvm?) means that once we chroot into the
+# mounted turnkeyvm, it becomes impossible to unmount (without rebooting).
+# So for now, the code that dynamically generates the grub.cfg file will be
+# commented out and replaced with an overlay (via a patch) which is updated with
+# the relevant UUID below this commented section.
 
-info "installing and configuring grub"
+# In the below section all lines were commented out, then the specific lines
+# still required were added in a new section below.
+
+#START_COMMENTED_SECTION
+#info "mount binding dev and proc"
+#mount --rbind --make-rslave /dev $rootfs.vm/dev
+#mount --rbind --make-rslave /sys $rootfs.vm/sys
+#mount --rbind --make-rslave /proc $rootfs.vm/proc
+#
+#info "installing and configuring grub"
+#grubcfg=$rootfs.vm/boot/grub/grub.cfg
+#devicemap=$rootfs.vm/boot/grub/device.map
+#cat > $devicemap <<EOF
+#(hd0)   /dev/${loopdev%p1}
+#EOF
+#
+## lvm-metadata service no longer exists in Buster but without /run/udev, it
+## hangs forever; mounting /run/udev from host resolves that.
+## Update - unfortunately, this hack only seems to work on a Stretch TKLDev :(
+#mkdir -p $rootfs.vm/run/udev
+#mount --rbind --make-rslave /run/udev $rootfs.vm/run/udev
+#
+## Generate config; ensuring that host isn't included as a boot option.
+#chmod -x $rootfs.vm/etc/grub.d/30_os-prober
+#chroot $rootfs.vm grub-mkconfig -o /boot/grub/grub.cfg
+#chmod +x $rootfs.vm/etc/grub.d/30_os-prober
+#grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.vm /dev/${loopdev%p1}
+#
+#umount $rootfs.vm/run/udev
+#rm -rf $rootfs.vm/run/udev
+#rm -f $devicemap
+#
+#info "creating fstab"
+#fstab="$rootfs.vm/etc/fstab"
+#echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" > $fstab
+#echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
+#
+#info "umounting the jumble..."
+#sync # ensure everything is written from cache before trying to umount
+#umount $rootfs.vm/proc
+#grep $rootfs.vm/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
+#umount $rootfs.vm/dev
+#umount $rootfs.vm/
+#
+#info "cleaning up volume groups and mounts"
+## udev seems to be holding files open on occasion?!
+## workaround weird issue where systemd-networkd was locking the lv?!
+## this covers both cases
+#if locked=$(grep $VG /proc/*/mounts); then
+#    pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
+#    for pid in $pids; do
+#        comm=$(ps -p $pid -o comm | tail -1)
+#        if [[ $comm =~ ^systemd- ]]; then
+#            systemctl restart $comm
+#        elif [[ $comm = ntpd ]]; then
+#            systemctl restart ntp
+#        elif [[ $comm = COMMAND ]]; then
+#            warning "Couldn't determine name of process. Trying to ignore it."
+#        else
+#            fatal "Process $comm locking volume group; unsure how to proceed"
+#        fi
+#    done
+#fi
+#END_COMMENTED_SECTION
+
+#START_NEW_SECTION
+
+info "Updating grub.cfg overlay"
 grubcfg=$rootfs.vm/boot/grub/grub.cfg
-devicemap=$rootfs.vm/boot/grub/device.map
 
-cat > $devicemap <<EOF
-(hd0)   /dev/${loopdev%p1}
-EOF
+VM_ROOT_UUID=$(blkid -s UUID -o value /dev/mapper/$VG-root)
+VM_VG_UUID=$(vgs $VG --noheadings -o uuid | sed "s|^[[:space:]]*||g")
+VM_LV_UUID=$(lvs $VG/root --noheadings -o uuid | sed "s|^[[:space:]]*||g")
 
-# lvm-metadata service no longer exists in Buster but without /run/udev, it
-# hangs forever; mounting /run/udev from host resolves that
-mkdir -p $rootfs.vm/run/udev
-mount --rbind --make-rslave /run/udev $rootfs.vm/run/udev
-chroot $rootfs.vm grub-mkconfig -o /boot/grub/grub.cfg
+sed -i "s|__VM_VG__|$VG|g" $grubcfg
+sed -i "s|__VM_ROOT_UUID__|$VM_ROOT_UUID|g" $grubcfg
+sed -i "s|__VM_VG_UUID__|$VM_VG_UUID|g" $grubcfg
+sed -i "s|__VM_LV_UUID__|$VM_LV_UUID|g" $grubcfg
+
 grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.vm /dev/${loopdev%p1}
-umount $rootfs.vm/run/udev
-rm -rf $rootfs.vm/run/udev
-rm -f $devicemap
 
-info "creating fstab"
+info "Creating fstab"
 fstab="$rootfs.vm/etc/fstab"
 echo -e "/dev/mapper/$VG-root\t/\text4\terrors=remount-ro\t0\t1" > $fstab
 echo -e "/dev/mapper/$VG-swap_1\tnone\tswap\tsw\t0\t0" >> $fstab
 
-info "umounting the jumble..."
-sync # ensure everything is written from cache before trying to umount
-umount $rootfs.vm/proc
-grep $rootfs.vm/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
-umount $rootfs.vm/dev
 umount $rootfs.vm/
 
-info "cleaning up volume groups and mounts"
-# udev seems to be holding files open on occasion?!
-# workaround weird issue where systemd-networkd was locking the lv?!
-# this covers both cases
-if locked=$(grep $VG /proc/*/mounts); then
-    pids=$(echo "$locked" | cut -d: -f1 | egrep -o '[[:digit:]]*')
-    for pid in $pids; do
-        comm=$(ps -p $pid -o comm | tail -1)
-        if [[ comm =~ ^systemd- ]]; then
-            systemctl restart $comm
-        else
-            fatal "Process $comm locking volume group; unsure how to proceed"
-        fi
-    done
-fi
+#END_NEW_SECTION
+
 vgchange -a n $VG
 kpartx -dv $rootfs.raw
 dmsetup remove_all
@@ -165,10 +212,10 @@ info "creating vmx"
 cat > $name.vmx<<EOF 
 #!/usr/bin/vmware
 config.version = "8"
-virtualHW.version = "8"
+virtualHW.version = "10"
 memsize = "$VM_MEMORY"
-Ethernet0.present = "TRUE"
-Ethernet0.connectionType = "bridged"
+ethernet0.present = "TRUE"
+ethernet0.connectionType = "bridged"
 displayName = "$VM_FULLNAME"
 annotation = "$VM_URL"
 guestinfo.vmware.product.long = "$VM_FULLNAME"
@@ -239,7 +286,9 @@ sed -e "/<\/Name>/r./productinfo.tmp" $name.ovf.tmp > $name.ovf
 
 # for widest compatibility, unfortunately we need to strip OS info and
 # explicitly set OS to "Other 64-Bit". To be reviewed next major release.
-sed -i '/OperatingSystemSection/ s|ovf:id="96.*|ovf:id="102">|' $name.ovf
+#sed -i '/OperatingSystemSection/ s|ovf:id="96.*|ovf:id="102">|' $name.ovf
+# Trying to set allow ovftool to update this and see how we go...
+grep OperatingSystemSection $name.ovf
 
 # remove invalid ovf manifest
 # (SHA sums won't match due to tweaked OVF; ovftool auto generates a new
@@ -257,4 +306,3 @@ if [ -z "$BT_DEBUG" ]; then
     info "cleaning up vm temp files"
     rm -rf $name
 fi
-
