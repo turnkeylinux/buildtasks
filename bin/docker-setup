@@ -29,6 +29,11 @@ EOF
 exit 1
 }
 
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+
+[[ ! -f "$BT_CONFIG/docker.cfg" ]] || . $BT_CONFIG/docker.cfg
+
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )    usage;;
@@ -71,11 +76,9 @@ if ! grep -qs /sys/fs/cgroup /etc/fstab; then
 fi
 
 if [ ! -e /etc/apt/sources.list.d/docker.list ]; then
-    info "installing apt-transport-https"
-    install apt-transport-https
     info "importing docker repo key and creating docker apt repo entry"
     GPG_FINGERPRINT=9DC858229FC7DD38854AE2D88D81803C0EBFCD88
-    gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys $GPG_FINGERPRINT
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $GPG_FINGERPRINT
     gpg --output /usr/share/keyrings/docker.gpg --export $GPG_FINGERPRINT
     
     cat > /etc/apt/sources.list.d/docker.list <<EOF
