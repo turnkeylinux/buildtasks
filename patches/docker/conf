@@ -40,7 +40,7 @@ dpkg --purge ntp || true
 chmod -x /etc/tklbam/hooks.d/fixclock
 
 # disable confconsole
-update-rc.d -f confconsole disable
+chmod -x /root/.bashrc.d/confconsole-auto
 
 # disable fgconsole (inithooks related until fixed)
 mv /bin/fgconsole /bin/fgconsole.orig
@@ -60,4 +60,3 @@ ln -s /bin/true /sbin/modprobe
 [ -e /var/lib/mongodb/journal ] && rm -f /var/lib/mongodb/journal/prealloc.*
 
 exit 0
-
