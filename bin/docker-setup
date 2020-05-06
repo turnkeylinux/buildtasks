@@ -95,7 +95,8 @@ fi
 
 if ! which docker >/dev/null; then
     info "installing docker"
-    install docker-ce
+    install docker-ce \
+        || warning "docker-ce install exited non-zero - trying to proceed regardless."
 fi
 
 if [ ! -e /var/lib/docker ]; then
@@ -120,6 +121,9 @@ fi
 if ! pidof docker >/dev/null; then
     info "starting docker daemon"
     service docker start
+else
+    info "restarting docker daemon"
+    service docker restart
 fi
 
 info "testing docker"
