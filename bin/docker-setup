@@ -132,4 +132,4 @@ fi
 exit_code=0
 info "testing docker"
 docker run hello-world \
-    || warning "Docker hello-world test failed for user: '$BT_DOCKER_USER'; email: '$BT_DOCKER_MAIL'; using password: '$BT_DOCKER_PASS'."
+    || fatal "Docker hello-world test failed for user: '$BT_DOCKER_USER'; email: '$BT_DOCKER_MAIL'; using password: '$BT_DOCKER_PASS'."
