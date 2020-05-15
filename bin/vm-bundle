@@ -274,7 +274,7 @@ mv $name.ovf $name.ovf.tmp
 # fix vm name (otherwise defaults to "vm" in VBox)
 sed -i "/VirtualSystem ovf:id/ s|=\".*|=\"$VM_FULLNAME\">|" $name.ovf.tmp
 
-# add additional product info - displays in VirtualBox on import
+# Add additional product info - displays in VirtualBox on import
 # and should also show in the UI of higher end VMware products
 cp $BT/templates/ovf-productinfo productinfo.tmp
 sed -i "s|@@APP@@|$appname|; \
@@ -284,20 +284,22 @@ sed -i "s|@@APP@@|$appname|; \
         " productinfo.tmp
 sed -e "/<\/Name>/r./productinfo.tmp" $name.ovf.tmp > $name.ovf
 
-# for widest compatibility, unfortunately we need to strip OS info and
-# explicitly set OS to "Other 64-Bit". To be reviewed next major release.
-#sed -i '/OperatingSystemSection/ s|ovf:id="96.*|ovf:id="102">|' $name.ovf
-# Trying to set allow ovftool to update this and see how we go...
+# For widest compatibility, unfortunately we need to strip OS info and
+# explicitly set OS to "Other 64-Bit". To be reviewed (again) for v17.0.
+# Note: Sticking with "Other 64-Bit" for v16.x, as ESXi/vSphere v6.0 user
+# reported that "id 102" still causes issues :( See:
+# https://www.turnkeylinux.org/forum/support/fri-20200221-0845/wordpress-php-73#comment-48187
+sed -i '/OperatingSystemSection/ s|ovf:id="96.*|ovf:id="102">|' $name.ovf
 grep OperatingSystemSection $name.ovf
 
-# remove invalid ovf manifest
+# Remove invalid ovf manifest
 # (SHA sums won't match due to tweaked OVF; ovftool auto generates a new
 #  manifest when creating an OVA)
 rm $name.mf
 
-# SHA256 is default for ovftool v4.2, but older versions of vSphere/ESX only
+# SHA256 is default for ovftool v4.2+, but older versions of vSphere/ESX only
 # support SHA1. It's not a security issue as we hash the ova itself with
-# SHA256 and then sign the hash file. To be reviewed next major release.
+# SHA256 and then sign the hash file. To be reviewed (again) v17.0.
 ovftool --shaAlgorithm=SHA1 $name.ovf ../$name.ova
 
 cd ../
