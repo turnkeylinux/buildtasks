@@ -104,7 +104,11 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
-[[ "$appversion" == *"rc"* ]] && $BT/bin/upgrade-pkgs $rootfs
+if [[ "$appversion" == *"rc"* ]]; then
+    $BT/bin/upgrade-pkgs $rootfs
+else
+    $BT/bin/update-pkgs $rootfs
+fi
 
 $BT/bin/purge-pkgs $rootfs
 tklpatch-apply $rootfs $BT/patches/vm
