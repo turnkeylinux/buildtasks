@@ -1,0 +1,74 @@
+#!/bin/bash -e
+# Copyright (c) 2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+PKGS="turnkey-netinfo confconsole"
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) path_to_rootfs
+Update/Install noted packages in specified rootfs.
+
+Arguments::
+
+    path_to_rootfs  - Absolute or relative path to rootfs.
+
+    package-1 [package-2 ... package-N]
+
+                    - Additional package(s) to update/install (or alternative
+                      package(s) to update/install if used with --no-default).
+
+
+Options::
+
+    --no-default|-n - Do NOT install/upgrade the default packages. Only packages
+                      specified as args.
+                      Default packages:
+                        "$PKGS"
+
+Environment::
+
+    BT_DEBUG        - turn on debugging
+EOF
+exit 1
+}
+
+path_to_rootfs=$1
+shift
+
+[[ -n "$BT_DEBUG" ]] && set -x
+
+[[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
+
+pkgs=""
+while [ "$1" != "" ]; do
+    case $1 in
+        --no-default|-n)
+            PKGS=""
+            shift;;
+        --help|-h)
+            usage;;
+        -*)
+            fatal "Unknown switch '$1'.";;
+        *)
+            pkgs="$pkgs $1"
+            shift;;
+    esac
+done
+
+pkgs=$(echo "$pkgs $PKGS" | tr -s ' ')
+
+info "Updating package lists."
+fab-chroot $path_to_rootfs "apt-get update -qq"
+info "Updating/Installing packages: $pkgs"
+APT="DEBIAN_FRONTEND=noninteractive apt-get"
+fab-chroot $path_to_rootfs "$APT -y $pkgs"
