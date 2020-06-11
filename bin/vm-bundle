@@ -174,10 +174,13 @@ rsync -a -t -r -S -I -H $rootfs/ $rootfs.vm
 info "Updating grub.cfg overlay"
 grubcfg=$rootfs.vm/boot/grub/grub.cfg
 
+k_ver=$(find $rootfs.vm/boot -type f -name "vmlinuz-*" | sort | tail -1)
+VM_K_VER=${k_ver#${k_ver%4\.19*}}
 VM_ROOT_UUID=$(blkid -s UUID -o value /dev/mapper/$VG-root)
 VM_VG_UUID=$(vgs $VG --noheadings -o uuid | sed "s|^[[:space:]]*||g")
 VM_LV_UUID=$(lvs $VG/root --noheadings -o uuid | sed "s|^[[:space:]]*||g")
 
+sed -i "s|__VM_K_VER__|$VM_K_VER|g" $grubcfg
 sed -i "s|__VM_VG__|$VG|g" $grubcfg
 sed -i "s|__VM_ROOT_UUID__|$VM_ROOT_UUID|g" $grubcfg
 sed -i "s|__VM_VG_UUID__|$VM_VG_UUID|g" $grubcfg
