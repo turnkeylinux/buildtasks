@@ -58,11 +58,10 @@ $BT/bt-vm $opts $appver
 [ "$clean" = "y" ] && $BT/bin/clean vm $appver
 $BT/bt-container $opts $appver
 [ "$clean" = "y" ] && $BT/bin/clean container $appver
-$BT/bt-openstack $opts $appver
-[ "$clean" = "y" ] && $BT/bin/clean openstack $appver
-$BT/bt-xen $opts $appver
-[ "$clean" = "y" ] && $BT/bin/clean xen $appver
-[ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appver
+#$BT/bt-openstack $opts $appver
+#[ "$clean" = "y" ] && $BT/bin/clean openstack $appver
+#$BT/bt-xen $opts $appver
+#[ "$clean" = "y" ] && $BT/bin/clean xen $appver
+#[ "$ARCH" == "amd64" ] && $BT/bt-docker $opts $appver
 
 exit 0
-
