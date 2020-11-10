@@ -27,14 +27,18 @@ class TempFile(file):
 def main():
     userdata = ec2metadata.get('user-data')
 
-    if userdata and userdata.startswith("#!"):
-        fh = TempFile(prefix="ec2userdata")
-        fh.writelines(userdata)
-        fh.close()
+    if userdata:
+        if userdata.startswith('#!'):
+            fh = TempFile(prefix="ec2userdata")
+            fh.writelines(userdata)
+            fh.close()
 
-        os.chmod(fh.path, 0750)
-        executil.system(fh.path)
-        print "# executed ec2 user-data script"
+            os.chmod(fh.path, 0750)
+            executil.system(fh.path)
+            print '# executed ec2 user-data script'
+        else:
+            print '# unknown userdata format - calling cloud-init for help'
+            executil.system('cloud-init init')
 
 if __name__ == "__main__":
     main()

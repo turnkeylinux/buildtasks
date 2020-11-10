@@ -9,7 +9,13 @@ install() {
 }
 
 # install cloud required packages
-install ec2metadata
+install ec2metadata cloud-init
+
+# disable cloud-init on boot
+for i in init config final init-local; do
+    update-rc.d cloud-$i disable
+    systemctl disable cloud-$i.service
+done
 
 # copy mntbind inithook in everyboot
 INITHOOKS=/usr/lib/inithooks
