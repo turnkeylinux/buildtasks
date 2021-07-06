@@ -1,0 +1,121 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [--publish] appname
+Converts appliance appname (e.g., core) to vhd
+
+Options::
+
+    --publish           - if set, image and meta files will be published
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        --publish)   publish="yes";;
+        *)           if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/build.cfg
+
+O=$BT_BUILDS/vm
+mkdir -p $O
+
+[ -n "$BT_VERSION" ] || fatal "BT_VERSION not set"
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+fi
+
+export VM_URL="http://www.turnkeylinux.org/$appname"
+export VM_FULLNAME="TURNKEY $(echo $appname | tr [a-z] [A-Z] | sed s'/-/ /g')"
+
+case "$appname" in
+    canvas)           export VM_MEMORY=1024 ;;
+    gitlab)           export VM_MEMORY=1024 ;;
+    jenkins)          export VM_MEMORY=1024 ;;
+    odoo)             export VM_MEMORY=1024 ;;
+    tkldev)           export VM_MEMORY=768 ;;
+    moodle)           export VM_MEMORY=768 ;;
+    tomcat-apache)    export VM_MEMORY=768 ;;
+    appengine-java)   export VM_MEMORY=768 ;;
+    *)                export VM_MEMORY=512 ;;
+esac
+
+if $(echo $BT_VERSION | grep -q squeeze-i386); then guestos="debian6"; fi
+if $(echo $BT_VERSION | grep -q squeeze-amd64); then guestos="debian6-64"; fi
+if $(echo $BT_VERSION | grep -q wheezy-i386); then guestos="debian7"; fi
+if $(echo $BT_VERSION | grep -q wheezy-amd64); then guestos="debian7-64"; fi
+if $(echo $BT_VERSION | grep -q jessie-i386); then guestos="debian8"; fi
+if $(echo $BT_VERSION | grep -q jessie-amd64); then guestos="debian8-64"; fi
+[ -n "$guestos" ] || fatal "guestos could not be determined"
+export VM_GUESTOS="$guestos"
+
+isofile=turnkey-$appname-$BT_VERSION.iso
+name=turnkey-$appname-$BT_VERSION
+rootfs=$name.rootfs
+cdroot=$name.cdroot
+
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+
+cd $O
+tklpatch-extract-iso $BT_ISOS/$isofile
+tklpatch-apply $rootfs $BT/patches/headless
+$BT/bin/rootfs-cleanup $rootfs
+
+$BT/bin/aptconf-tag $rootfs vm
+
+$BT/bin/vhd-bundle $O/$rootfs
+
+$BT/bin/generate-signature $O/$name.vhd
+
+# publish if specified
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/vmdk/
+    $BT/bin/publish-files $O/$name-vmdk.zip
+
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/ova/
+    $BT/bin/publish-files $O/$name.ova
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$name-vmdk.{zip.sig,zip.buildenv}
+    $BT/bin/publish-files $O/$name.{ova.sig,ova.buildenv}
+fi
+
+if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    rm -rf $rootfs
+    rm -rf $cdroot
+fi
+
