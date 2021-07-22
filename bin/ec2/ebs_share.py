@@ -44,7 +44,7 @@ def share_marketplace(snapshot_id, region):
     snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
 
     log.debug('sharing with marketplace')
-    snapshot.share(user_ids=['679593333241'])
+    snapshot.share(user_ids=['096457495696'])
 
     log.info('shared with marketplace - %s', snapshot_id)
 
@@ -72,4 +72,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
