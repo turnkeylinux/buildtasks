@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -20,7 +20,7 @@ Converts appliance appname-version to EC2 EBS-backed HVM AMI
 
 Arguments::
 
-    appname-version     - e.g., core-14.2-jessie-amd64
+    appname-version     - e.g., core-16.2-jessie-amd64
 
 Options::
 
@@ -33,6 +33,8 @@ Options::
     --force             - --copy &/or --marketplace honored, even if non-stable
                           (otherwise --copy & --marketplace ignored)
     --secupdates        - install security updates before building image
+    --increment         - install all (apt) updates before building image and
+                          add increment to version number; e.g. 16.2.1
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
     --pvmregister       - register pvm-virtualized snapshot, too
 
@@ -43,7 +45,7 @@ EOF
 exit 1
 }
 
-ebs_opts=""
+unset ebs_opts force secupdates increment pvmshim appver
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h)     usage;;
@@ -53,6 +55,7 @@ while [ "$1" != "" ]; do
         --publish)     ebs_opts+="$1 "; publish="yes";;
         --force)       force="yes";;
         --secupdates)  secupdates="yes";;
+        --increment)   increment="yes";;
         --pvmshim)     pvmshim="yes";;
         --pvmregister) ebs_opts+="$1 ";;
         *)             if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
@@ -62,6 +65,10 @@ done
 
 [ -n "$appver" ] || usage
 [ -n "$secupdates" ] || warning "--secupdates was not specified"
+if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
+    warning "--increment implies --secupdates"
+    unset secupdates
+fi
 
 [ -n "$BT_DEBUG" ] && set -x
 
@@ -124,19 +131,23 @@ if [[ ! "$appversion" =~ ^([0-9.]+)$ ]]; then
     warning "$msg --marketplace &/or --copy (if set)"
 fi
 
-export BT_VERSION=${appversion}-${codename}-${arch}
-
 os_arch=$(dpkg --print-architecture)
 [ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
 
 O=$BT_BUILDS/ec2
 mkdir -p $O
 
+export BT_VERSION=${appversion}-${codename}-${arch}
 name=turnkey-${appname}-${BT_VERSION}
 rootfs=$name.rootfs
 cdroot=$name.cdroot
 isofile=$name.iso
 logfile=$name.log
+if [[ -n "$increment" ]]; then
+    new_version="${appversion}.1"
+    new_name=turnkey-${appname}-${new_version}-${codename}-${arch}
+    logfile=$new_name.log
+fi
 
 export LOGFILE_PATH=$O/$logfile
 echo > $LOGFILE_PATH
@@ -146,7 +157,10 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
-[[ "$appversion" == *"rc"* ]] && $BT/bin/upgrade-pkgs $rootfs
+
+if [[ "$appversion" == *"rc"* ]] || [[ "$increment" == "yes" ]]; then
+    $BT/bin/upgrade-pkgs $rootfs
+fi
 
 function _cleanup() {
     umount -l $rootfs/dev || true
@@ -180,7 +194,7 @@ $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs ec2
 $BT/bin/build-tag $rootfs ec2
 $BT/bin/ec2/ebs.py $ebs_opts $rootfs
-$BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$name.ec2.buildenv
+$BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$new_name.ec2.buildenv
 
 if [ "$publish" == "yes" ]; then
     export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/
