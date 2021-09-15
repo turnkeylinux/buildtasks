@@ -132,6 +132,8 @@ if [[ -n "$increment" ]]; then
     new_version="${appversion}.1"
     new_name=turnkey-${appname}-${new_version}-${codename}-${arch}
     logfile=$new_name.log
+else
+    new_name=$name
 fi
 
 export LOGFILE_PATH=$O/$logfile
@@ -186,5 +188,5 @@ if [ "$publish" == "yes" ]; then
     $BT/bin/publish-files $LOGFILE_PATH
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$name.ec2.buildenv
+    $BT/bin/publish-files $O/$new_name.ec2.buildenv
 fi
