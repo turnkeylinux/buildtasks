@@ -145,10 +145,6 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
 
-if [[ "$appversion" == *"rc"* ]] || [[ "$increment" == "yes" ]]; then
-    $BT/bin/upgrade-pkgs $rootfs
-fi
-
 function _cleanup() {
     umount -l $rootfs/dev || true
     umount -l $rootfs/sys || true
@@ -167,6 +163,9 @@ mount --bind --make-rslave /sys $rootfs/sys
 mount --bind --make-rslave /dev $rootfs/dev
 
 $BT/bin/purge-pkgs $rootfs
+if [[ "$appversion" == *"rc"* ]] || [[ "$increment" == "yes" ]]; then
+    $BT/bin/upgrade-pkgs $rootfs
+fi
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
