@@ -64,9 +64,14 @@ done
     || fatal "file and hashfile must be set. See '--help' for more info."
 
 if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-    info "Downloading GPG key: $BT_GPGKEY"
-    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY \
-        || fatal "failed to download GPG key $BT_GPGKEY"
+    info "Downloading GPG key: $BT_GPGKEY."
+    if ! gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY; then
+        warning "importing from keyserver.ubuntu.com failed; trying alternate."
+        wget -O /tmp/$BT_GPGKEY.asc https://www.turnkeylinux.org/$BT_GPGKEY.asc \
+            || fatal "failed to download GPG key $BT_GPGKEY."
+        gpg --import /tmp/$BT_GPGKEY.asc || fatal "alternate import failed."
+        rm -f /tmp/$BT_GPGKEY.asc*
+    fi
 fi
 
 info "Verifying GPG signature"
