@@ -49,10 +49,18 @@ SHA512SUM="$(sha512sum $filepath | cut -d " " -f 1)  $filename"
 
 TKL_KEY=tkl-$CODENAME-images.asc
 KEY_EMAIL=release-$CODENAME-images@turnkeylinux.org
-KEY_URL=https://raw.githubusercontent.com/turnkeylinux/common/master/keys/$TKL_KEY
+# first try local common
+if [[ -f "$FAB_PATH/common/keys/$TKL_KEY" ]]; then
+    GET_KEY_COM="cat $FAB_PATH/common/keys/$TKL_KEY"
+else
+    # set BRANCH - default to master
+    BRANCH=${BRANCH:-master}
+    KEY_URL=https://raw.githubusercontent.com/turnkeylinux/common/$BRANCH/keys/$TKL_KEY
+    GET_KEY_COM="curl $KEY_URL"
+fi
 TMP_KEYRING=/tmp/temp.gpg
 GPG_COMMAND="gpg --no-default-keyring --keyring $TMP_KEYRING"
-curl $KEY_URL | $GPG_COMMAND --import
+$GET_KEY_COM | $GPG_COMMAND --import
 GPG_LISTKEYS=$($GPG_COMMAND --list-keys --with-fingerprint $KEY_EMAIL | sed "s|^|      |g")
 UID_INFO=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | grep $KEY_EMAIL | sed "s|^.*::\(.*\):$|\1|")
 FINGERPRINT=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | awk -F: '$1 == "fpr" {print $10;}' | head -1)
