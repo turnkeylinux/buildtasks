@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -46,7 +46,7 @@ done
 [ -n "$BT_DEBUG" ] && set -x
 
 REQ_FAB_V=0.8
-REQ_DBOOT_V=1.0.114
+REQ_DBOOT_V=1.0.123
 HOST_VER=$(lsb_release -sr | cut -d. -f1)
 
 export BT=$(dirname $(readlink -f $0))
@@ -94,38 +94,21 @@ install_pkg() {
     rm -rf /tmp/$_pkg
 }
 
-setup() {
-    appname=$1
-    # ensure important repos are cloned and at latest commit
-    clone_or_pull $BT_PRODUCTS/$appname turnkeylinux-apps/$appname.git
-    clone_or_pull $FAB_PATH/common turnkeylinux/common.git
-    clone_or_pull $FAB_PATH/cdroots turnkeylinux/cdroots.git
-    clone_or_pull $BT_PROFILES turnkeylinux/tklbam-profiles.git
-}
-
-# Note: post v16.0 release; setup() & clone_or_pull() could be removed, and
-# below if..elif..else..if can be removed/simplified.
-if [[ "$HOST_VER" -le 9 ]]; then
-    setup $appname
-elif [[ "$HOST_VER" -ge 10 ]]; then
-    # Leverage tkldev-setup to ensure important repos are cloned and at latest
-    # commit; also ensures RELEASE & ARCH are set.
-    tkldev-setup $appname \
+# Leverage tkldev-setup to ensure important repos are cloned and at latest
+# commit; also ensures RELEASE & ARCH are set.
+tkldev-setup $appname \
         || warning "tkldev-setup failed. Attempting to continue anyway."
-else
-    fatal "Host Debian version: $HOST_VER; not recognised."
-fi
 
-# if v16.x (buster) being built on v15.x (stretch) get/build right bootstrap
+# if v17.x (bullseye) being built on v16.x (buster) get/build right bootstrap
 TKL_VER=$(head -1 $BT_PRODUCTS/$appname/changelog | cut -d' ' -f1)
 MAJ_VER_NO=$(basename $(echo $TKL_VER | tr '-' '/') | cut -d'.' -f1)
-if [[ "$HOST_VER" -eq 9 ]] \
-    && [[ $MAJ_VER_NO -eq 16 ]]; then
-    warning "Stretch host detected, attempting to build for Buster."
-    RC="rc2"
+if [[ "$HOST_VER" -eq 10 ]] \
+    && [[ $MAJ_VER_NO -eq 17 ]]; then
+    warning "Buster host detected, attempting to build for Bullseye."
+    RC="rc1"
     info "Assuming RC build. Nominating $RC."
     export VERSION_TAG=$RC
-    export CODENAME="buster"
+    export CODENAME="bullseye"
     export RELEASE="debian/$CODENAME"
     info "Fab v$(get_version fab) detected."
     if [[ "$(get_version fab)" != "$REQ_FAB_V"* ]]; then
@@ -178,6 +161,7 @@ if [[ "$HOST_VER" -eq 9 ]] \
                 $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
         fi
     fi
+    touch $BOOTSTRAP_PATH/bullseye_on_buster
 fi
 
 info "Preperation done. Building appliance $appname."
