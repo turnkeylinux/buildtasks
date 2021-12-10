@@ -126,8 +126,9 @@ if [[ "$HOST_VER" -eq 10 ]] \
         mkdir -p $(dirname $BOOTSTRAP_PATH)
         cd $(dirname $BOOTSTRAP_PATH)
         exit_code=0
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
+        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
+        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
+        exit_code=1 # force rebuild of bootstrap...
         if [[ "$exit_code" -eq 0 ]]; then
             info "verifying $BOOTSTRAP_NAME"
             gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $GPGKEY
