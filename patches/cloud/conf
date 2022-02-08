@@ -9,7 +9,7 @@ install() {
 }
 
 # install cloud required packages
-install ec2metadata
+install tkl-ec2metadata
 
 # copy mntbind inithook in everyboot
 INITHOOKS=/usr/lib/inithooks
