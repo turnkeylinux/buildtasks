@@ -28,7 +28,7 @@ Options:
 import sys
 import getopt
 
-from . import utils
+import utils
 
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 import boto3

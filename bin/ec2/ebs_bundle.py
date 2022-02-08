@@ -28,7 +28,7 @@ import sys
 import time
 import getopt
 
-from . import utils
+import utils
 
 from boto.exception import EC2ResponseError
 

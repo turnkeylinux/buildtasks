@@ -34,13 +34,13 @@ import sys
 import time
 import getopt
 
-from . import utils
+import utils
 
-from .ebs_bundle import bundle
-from .ebs_register import register
-from .ebs_publish import share_public
-from .ebs_share import share_marketplace
-from .ec2_copy import copy_image
+from ebs_bundle import bundle
+from ebs_register import register
+from ebs_publish import share_public
+from ebs_share import share_marketplace
+from ec2_copy import copy_image
 
 log = utils.get_logger('ebs')
 

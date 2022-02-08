@@ -23,7 +23,7 @@ Arguments:
 import sys
 import getopt
 
-from . import utils
+import utils
 
 log = utils.get_logger('ebs-copy')
 

@@ -15,7 +15,7 @@ import sys
 import logging
 import subprocess
 
-from . import conf
+import conf
 
 # depends on tkl-ec2metadata
 import ec2metadata
