@@ -8,16 +8,8 @@ install() {
         install $@
 }
 
-#conflicts with cloud-utils, which is a dependency of cloud-initramfs-growroot
-dpkg --purge ec2metadata
-
 # install useful packages
-install ebsmount cloud-initramfs-growroot extlinux
-
-#on the other hand, inithooks needs it and the other implementation is written by Alon Swartz anyway
-DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Options::=--force-confdef \
-  -o DPkg::Options::=--force-confold -o DPkg::Options::=--force-overwrite \
-  install ec2metadata
+install ebsmount cloud-initramfs-growroot extlinux tkl-ec2metadata
 
 # support hot-plugging of attached volumes
 echo "acpiphp" >> /etc/modules
