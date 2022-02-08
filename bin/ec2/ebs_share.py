@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -24,34 +24,37 @@ Options:
 import sys
 import getopt
 
-import utils
+from . import utils
 
 log = utils.get_logger('ebs-share')
 
+
 def usage(e=None):
     if e:
-        print >> sys.stderr, "error: " + str(e)
+        print("error: " + str(e), file=sys.stderr)
 
-    print >> sys.stderr, "Syntax: %s [ -options ] snapshot_id" % (sys.argv[0])
-    print >> sys.stderr, __doc__.strip()
+    print("Syntax: %s [ -options ] snapshot_id" % (sys.argv[0]), file=sys.stderr)
+    print(__doc__.strip(), file=sys.stderr)
 
     sys.exit(1)
+
 
 def share_marketplace(snapshot_id, region):
     conn = utils.connect(region)
 
-    log.debug('getting snapshot - %s', snapshot_id)
+    log.debug(f'getting snapshot - {snapshot_id}')
     snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
 
     log.debug('sharing with marketplace')
     snapshot.share(user_ids=['096457495696'])
 
-    log.info('shared with marketplace - %s', snapshot_id)
+    log.info(f'shared with marketplace - {snapshot_id}')
+
 
 def main():
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", ["help", "region="])
-    except getopt.GetoptError, e:
+    except getopt.GetoptError as e:
         usage(e)
 
     region = None
@@ -69,6 +72,7 @@ def main():
     region = region if region else utils.get_region()
 
     share_marketplace(snapshot_id, region)
+
 
 if __name__ == "__main__":
     main()

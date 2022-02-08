@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -28,34 +28,35 @@ Options:
 import sys
 import getopt
 
-import utils
+from . import utils
 
 from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
 import boto3
 
 log = utils.get_logger('ebs-register')
 
-class Error(Exception):
-    pass
 
 def fatal(e):
-    print >> sys.stderr, "error: " + str(e)
+    print("error: " + str(e), file=sys.stderr)
     sys.exit(1)
+
 
 def usage(e=None):
     if e:
-        print >> sys.stderr, "error: " + str(e)
+        print("error: " + str(e), file=sys.stderr)
 
-    print >> sys.stderr, "Syntax: %s [ opts ] snapshot_id" % (sys.argv[0])
-    print >> sys.stderr, __doc__.strip()
+    print("Syntax: %s [ opts ] snapshot_id" % (sys.argv[0]), file=sys.stderr)
+    print(__doc__.strip(), file=sys.stderr)
 
     sys.exit(1)
 
-def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=False):
+
+def register(snapshot_id, region, arch, size=None,
+             name=None, desc=None, pvm=False):
     conn = utils.connect(region)
 
     if None in (name, size):
-        log.debug('getting snapshot - %s', snapshot_id)
+        log.debug(f'getting snapshot - {snapshot_id}')
         snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
         size = size if size else snapshot.volume_size
         name = name if name else snapshot.description
@@ -86,9 +87,9 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=Fal
     ephemeral_device_name = device_base + 'b'
     block_device_map[ephemeral_device_name] = ephemeral
 
-    log.debug('registering image - %s', name)
+    log.debug(f'registering image - {name}')
     client3 = utils.connect_boto3(region)
-    
+
     response = client3.register_image(
         Name=name,
         Architecture=ec2_arch,
@@ -112,21 +113,22 @@ def register(snapshot_id, region, arch, size=None, name=None, desc=None, pvm=Fal
 
     ami_id = response['ImageId']
 
-    log.info('registered image - %s %s %s', ami_id, name, region)
+    log.info(f'registered image - {ami_id} {name} {region}')
     return ami_id, name
+
 
 def main():
     try:
         l_opts = ["help", "pvm", "region=", "size=", "name=", "arch=", "desc="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
-    except getopt.GetoptError, e:
+    except getopt.GetoptError as e:
         usage(e)
 
     kwargs = {
         'size': None,
         'name': None,
         'desc': None,
-        'pvm' : False
+        'pvm': False
     }
     arch = None
     region = None
@@ -160,8 +162,8 @@ def main():
     region = region if region else utils.get_region()
 
     ami_id, ami_name = register(snapshot_id, region, arch, **kwargs)
-    print ami_id, ami_name
+    print(ami_id, ami_name)
+
 
 if __name__ == "__main__":
     main()
-

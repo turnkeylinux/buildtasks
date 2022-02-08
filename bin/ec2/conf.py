@@ -11,4 +11,3 @@ KERNELS = {
     'ap-southeast-2': {'amd64': 'aki-3b1d8001', 'i386': 'aki-c162fffb'},
     'ap-northeast-1': {'amd64': 'aki-196bf518', 'i386': 'aki-1f6bf51e'},
 }
-
