@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2016 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2016-2022 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -59,7 +59,10 @@ _common() {
     else
         echo "ami-id unknown - ec2metadata not installed"
     fi
-    echo "awscli $(python -c 'import awscli; print awscli.__version__' 2>/dev/null || echo not-installed)"
+    echo "awscli (py2) $(python2 -c 'import awscli; print awscli.__version__' 2>/dev/null || echo not-installed)"
+    echo "awscli (py3) $(python3 -c 'import awscli; print(awscli.__version__)' 2>/dev/null || echo not-installed)"
+    echo "boto (py3) $(python3 -c 'import boto; print(boto.__version__)' 2>/dev/null || echo not-installed)"
+    echo "boto3 (py3) $(python3 -c 'import boto3; print(boto3.__version__)' 2>/dev/null || echo not-installed)"
 }
 
 _optimized() {
