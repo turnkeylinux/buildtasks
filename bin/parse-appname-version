@@ -21,7 +21,7 @@ Echoes space-delimeted if valid: appname appversion codename arch
 Arguments::
 
     appname-version     - appname-appversion-codename-arch
-                          e.g., core-14.2-jessie-amd64
+                          e.g., core-16.1-buster-amd64
                           
 EOF
 exit 1
@@ -54,13 +54,28 @@ else
 fi
 
 case $codename in
-    squeeze|wheezy|jessie|stretch|buster) ;;
-    *) fatal "unrecognized codename: $codename" ;;
+    squeeze|wheezy|jessie|stretch)
+        fatal "$codename no longer supported"
+        ;;
+    buster|bullseye)
+        ;;
+    bookworm)
+        warning "$codename technically unsupported; support may be incomplete/problematic"
+        ;;
+    *)
+        fatal "unrecognized codename: $codename"
+        ;;
 esac
 
 case $architecture in
-    i386|amd64) ;;
-    *) fatal "unrecognized architecture: $architecture" ;;
+    i386|amd64)
+        ;;
+    arm|arm64)
+        warning "$architecture unsupported, unlikely to work"
+        ;;
+    *)
+        fatal "unrecognized architecture: $architecture"
+        ;;
 esac
 
 echo $appname $appversion $codename $architecture
