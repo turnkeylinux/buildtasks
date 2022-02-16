@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
@@ -8,34 +8,20 @@ if '_TURNKEY_INIT' in os.environ:
     sys.exit(0)
 
 import tempfile
+import subprocess
 
-import executil
 import ec2metadata
 
-class TempFile(file):
-    def __init__(self, prefix='tmp', suffix=''):
-        fd, path = tempfile.mkstemp(suffix, prefix)
-        os.close(fd)
-        self.path = path
-        self.pid = os.getpid()
-        file.__init__(self, path, "w")
-
-    def __del__(self):
-        if self.pid == os.getpid():
-            os.remove(self.path)
 
 def main():
     userdata = ec2metadata.get('user-data')
 
     if userdata and userdata.startswith("#!"):
-        fh = TempFile(prefix="ec2userdata")
-        fh.writelines(userdata)
-        fh.close()
-
-        os.chmod(fh.path, 0750)
-        executil.system(fh.path)
-        print "# executed ec2 user-data script"
+        with tempfile.NamedTemporaryFile("w", prefix="ec2userdata") as fob:
+            fob.writelines(userdata)
+            os.chmod(fob.name, 0o750)
+            subprocess.run([fob.name])
+            print("# executed ec2 user-data script")
 
 if __name__ == "__main__":
     main()
-
