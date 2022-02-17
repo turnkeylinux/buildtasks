@@ -100,7 +100,8 @@ def get_logger(name, level=None):
 
 
 def is_mounted(path):
-    mounts = file("/proc/mounts").read()
+    with open("/proc/mounts") as fob:
+        mounts = fob.read()
     if mounts.find(path) != -1:
         return True
 
