@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -30,27 +30,29 @@ import getopt
 
 import utils
 
-import executil
-
 from boto.exception import EC2ResponseError
 
 log = utils.get_logger('ebs-bundle')
 
+
 def fatal(e):
-    print >> sys.stderr, "error: " + str(e)
+    print("error: " + str(e), file=sys.stderr)
     sys.exit(1)
+
 
 def usage(e=None):
     if e:
-        print >> sys.stderr, "error: " + str(e)
+        print("error: " + str(e), file=sys.stderr)
 
-    print >> sys.stderr, "Syntax: %s [ -options ] rootfs" % (sys.argv[0])
-    print >> sys.stderr, __doc__.strip()
+    print("Syntax: %s [ -options ] rootfs" % (sys.argv[0]), file=sys.stderr)
+    print(__doc__.strip(), file=sys.stderr)
 
     sys.exit(1)
 
-class Error(Exception):
+
+class EbsBundleError(Exception):
     pass
+
 
 class Snapshot:
     def __init__(self, region=None):
@@ -72,6 +74,7 @@ class Snapshot:
         self._wait("completed")
 
         log.debug('created snapshot - %s', self.snap.id)
+
 
 class Volume:
     def __init__(self, region=None):
@@ -100,19 +103,19 @@ class Volume:
             attempt = 0
             while True:
                 attempt += 1
-                log.debug('deleting volume %s (attempt %d)', self.vol.id, attempt)
+                log.debug(f'deleting volume {self.vol.id} (attempt {attempt})')
                 self._wait("available")
                 try:
                     self.vol.delete()
                     break
-                except EC2ResponseError, e:
+                except EC2ResponseError as e:
                     error_code = e.errors[0][0]
-                    log.debug('delete failed %s - %s)', self.vol.id, error_code)
-                    if not error_code in ("Client.VolumeInUse", "VolumeInUse"):
+                    log.debug(f'delete failed {self.vol.id} ({error_code})')
+                    if error_code not in ("Client.VolumeInUse", "VolumeInUse"):
                         raise
 
                     if max_attempts == attempt:
-                        log.debug('all delete attempts failed - %s)', self.vol.id)
+                        log.debug(f'all delete attempts failed: {self.vol.id}')
                         raise
 
             self.vol = None
@@ -120,8 +123,8 @@ class Volume:
     def attach(self, instance_id, device):
         self.device = device
         if self.vol:
-            log.debug('attaching volume - %s (%s)',
-                      self.device.real_path, self.device.amazon_path)
+            log.debug(f'attaching volume - {self.device.real_path} ('
+                      f'{self.device.amazon_path})')
 
             self.vol.attach(instance_id, self.device.amazon_path)
             while not self.device.exists():
@@ -146,11 +149,12 @@ class Volume:
         self.detach()
         self.delete(max_attempts=1)
 
+
 class Device:
     def __init__(self):
         self.real_path = self._get_freedevice()
         if not self.real_path:
-            raise Error("no free devices available...")
+            raise EbsBundleError("no free devices available...")
 
         self.amazon_path = '/dev/sd' + self.real_path[-1]
         self.root_path = None
@@ -171,21 +175,24 @@ class Device:
         return os.path.exists(self.real_path)
 
     def mount(self, mount_path):
-        log.debug('mounting - %s %s', self.real_path, mount_path)
+        log.debug(f'mounting - {self.real_path} {mount_path}')
         utils.mkdir(mount_path)
-        executil.system('mount', self.real_path, mount_path)
+        subprocess.run(['mount', self.real_path, mount_path], check=True)
 
     def umount(self):
-        log.debug('umounting - %s', self.real_path)
-        executil.system('umount', '-f', self.real_path)
+        log.debug(f'umounting - {self.real_path}')
+        subprocess.run(['umount', '-f', self.real_path], check=True)
 
     def mkfs(self, fs):
-        log.debug('mkfs - %s', self.real_path)
-        executil.system('mkfs.' + fs, '-F', '-j', self.real_path)
+        log.debug(f'mkfs - {self.real_path}')
+        subprocess.run(['mkfs.' + fs, '-F', '-j', self.real_path], check=True)
 
     def mkpart(self):
-        executil.system('parted', self.real_path, '--script', 'unit mib mklabel gpt mkpart primary 1 3 name 1 grub set 1 bios_grub on mkpart primary ext4 3 -1 name 2 rootfs quit')
-        executil.system('partprobe', self.real_path)
+        subprocess.run(['parted', self.real_path, '--script',
+                        "unit mib mklabel gpt mkpart primary 1 3 name 1 grub"
+                        " set 1 bios_grub on mkpart primary ext4 3 -1 name 2"
+                        " rootfs quit"], check=True)
+        subprocess.run(['partprobe', self.real_path], check=True)
         time.sleep(5)
         self.root_path = self.real_path
         self.real_path = self.real_path + '2'
@@ -194,8 +201,9 @@ class Device:
         if self.is_mounted():
             self.umount()
 
+
 def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
-    log.info('target snapshot - %s ', snapshot_name)
+    log.info(f'target snapshot - {snapshot_name} ')
 
     log.info('creating volume, attaching, formatting and mounting')
     volume = Volume()
@@ -216,15 +224,17 @@ def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
     log.info('installing GRUB on volume')
     submounts = ['/sys', '/proc', '/dev']
     for s in submounts:
-        executil.system('mount', '--bind', '--make-rslave', s, mount_path + s)
-
-    executil.system('chroot', mount_path, 'grub-install', device.root_path)
-    executil.system('chroot', mount_path, 'update-grub')
-    executil.system('chroot', mount_path, 'update-initramfs', '-u')
+        subprocess.run(['mount', '--bind', '--make-rslave', s, mount_path + s],
+                       check=True)
+    subprocess.run(['chroot', mount_path, 'grub-install', device.root_path],
+                   check=True)
+    subprocess.run(['chroot', mount_path, 'update-grub'], check=True)
+    subprocess.run(['chroot', mount_path, 'update-initramfs', '-u'],
+                   check=True)
 
     submounts.reverse()
     for s in submounts:
-        executil.system('umount', '-l', mount_path + s)
+        subprocess.run(['umount', '-l', mount_path + s], check=True)
 
     device.umount()
     volume.detach()
@@ -237,14 +247,15 @@ def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
     volume._wait("available")
     volume.delete()
 
-    log.info("complete - %s %s", snapshot.snap.id, snapshot.snap.description)
+    log.info(f"complete - {snapshot.snap.id} {snapshot.snap.description}")
     return snapshot.snap.id, snapshot.snap.description
+
 
 def main():
     try:
         l_opts = ["help", "name=", "size=", "filesystem="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
-    except getopt.GetoptError, e:
+    except getopt.GetoptError as e:
         usage(e)
 
     name = None
@@ -268,7 +279,7 @@ def main():
 
     rootfs = args[0]
     if not os.path.exists(rootfs):
-        fatal("rootfs path does not exist: %s" % rootfs)
+        fatal(f"rootfs path does not exist: {rootfs}")
 
     if not name:
         turnkey_version = utils.get_turnkey_version(rootfs)
@@ -277,8 +288,8 @@ def main():
     kwargs = {'size': size, 'filesystem': filesystem}
     snapshot_id, snapshot_name = bundle(rootfs, name, **kwargs)
 
-    print snapshot_id, snapshot_name
+    print(snapshot_id, snapshot_name)
+
 
 if __name__ == "__main__":
     main()
-

@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -44,24 +44,27 @@ from ec2_copy import copy_image
 
 log = utils.get_logger('ebs')
 
+
 def fatal(e):
-    print >> sys.stderr, "error: " + str(e)
+    print("error: " + str(e), file=sys.stderr)
     sys.exit(1)
+
 
 def usage(e=None):
     if e:
-        print >> sys.stderr, "error: " + str(e)
+        print("error: " + str(e), file=sys.stderr)
 
-    print >> sys.stderr, "Syntax: %s [ -options ] rootfs" % (sys.argv[0])
-    print >> sys.stderr, __doc__.strip()
+    print("Syntax: %s [ -options ] rootfs" % (sys.argv[0]), file=sys.stderr)
+    print(__doc__.strip(), file=sys.stderr)
 
     sys.exit(1)
+
 
 def main():
     try:
         l_opts = ["help", "copy", "publish", "marketplace", "pvmregister", "name="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
-    except getopt.GetoptError, e:
+    except getopt.GetoptError as e:
         usage(e)
 
     name = None
@@ -132,4 +135,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

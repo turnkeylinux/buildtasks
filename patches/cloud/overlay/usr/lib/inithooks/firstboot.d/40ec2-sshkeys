@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
@@ -12,6 +12,7 @@ import ec2metadata
 
 USERNAME = 'root'
 
+
 def authorize_sshkeys(keys, username):
     pw = pwd.getpwnam(username)
     sshdir = os.path.join(pw.pw_dir, '.ssh')
@@ -19,13 +20,13 @@ def authorize_sshkeys(keys, username):
 
     if not os.path.exists(sshdir):
         os.makedirs(sshdir)
-        os.chmod(sshdir, 0700)
+        os.chmod(sshdir, 0o700)
         os.chown(sshdir, pw.pw_uid, pw.pw_gid)
 
-    f = open(authorized_keys, 'a')
-    f.write(''.join(['%s\n' % key for key in keys]))
-    f.close()
+    with open(authorized_keys, 'a') as fob:
+        fob.write(''.join(['%s\n' % key for key in keys]))
     os.chown(authorized_keys, pw.pw_uid, pw.pw_gid)
+
 
 def main():
     keys = ec2metadata.get('public-keys')
@@ -35,4 +36,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

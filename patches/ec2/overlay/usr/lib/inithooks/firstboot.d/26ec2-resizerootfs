@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os
@@ -10,8 +10,8 @@ if '_TURNKEY_INIT' in os.environ:
 import stat
 import statvfs
 import tempfile
+import subprocess
 
-from executil import system, ExecError
 
 def get_mounts(mounts_file="/proc/mounts"):
     """
@@ -23,22 +23,22 @@ def get_mounts(mounts_file="/proc/mounts"):
      - filesystem: The filesystem type.
      - total-space: The capacity of the filesystem in kbytes.
     """
-    for line in open(mounts_file):
+    with open(mount_file) as fob:
+        for line in fob.readlines():
+            try:
+                device, mount_point, filesystem = line.split()[:3]
+                mount_point = mount_point.decode("string-escape")
+            except ValueError:
+                continue
 
-        try:
-            device, mount_point, filesystem = line.split()[:3]
-            mount_point = mount_point.decode("string-escape")
-        except ValueError:
-            continue
+            stats = os.statvfs(mount_point)
+            total_space = (stats.f_blocks * stats.f_bsize) / 1024
 
-        stats = os.statvfs(mount_point)
-        block_size = stats[statvfs.F_BSIZE]
-        total_space = (stats[statvfs.F_BLOCKS] * block_size) / 1024
+            yield {"device": device,
+                   "mount-point": mount_point,
+                   "filesystem": filesystem,
+                   "total-space": int(total_space)}
 
-        yield { "device": device,
-                "mount-point": mount_point,
-                "filesystem": filesystem,
-                "total-space": int(total_space) }
 
 def get_partitions(partitions_file="/proc/partitions"):
     """
@@ -50,20 +50,28 @@ def get_partitions(partitions_file="/proc/partitions"):
      - blocks: Amount of blocks
      - name: Partition name
     """
-    for line in open(partitions_file):
+    with open(partitions_file) as fob:
+        for line in fob.readlines():
 
-        try:
-            major, minor, blocks, name = line.split()
-            blocks = int(blocks)
-        except ValueError:
-            continue
+            try:
+                major, minor, blocks, name = line.split()
+                blocks = int(blocks)
+            except ValueError:
+                continue
 
-        yield { "major": major,
-                "minor": minor,
-                "blocks": blocks,
-                "name": name }
+            yield {"major": major,
+                   "minor": minor,
+                   "blocks": blocks,
+                   "name": name}
+
+
+class RootFSError(Exception):
+    pass
+
 
 class RootFS:
+
+    RootFSError = RootFSError
     SUPPORTED_FILESYSTEMS = ('ext2', 'ext3', 'ext4')
 
     def __init__(self, mountpoint):
@@ -83,7 +91,8 @@ class RootFS:
     @staticmethod
     def _get_mount(mountpoint):
         for m in get_mounts():
-            if m['device'].startswith('/dev/') and m['mount-point'] == mountpoint:
+            if (m['device'].startswith('/dev/') and
+                    m['mount-point'] == mountpoint):
                 return m
 
     @staticmethod
@@ -98,7 +107,9 @@ class RootFS:
 
     @property
     def has_supported_filesystem(self):
-        return True if self.filesystem in self.SUPPORTED_FILESYSTEMS else False
+        if self.filesystem in self.SUPPORTED_FILESYSTEMS:
+            return True
+        return False
 
     def resize_filesystem(self):
         fd, devpath = tempfile.mkstemp(dir=self.mountpoint)
@@ -107,23 +118,21 @@ class RootFS:
 
         st_dev = os.stat(self.mountpoint).st_dev
         dev = os.makedev(os.major(st_dev), os.minor(st_dev))
-        os.mknod(devpath, 0400 | stat.S_IFBLK, dev)
+        os.mknod(devpath, 0o400 | stat.S_IFBLK, dev)
 
-        try:
-            system("resize2fs", devpath)
-        except ExecError:
-            os.unlink(devpath)
-            raise
-
+        resize = subprocess.run(["resize2fs", devpath],
+                                capture_output=True, text=True)
         os.unlink(devpath)
+        if resize.returncode != 0:
+            raise RootFSError(f"Failed to resize '{devpath}'")
 
 
 def main():
     rootfs = RootFS(mountpoint="/")
     if rootfs.has_unused_space and rootfs.has_supported_filesystem:
-        print "Resizing %s: %sG to %sG" % (rootfs.device, rootfs.fs_gb, rootfs.pt_gb)
+        print(f"Resizing {rootfs.device}: {rootfs.fs_gb}G to {rootfs.pt_gb}G")
         rootfs.resize_filesystem()
+
 
 if __name__ == "__main__":
     main()
-

@@ -1,9 +1,0 @@
-#!/bin/bash -e
-# set canvas admin password, email and domain to serve
-
-. /etc/default/inithooks
-
-[ -e $INITHOOKS_CONF ] && . $INITHOOKS_CONF
-$INITHOOKS_PATH/bin/canvas.py --pass="$APP_PASS" --email="$APP_EMAIL" --domain="$APP_DOMAIN"
-
-service canvas_init restart

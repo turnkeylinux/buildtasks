@@ -1,5 +1,5 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -13,14 +13,17 @@ import re
 import os
 import sys
 import logging
+import subprocess
 
 import conf
 
-import executil
+# depends on tkl-ec2metadata
 import ec2metadata
 
+# depends on python3-boto & python3-boto3
 from boto.ec2 import connect_to_region
 import boto3
+
 
 def connect(region=None):
     region = region if region else get_region()
@@ -30,33 +33,45 @@ def connect(region=None):
         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
         security_token=os.environ.get('AWS_SESSION_TOKEN', None))
 
+
 def connect_boto3(region=None):
     region = region if region else get_region()
-    return boto3.client('ec2',
-        region_name = region,
+    return boto3.client(
+        'ec2',
+        region_name=region,
         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
 
+
 def get_turnkey_version(rootfs):
-    return file(os.path.join(rootfs, "etc/turnkey_version")).read().strip()
+    with open(os.path.join(rootfs, "etc/turnkey_version")) as fob:
+        return fob.read().strip()
+
 
 def get_instanceid():
     return ec2metadata.get('instance-id')
 
+
 def get_zone():
     return ec2metadata.get('availability-zone')
+
 
 def get_region():
     return ec2metadata.get('availability-zone')[0:-1]
 
+
 def get_all_regions():
-    return conf.KERNELS.keys()
+    return list(conf.KERNELS.keys())
+
 
 def get_kernel(region, arch):
     return conf.KERNELS[region][arch]
 
+
 def get_arch():
-    return executil.getoutput('dpkg --print-architecture')
+    return subprocess.run(['dpkg', '--print-architecture'],
+                          capture_output=True, text=True).stdout.rstrip()
+
 
 def get_logger(name, level=None):
     logger = logging.getLogger(name)
@@ -83,6 +98,7 @@ def get_logger(name, level=None):
 
     return logger
 
+
 def is_mounted(path):
     mounts = file("/proc/mounts").read()
     if mounts.find(path) != -1:
@@ -90,10 +106,12 @@ def is_mounted(path):
 
     return False
 
+
 def mkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def rsync(rootfs, dest):
-    executil.system('rsync -a -t -r -S -I -H %s/ %s' % (rootfs, dest))
 
+def rsync(rootfs, dest):
+    subprocess.run(
+            ['rsync', '-a', '-t', '-r', '-S', '-I', '-H', f'{rootfs}/', dest])

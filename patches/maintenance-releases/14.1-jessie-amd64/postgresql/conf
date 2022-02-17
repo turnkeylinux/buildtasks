@@ -1,5 +1,0 @@
-#!/bin/bash -e
-
-sed -Ei "s|^(server.document-root.*=).*|\1 \"/var/www\"|" /etc/lighttpd/lighttpd.conf
-sed -Ei "s|^(server.port.*=).*|\1 80|" /etc/lighttpd/lighttpd.conf
-
