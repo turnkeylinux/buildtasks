@@ -37,6 +37,3 @@ done
 # on other headless builds. However, we want it on Hub builds.
 confconsole_auto='/root/.bashrc.d/confconsole-auto'
 [[ -f "$confconsole_auto" ]] && chmod -x "$confconsole_auto"
-
-# disable hubclient for testing
-sed -i "/hubclient-status/ s|\(hubclient.*\)|echo \"\1\"|" /usr/lib/inithooks/firstboot.d/95secupdates

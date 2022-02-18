@@ -7,7 +7,6 @@
 
 [ -z $RESTORE_BACKUPID ] && exit 0
 
-#hubclient-status tklbam-restore
-echo "hubclient-status tklbam-restore"
-#tklbam-restore --noninteractive $RESTORE_BACKUPID
-echo "tklbam-restore --noninteractive $RESTORE_BACKUPID"
+hubclient-status tklbam-restore
+tklbam-restore --noninteractive $RESTORE_BACKUPID
+
