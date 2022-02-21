@@ -30,7 +30,12 @@ def main():
             os.remove(script)
             print("# executed ec2 user-data script")
         else:
-            print(f"# ERROR: executing ec2 user-data script failed ({script})")
+            line = f"# ERROR: executing ec2 user-data script failed ({script})"
+            log = '/var/log/userdata.log'
+            with open(log, 'w') as fob:
+                print(line, f'\n - see {log} for details.')
+                fob.write(line+'\n\n')
+                fob.writelines(ec2meta.stderr)
             sys.exit(1)
 
 
