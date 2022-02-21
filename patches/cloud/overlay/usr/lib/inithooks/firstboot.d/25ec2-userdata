@@ -7,21 +7,32 @@ import sys
 if '_TURNKEY_INIT' in os.environ:
     sys.exit(0)
 
-import tempfile
+from os.path import join
 import subprocess
 
 import ec2metadata
 
+DIR = '/var/lib/inithooks/ec2metadata'
+
 
 def main():
     userdata = ec2metadata.get('user-data')
+    os.makedirs(DIR, exist_ok=True)
 
-    if userdata and userdata.startswith("#!"):
-        with tempfile.NamedTemporaryFile("w", prefix="ec2userdata") as fob:
-            fob.writelines(userdata)
-            os.chmod(fob.name, 0o750)
-            subprocess.run([fob.name])
+    if userdata and userdata.decode().startswith("#!"):
+        os.makedirs(DIR, exist_ok=True)
+        script = join(DIR, 'user-data.sh')
+        with open(script, "wb") as fob:
+            fob.write(userdata)
+        os.chmod(script, 0o750)
+        ec2meta = subprocess.run([script], capture_output=True, text=True)
+        if ec2meta.returncode == 0:
+            os.remove(script)
             print("# executed ec2 user-data script")
+        else:
+            print(f"# ERROR: executing ec2 user-data script failed ({script})")
+            sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
