@@ -8,7 +8,6 @@ if '_TURNKEY_INIT' in os.environ:
     sys.exit(0)
 
 import stat
-import statvfs
 import tempfile
 import subprocess
 
@@ -23,11 +22,10 @@ def get_mounts(mounts_file="/proc/mounts"):
      - filesystem: The filesystem type.
      - total-space: The capacity of the filesystem in kbytes.
     """
-    with open(mount_file) as fob:
+    with open(mounts_file) as fob:
         for line in fob.readlines():
             try:
                 device, mount_point, filesystem = line.split()[:3]
-                mount_point = mount_point.decode("string-escape")
             except ValueError:
                 continue
 
