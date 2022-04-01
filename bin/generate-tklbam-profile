@@ -157,7 +157,11 @@ class Profile:
         for control in parse_status(join(path_rootfs, "var/lib/dpkg/status")):
             d = parse_control(control)
             if d['Status'] == 'install ok installed':
-                packages.append(d['Package'])
+                # filter out live packages (removed on install)
+                if not d['Package'] in ['di-live', 'live-boot',
+                                        'live-boot-initramfs-tools',
+                                        'live-tools']:
+                    packages.append(d['Package'])
 
         packages.sort()
         return packages
