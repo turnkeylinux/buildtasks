@@ -72,16 +72,14 @@ case "$appname" in
     tkldev)           export ON_MEMORY=0.50 ;;
     moodle)           export ON_MEMORY=0.33 ;;
     tomcat-apache)    export ON_MEMORY=0.33 ;;
-    appengine-java)   export ON_MEMORY=0.33 ;;
     *)                export ON_MEMORY=0.25 ;;
 esac
 
 case "$codename" in
-    squeeze) debianversion="debian-6" ;;
-    wheezy)  debianversion="debian-7" ;;
-    jessie)  debianversion="debian-8" ;;
-    stretch) debianversion="debian-9" ;;
-    buster)  debianversion="debian-10" ;;
+    stretch)    debianversion="debian-9" ;;
+    buster)     debianversion="debian-10" ;;
+    bullseye)   debianversion="debian-11" ;;
+    bookworm)   debianversion="debian-12" ;;
     *)       fatal "debianversion could not be determined" ;;
 esac
 
