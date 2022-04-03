@@ -1,0 +1,16 @@
+#!/bin/bash -e
+
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get -y \
+    -o DPkg::Options::=--force-confdef \
+    -o DPkg::Options::=--force-confold \
+    install dtach inithooks
+
+rm -f /root/.bashrc.d/confconsole-auto
+rm -f /root/.profile.d/turnkey-init-fence
+
+apt-mark hold linux-image-arm64
+
+sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
+
+echo "hostmnt /mnt 9p trans=virtio,rw,_netdev 0 0" >> /etc/fstab

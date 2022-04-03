@@ -1,0 +1,65 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 imgdir version appname
+Verify IMG by getting .hash and verifying (skipped if .hash exists)
+
+Arguments::
+
+    imgdir      - directory containing IMG
+    version     - appliance version (e.g., 11.1-lucid-x86)
+    appname     - appliance name (e.g., core)
+
+Environment::
+
+    BT_GPGKEY   - gpg key id used to sign the signature file
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+[ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+
+imgdir=$1
+version=$2
+appname=$3
+
+imgfile=turnkey-$appname-$version.img.xz
+hashfile=turnkey-$appname-$version.img.xz.hash
+hashpath=$imgdir/$hashfile
+
+. $BT_CONFIG/aws.cfg &>/dev/null || true
+
+if [ ! -e $hashpath ]; then
+    mirror_src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$hashfile
+    bucket_src=s3://turnkeylinux-builds/metadata/$hashfile
+    wget --read-timeout=60 --tries=10 $mirror_src -O $hashpath \
+        || aws s3 cp $bucket_src $hashpath \
+        || fatal "$hashfile download failed"
+else
+    info "$hashfile already exists, skipping download..."
+fi
+
+if ! $BT/bin/signature-verify $imgdir/$imgfile $hashpath; then
+    mv $imgdir/$imgfile $imgdir/$imgfile.corrupt
+    rm $hashpath
+    fatal "$hashfile verification failed"
+fi

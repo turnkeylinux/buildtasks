@@ -1,0 +1,64 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+
+FILES=$*
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) img...imgN
+Publish release IMG and related metafiles
+
+Environment::
+
+    BT_PUBLISH_IMGS
+    BT_PUBLISH_META
+    BT_PUBLISH_PROFILES
+
+EOF
+exit 1
+}
+
+if [[ "${#FILES}" < "1" ]]; then
+    usage
+fi
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+. $BT/config/common.cfg
+
+[ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+[ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+[ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+
+for f in $FILES; do
+    [ -e $f ] || fatal "$f does not exist"
+
+    O=$(dirname $f)
+    name=$(basename $f | sed 's/.img.xz//')
+    appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+    version=$(echo $name |perl -pe 's/.*?-(\d.*)/\1/')
+
+    export PUBLISH_DEST=${BT_PUBLISH_IMGS}/img/
+    $BT/bin/publish-files $O/$name.img.xz
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$name.{changelog,manifest,img.buildenv,img.xz.hash}
+
+    if [ -e $O/$name.tklbam/*.tar.gz ]; then
+        export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
+        $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
+    fi
+done
+

@@ -1,0 +1,98 @@
+#!/bin/bash -e
+# Author: Yannick Heneault yheneaul@gmail.com
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) appname-version
+Converts appliance appname-version to qcow2 for qemu
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appver" ] || usage
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
+
+os_arch=$(dpkg --print-architecture)
+[ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
+
+$BT/bin/img-download $BT_IMGS $BT_VERSION $appname
+$BT/bin/img-verify $BT_IMGS $BT_VERSION $appname
+
+O=$BT_QEMU
+mkdir -p $O
+cd $O
+
+imgfile=turnkey-${appname}-${BT_VERSION}.img.xz
+tmpimgfile=${imgfile%.xz}
+qcowfile=${imgfile%.img.xz}.qcow2
+
+info "Decompressing image..."
+xz -d -c $BT_IMGS/$imgfile > $tmpimgfile
+info "Resizing image..."
+qemu-img resize -f raw $tmpimgfile 30G
+parted -s $tmpimgfile -- resizepart 2 100%
+kpartx -asv $tmpimgfile
+e2fsck -f /dev/mapper/loop0p2
+resize2fs /dev/mapper/loop0p2
+mkdir -p sdroot
+mount /dev/mapper/loop0p2 sdroot
+mkdir -p sdroot/boot/firmware
+mount /dev/mapper/loop0p1 sdroot/boot/firmware
+
+[[ "$appversion" == *"rc"* ]] && $BT/bin/upgrade-pkgs sdroot
+
+$BT/bin/purge-pkgs sdroot
+tklpatch-apply sdroot $BT/patches/qemu
+$BT/bin/rootfs-cleanup sdroot
+
+$BT/bin/aptconf-tag sdroot qemu
+
+cp sdroot/boot/vmlinuz-* vmlinuz-$qcowfile 
+cp sdroot/boot/initrd.img-* initrd.img-$qcowfile 
+
+umount sdroot/boot/firmware
+umount sdroot
+rmdir sdroot 
+kpartx -dsv $tmpimgfile
+info "Converting image..."
+qemu-img convert -f raw -O qcow2 $tmpimgfile $qcowfile
+rm $tmpimgfile
+

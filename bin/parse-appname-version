@@ -71,7 +71,6 @@ case $architecture in
     i386|amd64)
         ;;
     arm|arm64)
-        warning "$architecture unsupported, unlikely to work"
         ;;
     *)
         fatal "unrecognized architecture: $architecture"
