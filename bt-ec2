@@ -99,6 +99,19 @@ install_pkg() {
     rm -rf /tmp/$_pkg
 }
 
+if [[ ! -f /usr/bin/ec2metadata ]]; then
+    codename=$(lsb_release -sc)
+    if [[ "$codename" == "buster" ]]; then
+        pkgs="ec2metadata python-boto3"
+    elif [[ "$codename" == "bullseye" ]]; then
+        pkgs="tkl-ec2metadata"
+    else
+        fatal "Expected buster or bullseye host"
+    fi
+    apt-get update -qq
+    apt-get install -y $pkgs
+fi
+
 parsed_appname_version=$($BT/bin/parse-appname-version $appver)
 read appname appversion codename arch <<< "$parsed_appname_version"
 
@@ -144,11 +157,17 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
+if netstat -tlnp | grep -q polipo; then
+    proxy=/etc/apt/apt.conf.d/00proxy
+    cp $rootfs/$proxy $rootfs/_proxy_backup
+    sed -i "s|3128|8124|"  $rootfs/$proxy
+fi
 
 function _cleanup() {
     umount -l $rootfs/dev || true
     umount -l $rootfs/sys || true
     umount -l $rootfs/proc || true
+    mv $rootfs/_proxy_backup $rootfs/$proxy || true
 
     if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
         rm -rf $rootfs
@@ -179,7 +198,11 @@ umount -l $rootfs/proc || true
 $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs ec2
 $BT/bin/build-tag $rootfs ec2
-$BT/bin/ec2/ebs.py $ebs_opts $rootfs
+if [[ -f /usr/bin/python ]]; then
+    $BT/bin/ec2/legacy/ebs.py $ebs_opts $rootfs
+else
+    $BT/bin/ec2/ebs.py $ebs_opts $rootfs
+fi
 $BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$new_name.ec2.buildenv
 
 if [ "$publish" == "yes" ]; then
