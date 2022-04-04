@@ -157,10 +157,17 @@ $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
 tklpatch-extract-iso $BT_ISOS/$isofile
+
+proxy=/etc/apt/apt.conf.d/00proxy
+info "Checking for proxy ports"
+grep -r '127.0.0.1:3128' /etc/apt/apt.conf.d/ || true
+grep -r '127.0.0.1:8124' /etc/apt/apt.conf.d/ || true
 if netstat -tlnp | grep -q polipo; then
-    proxy=/etc/apt/apt.conf.d/00proxy
     cp $rootfs/$proxy $rootfs/_proxy_backup
     sed -i "s|3128|8124|"  $rootfs/$proxy
+elif [[ -f "$rootfs/_proxy_backup" ]]; then
+    # assume that it's left over backup that didn't make it back
+    mv "$rootfs/_proxy_backup" "$rootfs/$proxy"
 fi
 
 function _cleanup() {
