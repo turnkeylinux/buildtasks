@@ -32,8 +32,8 @@ mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 # stop auto-secupdates complaining
 mkdir -p /lib/modules
 
-# remove ntp & jitterentropy daemons
-dpkg --purge ntp jitterentropy-rngd  || true
+# remove ntp, jitterentropy & acpi daemons
+dpkg --purge ntp jitterentropy-rngd acpid  || true
 
 # disable tklbam fixclock-hook - can't set time in a container (closes #1170)
 chmod -x /etc/tklbam/hooks.d/fixclock
