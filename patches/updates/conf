@@ -11,8 +11,8 @@ chmod +x $invokercd
 trap "rm $invokercd; dpkg-divert --local --rename --remove $invokercd" INT TERM EXIT
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get upgrade --autoremove -y \
-    -o APT::Get::Upgrade-Allow-New \
+DEBIAN_FRONTEND=noninteractive apt-get upgrade \
+    --autoremove --with-new-pkgs -y \
     -o DPkg::Options::=--force-confdef \
     -o DPkg::Options::=--force-confold
 
