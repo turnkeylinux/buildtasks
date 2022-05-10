@@ -1,0 +1,31 @@
+#!/bin/bash -ex
+
+invokercd=$(which invoke-rc.d)
+dpkg-divert --local --rename --add $invokercd
+cat>$invokercd<<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x $invokercd
+
+trap "rm $invokercd; dpkg-divert --local --rename --remove $invokercd" INT TERM EXIT
+
+export DEBIAN_FRONTEND=noninteractive
+_apt() {
+    opts="-o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold"
+    cmd=$1
+    shift
+    case $cmd in
+        install)    args="-y $opts";;
+        reinstall)  cmd=install
+                    args="--reinstall -y $opts";;
+        remove)     args="-y";;
+    esac
+    apt-get $cmd $args "$@"
+}
+
+apt-get update
+_apt remove live-tools
+_apt reinstall initramfs-tools
+# di-live was also removed above and will reinstall live-tools
+_apt install di-live
