@@ -199,14 +199,16 @@ mount --bind --make-rslave /run $rootfs/run
 
 info "Applying patches:"
 info " - $update_patch."
-tklpatch-apply $rootfs $update_patch
+tklpatch-apply-conf $rootfs $conf_script
 info " - $update_patch - done."
 rm -rf $update_patch
 for patch in $patches; do
     info " - $patch."
-    tklpatch-apply $rootfs $patch
+    [[ ! -d "$patch/overlay" ]] || tklpatch-apply-overlay $patch/overlay
+    tklpatch-apply-conf $rootfs $patch/conf
     info " - $patch - done."
 done
+tklpatch-apply-cleanup $rootfs
 
 _umount
 
