@@ -70,7 +70,7 @@ if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
     unset secupdates
 fi
 
-[ -n "$BT_DEBUG" ] && set -x
+[ -z "$BT_DEBUG" ] || set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config

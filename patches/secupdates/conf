@@ -24,4 +24,3 @@ for KERNEL in $INSTALLED; do
     [ "$KERNEL" == "$CURRENT" ] && continue
     DEBIAN_FRONTEND=noninteractive apt-get -y purge $KERNEL
 done
-

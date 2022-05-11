@@ -81,8 +81,9 @@ clone_or_pull() {
 
 get_version() {
     pkg=$1
-    pkg_info=$(dpkg -l | grep ^ii | tr -s [[:blank:]] ' ' | cut -d' ' -f2,3 \
-        | grep "^$pkg[ |:]")
+    sp="[[:space:]]"
+    pkg_info=$(dpkg -l \
+        | sed -En "s|^ii.*($pkg)$sp*([0-9a-z\.-:]*)$sp.*|\1 \2|p")
     echo $pkg_info | cut -d' ' -f2
 }
 
