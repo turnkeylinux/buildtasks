@@ -229,3 +229,11 @@ if [ -e $BT_PROFILES/$appname ]; then
     $BT/bin/generate-tklbam-profile $O/$new_name.iso $O/$new_name.tklbam
 fi
 _cleanup
+
+if [ "$publish" == "yes" ]; then
+    $BT/bin/iso-publish $BT_ISOS/$new_name.iso
+    if [[ -z "BT_DEBUG" ]]; then
+        rm -rf $BT_ISOS/$name.iso*
+        rm -rf $BT_ISOS/$new_name*
+    fi
+fi
