@@ -14,6 +14,9 @@ _apt() {
     apt-get $cmd $args "$@"
 }
 
+list_file=/var/lib/apt/lists/archive.turnkeylinux.org_debian_dists_bullseye_Release
+[[ -f "$list_file" ]] || apt-get update
+
 _apt remove live-tools
 _apt reinstall initramfs-tools
 # di-live was also removed above and will reinstall live-tools

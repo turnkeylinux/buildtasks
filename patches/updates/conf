@@ -1,6 +1,8 @@
 #!/bin/bash -ex
 
-apt-get update
+list_file=/var/lib/apt/lists/archive.turnkeylinux.org_debian_dists_bullseye_Release
+[[ -f "$list_file" ]] || apt-get update
+
 DEBIAN_FRONTEND=noninteractive apt-get upgrade \
     --autoremove --with-new-pkgs -y \
     -o DPkg::Options::=--force-confdef \
