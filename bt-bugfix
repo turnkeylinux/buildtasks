@@ -123,7 +123,7 @@ $BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
-_cleanup
+[[ "$force" == "yes" ]] || _cleanup
 tklpatch-extract-iso $isofile
 
 unset patches
