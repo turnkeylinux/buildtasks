@@ -127,15 +127,16 @@ cd $O
 tklpatch-extract-iso $isofile
 
 unset patches
-if [[ "$updates" == "yes" ]]; then
-    patches="$BT/patches/updates"
-elif [[ "$secupdates" == "yes" ]]; then
-    patches="$BT/patches/secupdates"
-fi
 [[ ! -d "$BT/patches/$BT_VERSION" ]] \
-    || patches="$patches $BT/patches/$BT_VERSION"
+    || patches="$BT/patches/$BT_VERSION"
 [[ ! -d "$BT/patches/${appname}-${NEW_BT_VERSION}" ]] \
     || patches="$patches $BT-patches/${appname}-${NEW_BT_VERSION}"
+if [[ "$updates" == "yes" ]]; then
+    patches="$patches $BT/patches/updates"
+elif [[ "$secupdates" == "yes" ]]; then
+    patches="$patches $BT/patches/secupdates"
+fi
+
 patch_test=$(echo $patches | tr -d '[[:space:]]')
 if [[ -z "$patch_test" ]]; then
     if [[ -z "$BT_DEBUG" ]]; then
@@ -216,7 +217,7 @@ _umount
 info "Cleaning up rootfs and rebuilding new ISO."
 $BT/bin/rootfs-cleanup $rootfs
 $BT/bin/aptconf-tag $rootfs iso
-tklpatch-prepare-cdroot $rootfs
+tklpatch-prepare-cdroot $rootfs $cdroot
 TKLPATCH_ISOLABEL=${appname} tklpatch-geniso $cdroot $new_isofile
 
 info "Preparing release files."
