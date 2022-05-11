@@ -168,6 +168,7 @@ elif [[ "$patches" == *"/secupdates"* ]]; then
 EOF
 fi
 cat >> $new_changelog <<EOF
+
   * $msg
     [ autopatched by buildtasks ]
 
