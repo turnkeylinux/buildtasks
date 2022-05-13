@@ -1,0 +1,54 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 outdir version appname
+Download IMG if it doesn't already exist in outdir
+
+Arguments::
+
+    outdir      - destination directory to save IMG
+    version     - appliance version (e.g., 17.0-bullseye-arm64)
+    appname     - appliance name (e.g., core)
+EOF
+exit 1
+}
+
+if [[ "$#" != "3" ]]; then
+    usage
+fi
+
+outdir=$1
+version=$2
+appname=$3
+
+imgfile=turnkey-$appname-$version.img.xz
+
+if [ -e $outdir/$imgfile ]; then
+    info "$imgfile already exists, skipping download..."
+    exit 0
+fi
+
+. $BT_CONFIG/aws.cfg &>/dev/null || true
+
+mkdir -p $outdir
+mirror_images="http://mirror.turnkeylinux.org/turnkeylinux/images"
+bucket_images="s3://turnkeylinux-builds/images"
+if ! wget --read-timeout=60 --tries=10 $mirror_images/img/$imgfile \
+        -O $outdir/$imgfile; then
+    if ! aws s3 cp $bucket_images/img/$imgfile $outdir/$imgfile; then
+        fatal "$imgfile download failed"
+    fi
+fi

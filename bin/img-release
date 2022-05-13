@@ -1,0 +1,82 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) outdir
+Generate release files for publishing
+
+Options::
+
+    --force             delete release files in outdir if they exist
+
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        --force)     force="yes";;
+        *)           if [ -n "$O" ]; then usage; else O=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$O" ] || usage
+[ -e "$O" ] || fatal "$O does not exist"
+
+[ -e changelog ] || fatal "changelog not found"
+[ -e build/product.img.xz ] || fatal "build/product.img.xz not found"
+[ -e build/root.sandbox ] || fatal "build/root.sandbox not found"
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+. $BT/config/common.cfg
+
+rootfs=build/root.sandbox
+name=$(cat $rootfs/etc/turnkey_version)
+appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+[ -n "$name" ] || fatal "could not identify name"
+
+if [ "$force" == "yes" ]; then
+    rm -f $O/$name.img.xz
+    rm -f $O/$name.img.xz.hash
+    rm -f $O/$name.img.xz.buildenv
+    rm -f $O/$name.manifest
+    rm -f $O/$name.changelog
+    rm -f $O/$name.log
+    rm -rf $O/$name.tklbam
+fi
+
+[ -e $O/$name.img.xz ] && fatal "$O/$name.img.xz already exists"
+[ -e $O/$name.img.xz.hash ] && fatal "$O/$name.img.xz.hash already exists"
+[ -e $O/$name.img.xz.buildenv ] && fatal "$O/$name.img.xz.buildenv already exists"
+[ -e $O/$name.manifest ] && fatal "$O/$name.manifest already exists"
+[ -e $O/$name.changelog ] && fatal "$O/$name.changelog already exists"
+[ -e $O/$name.tklbam ] && fatal "$O/$name.tklbam already exists"
+
+[ -e build/log ] && cp build/log $O/$name.log
+cp changelog $O/$name.changelog
+cp build/product.img.xz $O/$name.img.xz
+$BT/bin/generate-signature $O/$name.img.xz
+$BT/bin/generate-manifest $rootfs > $O/$name.manifest
+$BT/bin/generate-buildenv img $appname > $O/$name.img.xz.buildenv
+if [ -e $BT_PROFILES/$appname ]; then
+    mkdir -p $O/$name.tklbam
+    export PROFILES_CONF=$BT_PROFILES
+    $BT/bin/generate-tklbam-profile $rootfs $O/$name.tklbam
+fi
+

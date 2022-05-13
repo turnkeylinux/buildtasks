@@ -1,0 +1,123 @@
+#!/bin/bash -e
+# Author: Yannick Heneault yheneaul@gmail.com
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [--publish] appname-version
+Converts appliance appname-version to docker
+
+Arguments::
+
+    appname-version     - e.g., core-14.2-jessie-amd64
+
+Options::
+
+    --publish           - if set, image will be uploaded to docker index
+                          and metadata will be publish; also assumes
+                          '--mark-as-latest'.
+    --docker-publish    - if set, image will be uploaded to docker index
+    --mark-as-latest    - if set, the :latest tag will point to the
+                          newly build image
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )  usage;;
+        --publish)   publish="yes"; mark_as_latest="yes";;
+        --docker-publish)   docker_publish="yes";;
+        --mark-as-latest)   mark_as_latest="yes";;
+        *)           if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appver" ] || usage
+[ -n "$publish" ] || warning "--publish was not specified"
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/docker.cfg
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+else
+    warning "--publish was not specified"
+fi
+
+parsed_appname_version=$($BT/bin/parse-appname-version $appver)
+read appname appversion codename arch <<< "$parsed_appname_version"
+export BT_VERSION=${appversion}-${codename}-${arch}
+export RELEASE="debian/$codename"
+
+os_arch=$(dpkg --print-architecture)
+[ "amd64" == "$os_arch" ] || fatal "only amd64 is supported"
+
+[ -n "$BT_DOCKER_NAME" ] || fatal "BT_DOCKER_NAME not set"
+[ -n "$BT_DOCKER_USER" ] || fatal "BT_DOCKER_USER not set"
+[ -n "$BT_DOCKER_PASS" ] || fatal "BT_DOCKER_PASS not set"
+[ -n "$BT_DOCKER_MAIL" ] || fatal "BT_DOCKER_MAIL not set"
+
+O=$BT_BUILDS/docker
+mkdir -p $O
+
+# hack for cloudtasks issues with pre command
+if [ ! -e /root/docker-setup.done ]; then
+    /turnkey/buildtasks/bin/docker-setup
+    touch /root/docker-setup.done
+fi
+
+# make sure docker daemon is running
+service docker start
+
+ports=$(grep "^$appname:" $BT_CONFIG/docker.ports | sed "s|^$appname: ||")
+[ -n "$ports" ] || fatal "no ports defined for $appname"
+
+qcowfile=turnkey-${appname}-${BT_VERSION}.qcow2
+name=turnkey-${appname}-${BT_VERSION}
+
+cd $O
+
+# create docker image
+appversion=$(echo $BT_VERSION | cut -d "-" -f 1)
+dockername=$BT_DOCKER_USER/${appname}-${arch}-qemu-${os_arch}:${appversion}
+$BT/bin/docker-qemu-bundle $qcowfile $dockername $ports
+
+# publish if specified
+if [ "$publish" == "yes" ] || [ "$docker_publish" == "yes" ]; then
+    while true; do
+        if docker push $dockername; then
+            if [ "$mark_as_latest" == "yes" ]; then
+                docker tag $dockername "$BT_DOCKER_USER/${appname}-${arch}-qemu-${os_arch}:latest"
+                docker push "$BT_DOCKER_USER/${appname}-${arch}-qemu-${os_arch}:latest"
+                break
+            else
+                break
+            fi
+        else
+            echo "autoresume push: sleeping for 5 seconds"
+            sleep 5
+        fi
+    done
+fi
+

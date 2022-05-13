@@ -21,6 +21,7 @@ Targets::
 
     bootstrap   path/to/bootstrap_src_dir
     iso         appname
+    img         appname
     vm          path/to/iso.hash
     ec2         path/to/iso.hash
     xen         path/to/iso.hash
@@ -95,6 +96,22 @@ bt_iso() {
     echo "deck $(deck --version)"
 }
 
+bt_img() {
+    appname=$1
+
+    _git_state $FAB_PATH/common
+    _git_state $BT_PRODUCTS/core
+    _git_state $BT_PRODUCTS/$appname
+    _git_state $BT_PROFILES
+
+    bootstrap_hash=$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.hash
+    bootstrap_hash_md5=$(md5sum $bootstrap_hash | cut -d " " -f 1)
+    echo "$(basename $bootstrap_hash) $bootstrap_hash_md5"
+
+    echo "fab $(fab --version)"
+    echo "deck $(deck --version)"
+}
+
 bt_ec2() {
     echo "boto $(python -c 'import boto; print boto.__version__')"
 }
@@ -116,6 +133,7 @@ target=$1
 case $target in
     bootstrap)  _common; bt_bootstrap $2;;
     iso)        _common; bt_iso $2;;
+    img)        _common; bt_img $2;;
     ec2)        _common; _optimized $2; bt_ec2;;
     vm)         _common; _optimized $2; bt_vm;;
     docker)     _common; _optimized $2; bt_docker;;

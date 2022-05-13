@@ -1,0 +1,193 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [ --publish ] appname
+Builds appliance appname (e.g., core) IMG
+
+Arguments::
+
+    appname             - e.g., core
+
+Options::
+
+    --publish           - publish img, release files and tklbam profile
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        --publish)     publish="yes";;
+        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+[ -n "$appname" ] || usage
+[ -n "$BT_DEBUG" ] && set -x
+
+REQ_FAB_V=0.8
+REQ_DBOOT_V=1.0.123
+HOST_VER=$(lsb_release -sr | cut -d. -f1)
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+else
+    warning "--publish was not specified"
+fi
+
+clone_or_pull() {
+    # If $dir doesn't exist, clone $repo. If it does, update from origin master
+    dir=$1
+    repo=$2
+    [[ -n "$dir" ]] && [[ -n "$repo" ]] \
+        || fatal "One or more empty values passed to function: $FUNCNAME."
+    if [ ! -e $dir ]; then
+        info "Attempting to clone repo $repo to $dir."
+        cd $(dirname $dir)
+        git clone https://github.com/$repo $dir
+        cd $dir
+    else
+        info "Repo $repo found, attempting to update"
+        cd $dir
+        git pull origin master
+    fi
+}
+
+get_version() {
+    pkg=$1
+    pkg_info=$(dpkg -l | grep ^ii | tr -s [[:blank:]] ' ' | cut -d' ' -f2,3 \
+        | grep "^$pkg[ |:]")
+    echo $pkg_info | cut -d' ' -f2
+}
+
+install_pkg() {
+    _pkg=$1
+    _url=$2
+    wget -O /tmp/$_pkg $_url/$_pkg
+    apt install /tmp/$_pkg
+    rm -rf /tmp/$_pkg
+}
+
+# Leverage tkldev-setup to ensure important repos are cloned and at latest
+# commit; also ensures RELEASE & ARCH are set.
+tkldev-setup $appname \
+        || warning "tkldev-setup failed. Attempting to continue anyway."
+
+# if v17.x (bullseye) being built on v16.x (buster) get/build right bootstrap
+TKL_VER=$(head -1 $BT_PRODUCTS/$appname/changelog | cut -d' ' -f1)
+MAJ_VER_NO=$(basename $(echo $TKL_VER | tr '-' '/') | cut -d'.' -f1)
+if [[ "$HOST_VER" -eq 10 ]] \
+    && [[ $MAJ_VER_NO -eq 17 ]]; then
+    warning "Buster host detected, attempting to build for Bullseye."
+    RC="rc1"
+    info "Assuming RC build. Nominating $RC."
+    export VERSION_TAG=$RC
+    export CODENAME="bullseye"
+    export RELEASE="debian/$CODENAME"
+    info "Fab v$(get_version fab) detected."
+    if [[ "$(get_version fab)" != "$REQ_FAB_V"* ]]; then
+        warning "Fab v$REQ_FAB_V required, attempting install."
+        fab_pkg=fab_${REQ_FAB_V}_stretch_amd64.deb
+        fab_url=https://github.com/turnkeylinux/fab/releases/download/v${REQ_FAB_V}
+        install_pkg $fab_pkg $fab_url
+    fi
+    export GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
+    IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
+    BOOTSTRAP_NAME="bootstrap-$CODENAME-$(dpkg --print-architecture)"
+    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$CODENAME"
+    if [ ! -d $BOOTSTRAP_PATH ]; then
+        info "Attempting to download $BOOTSTRAP_NAME"
+        mkdir -p $(dirname $BOOTSTRAP_PATH)
+        cd $(dirname $BOOTSTRAP_PATH)
+        exit_code=0
+        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
+        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
+        exit_code=1 # force rebuild of bootstrap...
+        if [[ "$exit_code" -eq 0 ]]; then
+            info "verifying $BOOTSTRAP_NAME"
+            gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $GPGKEY
+            gpg --verify $BOOTSTRAP_NAME.tar.gz.hash
+
+            info "unpacking $BOOTSTRAP_NAME"
+            mkdir $BOOTSTRAP_PATH
+            tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
+            cd -
+        else
+            warning "Downloading bootstrap failed."
+            info "Attempting to build bootstrap."
+            info "Debootstrap v$(get_version debootstrap) detected."
+            if [[ "$(get_version debootstrap)" != "$REQ_DBOOT_V"* ]]; then
+                warning "Debootstrap v$REQ_DBOOT_V required, attempting install."
+                dboot_pkg=debootstrap_${REQ_DBOOT_V}_all.deb
+                dboot_url=http://deb.debian.org/debian/pool/main/d/debootstrap/
+                install_pkg $dboot_pkg $dboot_url
+            fi
+            unset PUBLISH
+            BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
+            [[ "$publish" != "yes" ]] || PUBLISH="--publish"
+            $BT/bt-bootstrap $PUBLISH --no-clean --force \
+                || fatal "Building bootstrap failed... :("
+            rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
+                $FAB_PATH/bootstraps/$CODENAME/
+            # create symlinks so bin/generate-buildenv completes successfully
+            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz \
+                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
+            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash \
+                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
+        fi
+    fi
+    touch $BOOTSTRAP_PATH/bullseye_on_buster
+fi
+
+info "Preperation done. Building appliance $appname."
+cd $BT_PRODUCTS/$appname
+deck -D build/root.sandbox || true
+make clean || true
+make || true
+
+if [ ! -e build/product.img.xz ]; then
+    if [ -z "$BT_DEBUG" ]; then
+        deck -D build/root.sandbox >/dev/null 2>&1 || true
+        make clean >/dev/null 2>&1 || true
+    fi
+    fatal "Build failed..."
+fi
+
+mkdir -p $BT_IMGS
+$BT/bin/img-release --force $BT_IMGS
+
+if [ "$publish" == "yes" ]; then
+    name=$(cat build/root.sandbox/etc/turnkey_version)
+    $BT/bin/img-publish $BT_IMGS/$name.img.xz
+fi
+
+if [ -z "$BT_DEBUG" ]; then
+    deck -D build/root.sandbox
+    make clean
+fi
