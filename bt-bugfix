@@ -119,7 +119,8 @@ _cleanup() {
 #trap _cleanup INT TERM EXIT
 
 info "Download and verfiy ISO."
-$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
+$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname \
+    || $BT/bt-iso $appname
 $BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
 
 cd $O
