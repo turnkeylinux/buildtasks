@@ -69,6 +69,10 @@ remove() {
                 jessie)  debianversion="debian-8" ;;
                 stretch) debianversion="debian-9" ;;
                 buster)  debianversion="debian-10" ;;
+                bullseye)
+                         debianversion="debian-11" ;;
+                bookworm)
+                         debianversion="debian-12" ;;
                 *)       fatal "debianversion could not be determined" ;;
             esac
             rm_app="${debianversion}-turnkey-${appname}_${appversion}-1_${arch}"
