@@ -35,6 +35,9 @@ mkdir -p /lib/modules
 # remove ntp, jitterentropy & acpi daemons
 apt-get purge --autoremove -y ntp jitterentropy-rngd acpid  || true
 
+# disable ssh.socket so that sshd runs reliably - closes #1722
+systemctl mask ssh.socket
+
 # disable tklbam fixclock-hook - can't set time in a container (closes #1170)
 chmod -x /etc/tklbam/hooks.d/fixclock
 
