@@ -33,6 +33,8 @@ EOF
 exit 1
 }
 
+ARGS="$@"
+
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )    usage;;
@@ -44,10 +46,6 @@ done
 
 [ -n "$appname" ] || usage
 [ -n "$BT_DEBUG" ] && set -x
-
-REQ_FAB_V=1.0.2
-REQ_DBOOT_V=1.0.123
-HOST_VER=$(lsb_release -sr | cut -d. -f1)
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
@@ -95,50 +93,73 @@ install_pkg() {
     rm -rf /tmp/$_pkg
 }
 
+git_unshallow() {
+    local dir=$1
+    local branch=$2
+    # assume TKL remote is 'origin'
+    local remote=origin
+    cd $dir
+    if [[ "$(git symbolic-ref --short HEAD)" != "$branch" ]]; then
+        git remote set-branches origin '*'
+        git fetch origin --unshallow 2>/dev/null || git fetch origin
+        git checkout $branch || git checkout $branch-dev
+    fi
+    cd -
+}
+
+cd $BT
+COMMIT_ID=$(git rev-parse --short HEAD)
 # Leverage tkldev-setup to ensure important repos are cloned and at latest
 # commit; also ensures RELEASE & ARCH are set.
 tkldev-setup $appname \
         || warning "tkldev-setup failed. Attempting to continue anyway."
 
-# if v17.x (bullseye) being built on v16.x (buster) get/build right bootstrap
-TKL_VER=$(head -1 $BT_PRODUCTS/$appname/changelog | cut -d' ' -f1)
-MAJ_VER_NO=$(basename $(echo $TKL_VER | tr '-' '/') | cut -d'.' -f1)
-if [[ "$HOST_VER" -eq 11 ]] \
-    && [[ $MAJ_VER_NO -eq 17 ]]; then
-    warning "Bullseye host detected, checking for bugfixed Bullseye fab package."
-    #RC="rc1"
-    #info "Assuming RC build. Nominating $RC."
-    #export VERSION_TAG=$RC
-    #export CODENAME="bullseye"
-    #export RELEASE="debian/$CODENAME"
-    info "Fab v$(get_version fab) detected - Fab v${REQ_FAB_V} required."
-    if [[ "$(get_version fab)" != "$REQ_FAB_V"* ]]; then
-        warning "Fab v$REQ_FAB_V required, attempting install."
-        #fab_pkg=fab_${REQ_FAB_V}_stretch_amd64.deb
-        #fab_url=https://github.com/turnkeylinux/fab/releases/download/v${REQ_FAB_V}
-        #install_pkg $fab_pkg $fab_url
-        apt-get update -qq
-        DEBIAN_FRONTEND=noninteractive apt-get install -y fab
+# if TKL version doesn't match host, check out the relevant branches and
+# attempt to download the right bootstrap; otherwise build it
+TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
+TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
+    $BT_PRODUCTS/$appname/changelog)
+if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
+    warning "Host TKL version ($TKL_HOST_VER) does not match guest version" \
+       " ($TKL_BUILD_VER)"
+    case $TKL_BUILD_VER in
+        16)
+            TKL_CODENAME=buster;;
+        17)
+            TKL_CODENAME=bullseye;;
+        18)
+            TKL_CODENAME=bookworm;;
+        19)
+            TKL_CODENAME=trixie;;
+        *)
+            fatal "Unrecognised TKL version: $TKL_BUILD_VER";;
+    esac
+    git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
+    # if buildtasks has changed, restart bt-iso
+    cd $BT
+    if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
+        exec ./$(basename $0) $ARGS
     fi
-    # double check that we have the right fab version now
-    [[ "$(get_version fab)" == "$REQ_FAB_V"* ]] \
-        || fatal "Unable to install Fab v${REQ_FAB_V}"
-    export GPGKEY="A8B2EF4287819B03D3516CCA76231C20425E9772"
+    cd -
+    git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
+    KEY=$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
     IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-    BOOTSTRAP_NAME="bootstrap-$CODENAME-$(dpkg --print-architecture)"
-    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$CODENAME"
-    if [ ! -d $BOOTSTRAP_PATH ]; then
+    BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$(dpkg --print-architecture)"
+    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME"
+
+    if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
         info "Attempting to download $BOOTSTRAP_NAME"
         mkdir -p $(dirname $BOOTSTRAP_PATH)
         cd $(dirname $BOOTSTRAP_PATH)
         exit_code=0
-        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
-        #wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
-        #exit_code=1 # force rebuild of bootstrap...
+        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
+        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
         if [[ "$exit_code" -eq 0 ]]; then
             info "verifying $BOOTSTRAP_NAME"
-            gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $GPGKEY
-            gpg --verify $BOOTSTRAP_NAME.tar.gz.hash
+            TMP_KEYRING="$(mktemp -d)/tmp.gpg"
+            GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
+            $GPG --import $FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
+            $GPG --verify $BOOTSTRAP_NAME.tar.gz.hash
 
             info "unpacking $BOOTSTRAP_NAME"
             mkdir $BOOTSTRAP_PATH
@@ -147,16 +168,10 @@ if [[ "$HOST_VER" -eq 11 ]] \
         else
             warning "Downloading bootstrap failed."
             info "Attempting to build bootstrap."
-            info "Debootstrap v$(get_version debootstrap) detected."
-            if [[ "$(get_version debootstrap)" != "$REQ_DBOOT_V"* ]]; then
-                warning "Debootstrap v$REQ_DBOOT_V required, attempting install."
-                dboot_pkg=debootstrap_${REQ_DBOOT_V}_all.deb
-                dboot_url=http://deb.debian.org/debian/pool/main/d/debootstrap/
-                install_pkg $dboot_pkg $dboot_url
-            fi
             unset PUBLISH
             BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
             [[ "$publish" != "yes" ]] || PUBLISH="--publish"
+            export RELEASE=debian/$TKL_CODENAME
             $BT/bt-bootstrap $PUBLISH --no-clean --force \
                 || fatal "Building bootstrap failed... :("
             rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
@@ -168,7 +183,6 @@ if [[ "$HOST_VER" -eq 11 ]] \
                 $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
         fi
     fi
-    #touch $BOOTSTRAP_PATH/bullseye_on_buster
 fi
 
 info "Preperation done. Building appliance $appname."
