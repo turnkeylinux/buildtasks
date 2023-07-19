@@ -134,6 +134,7 @@ if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
         *)
             fatal "Unrecognised TKL version: $TKL_BUILD_VER";;
     esac
+    export RELEASE=debian/$TKL_CODENAME
     git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
     # if buildtasks has changed, restart bt-iso
     cd $BT
@@ -171,7 +172,6 @@ if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
             unset PUBLISH
             BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
             [[ "$publish" != "yes" ]] || PUBLISH="--publish"
-            export RELEASE=debian/$TKL_CODENAME
             $BT/bt-bootstrap $PUBLISH --no-clean --force \
                 || fatal "Building bootstrap failed... :("
             rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
