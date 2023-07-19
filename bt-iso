@@ -175,7 +175,7 @@ if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
             $BT/bt-bootstrap $PUBLISH --no-clean --force \
                 || fatal "Building bootstrap failed... :("
             rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
-                $FAB_PATH/bootstraps/$CODENAME/
+                $FAB_PATH/bootstraps/$TKL_CODENAME/
             # create symlinks so bin/generate-buildenv completes successfully
             ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz \
                 $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
