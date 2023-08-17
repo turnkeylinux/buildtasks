@@ -24,6 +24,7 @@ Arguments::
 
 Options::
 
+    -n|--no-screens     - skip taking screenshots
     --publish           - publish iso, release files and tklbam profile
 
 Environment::
@@ -34,27 +35,32 @@ exit 1
 }
 
 ARGS="$@"
-
-while [ "$1" != "" ]; do
+unset no-screens
+while [[ "$1" != "" ]]; do
     case $1 in
-        --help|-h )    usage;;
-        --publish)     publish="yes";;
-        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+        --help|-h)          usage;;
+        --publish)          publish="yes";;
+        -n|--no-screens)    no_screens='';;
+        *)                  if [ -n "$appname" ]; then
+                                usage
+                            else
+                                appname=$1
+                            fi;;
     esac
     shift
 done
 
-[ -n "$appname" ] || usage
-[ -n "$BT_DEBUG" ] && set -x
+[[ -n "$appname" ]] || usage
+[[ -n "$BT_DEBUG" ]] && set -x
 
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
 
-if [ "$publish" == "yes" ]; then
-    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
-    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
-    [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+if [[ "$publish" == "yes" ]]; then
+    [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
+    [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
+    [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
 else
     warning "--publish was not specified"
 fi
@@ -106,6 +112,8 @@ git_unshallow() {
     fi
     cd -
 }
+
+
 
 cd $BT
 COMMIT_ID=$(git rev-parse --short HEAD)
@@ -202,9 +210,21 @@ fi
 mkdir -p $BT_ISOS
 $BT/bin/iso-release --force $BT_ISOS
 
-if [ "$publish" == "yes" ]; then
+if [[ "$publish" == "yes" ]]; then
     name=$(cat build/root.sandbox/etc/turnkey_version)
     $BT/bin/iso-publish $BT_ISOS/$name.iso
+fi
+
+if [[ -z "$no_screens" ]]; then
+    if [[ ! -f /root/clicksnap-setup.done ]]; then
+        info "Setting up clicksnap and dockerize"
+        $BT/bin/clicksnap-setup
+        touch /root/clicksnap-setup.done
+    fi
+    info "Product rootfs being loaded as docker container"
+    cont_name=$(DOCKER=podman dockerize.sh --deck build/root.sandbox)
+    info "Starting product docker container"
+    podman ...
 fi
 
 if [ -z "$BT_DEBUG" ]; then
