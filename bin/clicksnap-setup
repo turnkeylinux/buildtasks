@@ -1,0 +1,91 @@
+#!/bin/bash -e
+# Copyright (c) 2023 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo -e "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+    cat<<EOF
+Syntax: $(basename $0)
+Setup/update system ready for bt-iso (clicksnap & deps)
+
+Environment::
+
+    BASE_DIR        base dir to clone clicksnap and tkldev-docker source into
+                    - if not set, will fallback to /turnkey
+    BT_DEBUG        turn on debugging
+
+EOF
+    if [[ "$#" -ne 0 ]]; then
+        echo "Error: $@"
+        exit 1
+    fi
+    exit
+}
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+
+[[ -n "$BASE_DIR" ]] || BASE_DIR=/turnkey/public
+mkdir -p $BASE_DIR
+GH_URL=https://github.com/turnkeylinux
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        *)             usage "Unknown option '$1'";;
+    esac
+    shift
+done
+
+install() {
+    info "Updating apt cache and installing deps:" $@
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
+}
+
+# sed, fab & deck should be installed, but just in case
+deps="podman jq sed fab deck"
+missing=''
+for dep in $deps; do
+    which $dep >/dev/null || missing="$missing $dep"
+done
+[[ -z "$missing" ]] || install $missing
+
+case "$(which cargo || echo 'fail')" in
+    "$HOME/.cargo/bin/cargo")
+        true;;
+    /usr/bin/cargo)
+        warn "system installed rust detected; continuing but may cause issues\n" \
+             "   - if you encountner issues, please remove rust and rerun";;
+    fail)
+        info "Installing rust via rustup"
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > $HOME/.bashrc.d/rust
+        chmod +x $HOME/.bashrc.d/rust
+        source $HOME/.bashrc.d/rust;;
+    *)
+        fatal "Unexpected cargo path: '$1'";;
+esac
+
+for app in tkldev-docker clicksnap; do
+    info "Downloading $app source"
+    git clone --depth=1 $GH_URL/$app $BASE_DIR/$app
+done
+
+cd $BASE_DIR/clicksnap
+info "Building & installing clicksnap"
+cargo build
+ln -s $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
+ln -s $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize
