@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2023 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -13,10 +13,12 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 warning() { echo "WARNING [$(basename $0)]: $@"; }
 
+[[ -z "$BT_DEBUG" ]] || set -x
+
 FILES=$*
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $(basename $0) iso...isoN
 Publish release ISO and related metafiles
 
@@ -24,26 +26,30 @@ Environment::
 
     BT_PUBLISH_IMGS
     BT_PUBLISH_META
+    BT_PUBLISH_SCREENS
     BT_PUBLISH_PROFILES
 
+    BT_DEBUG
+
 EOF
-exit 1
+    exit 1
 }
 
-if [[ "${#FILES}" < "1" ]]; then
-    usage
+if [[ ${#FILES} -lt 1 ]]; then
+    usage "Must provide at least one ISO name"
 fi
 
 export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
 . $BT/config/common.cfg
 
-[ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
-[ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
-[ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+[[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
+[[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
+[[ -n "$BT_PUBLISH_SCREENS" ]] || fatal "BT_PUBLISH_SCREENS not set"
+[[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
 
 for f in $FILES; do
-    [ -e $f ] || fatal "$f does not exist"
+    [[ -e $f ]] || fatal "$f does not exist"
 
     O=$(dirname $f)
     name=$(basename $f | sed 's/.iso//')
@@ -56,9 +62,12 @@ for f in $FILES; do
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     $BT/bin/publish-files $O/$name.{changelog,manifest,iso.buildenv,iso.hash}
 
-    if [ -e $O/$name.tklbam/*.tar.gz ]; then
+    if find $O/$name.screens -type f -name "*.png" -print -quit; then
+        export PUBLISH_DEST=${BT_PUBLISH_SCREENS}
+        $BT/bin/publish-files $O/$name.screens/*.png
+    fi
+    if find $O/$name.tklbam -type f -name "*.tar.gz" -print -quit; then
         export PUBLISH_DEST=${BT_PUBLISH_PROFILES}/
         $BT/bin/publish-files $O/$name.tklbam/*.tar.gz
     fi
 done
-

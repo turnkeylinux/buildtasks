@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -14,33 +14,43 @@ fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 warning() { echo "WARNING [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $(basename $0) outdir
 Generate release files for publishing
 
 Options::
 
+    --no-screens        do not error if screenshots missing
     --force             delete release files in outdir if they exist
+    --help              show this help and exit
 
+Env::
+
+    BT_DEBUG
 EOF
-exit 1
+    exit 1
 }
 
-while [ "$1" != "" ]; do
+unset force no_screens
+while [[ "$1" != "" ]]; do
     case $1 in
-        --help|-h )  usage;;
-        --force)     force="yes";;
-        *)           if [ -n "$O" ]; then usage; else O=$1; fi ;;
+        --help|-h)      usage;;
+        --no-screens)   no_screens="true";;
+        --force)        force="yes";;
+        *)              if [ -n "$O" ]; then usage; else O=$1; fi;;
     esac
     shift
 done
 
-[ -n "$O" ] || usage
-[ -e "$O" ] || fatal "$O does not exist"
+[[ -z "$BT_DEBUG" ]] || set -x
 
-[ -e changelog ] || fatal "changelog not found"
-[ -e build/product.iso ] || fatal "build/product.iso not found"
-[ -e build/root.sandbox ] || fatal "build/root.sandbox not found"
+[[ -n "$O" ]] || usage
+[[ -e "$O" ]] || fatal "$O does not exist"
+
+[[ -e changelog ]] || fatal "changelog not found"
+[[ -e build/product.iso ]] || fatal "build/product.iso not found"
+[[ -e build/root.sandbox ]] || fatal "build/root.sandbox not found"
+[[ -n "$no_screens" ]] || [[ -e build/screens ]] || fatal "build/screens not found"
 
 export BT=$(dirname $(dirname $(readlink -f $0)))
 export BT_CONFIG=$BT/config
@@ -49,9 +59,9 @@ export BT_CONFIG=$BT/config
 rootfs=build/root.sandbox
 name=$(cat $rootfs/etc/turnkey_version)
 appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
-[ -n "$name" ] || fatal "could not identify name"
+[[ -n "$name" ]] || fatal "could not identify name"
 
-if [ "$force" == "yes" ]; then
+if [[ "$force" == "yes" ]]; then
     rm -f $O/$name.iso
     rm -f $O/$name.iso.hash
     rm -f $O/$name.iso.buildenv
@@ -59,24 +69,35 @@ if [ "$force" == "yes" ]; then
     rm -f $O/$name.changelog
     rm -f $O/$name.log
     rm -rf $O/$name.tklbam
+    rm -rf $O/$name.screens
 fi
 
-[ -e $O/$name.iso ] && fatal "$O/$name.iso already exists"
-[ -e $O/$name.iso.hash ] && fatal "$O/$name.iso.hash already exists"
-[ -e $O/$name.iso.buildenv ] && fatal "$O/$name.iso.buildenv already exists"
-[ -e $O/$name.manifest ] && fatal "$O/$name.manifest already exists"
-[ -e $O/$name.changelog ] && fatal "$O/$name.changelog already exists"
-[ -e $O/$name.tklbam ] && fatal "$O/$name.tklbam already exists"
+[[ ! -e $O/$name.iso ]] || fatal "$O/$name.iso already exists"
+[[ ! -e $O/$name.iso.hash ]] || fatal "$O/$name.iso.hash already exists"
+[[ ! -e $O/$name.iso.buildenv ]] || fatal "$O/$name.iso.buildenv already exists"
+[[ ! -e $O/$name.manifest ]] || fatal "$O/$name.manifest already exists"
+[[ ! -e $O/$name.changelog ]] || fatal "$O/$name.changelog already exists"
+[[ ! -e $O/$name.tklbam ]] || fatal "$O/$name.tklbam already exists"
+[[ ! -e $O/$name.screens ]] || fatal "$O/$name.screens already exists"
 
-[ -e build/log ] && cp build/log $O/$name.log
+[[ -e build/log ]] && cp build/log $O/$name.log
 cp changelog $O/$name.changelog
 cp build/product.iso $O/$name.iso
 $BT/bin/generate-signature $O/$name.iso
 $BT/bin/generate-manifest $rootfs > $O/$name.manifest
 $BT/bin/generate-buildenv iso $appname > $O/$name.iso.buildenv
-if [ -e $BT_PROFILES/$appname ]; then
+if [[ -e $BT_PROFILES/$appname ]]; then
     mkdir -p $O/$name.tklbam
     export PROFILES_CONF=$BT_PROFILES
     $BT/bin/generate-tklbam-profile $O/$name.iso $O/$name.tklbam
 fi
-
+if [[ -z "$no_screens" ]]; then
+    mkdir -p $O/$name.screens
+    prefix=$(echo "$name" | \
+        sed -En "s|turnkey-([a-z0-9-]+-[0-9]+\.[0-9]+[brc0-9]*)-.*|\1|p")
+    for screen in build/screens/screenshot-*.png; do
+        new_name=$(echo $(basename $screen) \
+                    | sed -En "s|screenshot-(.*\.png)|\1|p")
+        cp $screen $O/$name.screens/$prefix-$new_name
+    done
+fi
