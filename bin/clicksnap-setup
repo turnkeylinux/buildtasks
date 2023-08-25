@@ -10,18 +10,23 @@
 
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo -e "WARNING [$(basename $0)]: $@"; }
+warn() { echo -e "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0)
+Syntax: $(basename $0) [APP_NAME]
 Setup/update system ready for bt-iso (clicksnap & deps)
+
+Option::
+
+    APP_NAME        Optionally include APP_NAME so script can bail early if
+                    the app screenshot code doesn't exist
 
 Environment::
 
     BASE_DIR        base dir to clone clicksnap and tkldev-docker source into
-                    - if not set, will fallback to /turnkey
+                    - if not set, will fallback to /turnkey/public/
     BT_DEBUG        turn on debugging
 
 EOF
@@ -41,10 +46,15 @@ export BT_CONFIG=$BT/config
 mkdir -p $BASE_DIR
 GH_URL=https://github.com/turnkeylinux
 
+unset app
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h )    usage;;
-        *)             usage "Unknown option '$1'";;
+        *)             if [[ -z "$app" ]]; then
+                            app="$1"
+                       else
+                           usage "Unknown option/multiple app names given: '$1'"
+                       fi;;
     esac
     shift
 done
@@ -55,8 +65,41 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install $@
 }
 
+git_pull() {
+    local dir=$1
+    local app=$2
+    cd $dir
+    local remote=$(sed -En "s|(^[a-zA-Z0-9_-]*)[[:space:]].*|\1|p" \
+                    <<<$(git remote -v | grep -m1 "turnkeylinux/$app"))
+    git pull $remote master
+}
+
+# dl & check for screenshot code first so we can bail as early as possible
+for dl in tkldev-docker clicksnap; do
+    if [[ -e "$BASE_DIR/$dl" ]]; then
+        if [[ -d "$BASE_DIR/$dl/.git" ]]; then
+            info "$dl already installed, checking for updates"
+            cd "$BASE_DIR/$dl"
+            git_pull "$BASE_DIR/$dl" "$dl"
+        else
+            fatal "$BASE_DIR/$dl exists but is not a git repo"
+        fi
+    else
+        info "Downloading $dl source"
+        git clone --depth=1 $GH_URL/$dl $BASE_DIR/$dl
+    fi
+done
+
+app=$(sed "s|-|_|g" <<<$app)
+if [[ -z "$app" ]]; then
+    warn "App name not given - continuing, but may fail later"
+elif ! ls $BASE_DIR/clicksnap/src/apps/ | grep -q -w "$app" \
+        && [[ -z "$no_screens" ]] ; then
+    fatal "Clicksnap code for $app not found (checked in $BASE_DIR/clicksnap/src/apps/)"
+fi
+
 # sed, fab & deck should be installed, but just in case
-deps="podman jq sed fab deck"
+deps="podman sed fab deck"
 missing=''
 for dep in $deps; do
     which $dep >/dev/null || missing="$missing $dep"
@@ -79,13 +122,8 @@ case "$(which cargo || echo 'fail')" in
         fatal "Unexpected cargo path: '$1'";;
 esac
 
-for app in tkldev-docker clicksnap; do
-    info "Downloading $app source"
-    git clone --depth=1 $GH_URL/$app $BASE_DIR/$app
-done
-
 cd $BASE_DIR/clicksnap
 info "Building & installing clicksnap"
 cargo build
-ln -s $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
-ln -s $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize
+ln -sf $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
+ln -sf $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize

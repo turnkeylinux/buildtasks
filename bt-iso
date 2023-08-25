@@ -14,8 +14,8 @@ warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
-Syntax: $(basename $0) [ --publish ] appname
+    cat<<EOF
+Syntax: $(basename $0) [--publish | -u] [-n] [-s] appname
 Builds appliance appname (e.g., core) ISO
 
 Arguments::
@@ -25,45 +25,24 @@ Arguments::
 Options::
 
     -n|--no-screens     - skip taking screenshots
-    --publish           - publish iso, release files and tklbam profile
+    -u|--use-existing   - use an existing iso, rather than rebuilding, will
+                          fail if iso does not exist
+    -s|--skip-setup     - skip the inital setup step
+    --publish           - publish iso, release files and tklbam profile,
+                          incompatible with -u|--use-existing and
+                          -s|--skip-setup
 
 Environment::
 
     BT_DEBUG            - turn on debugging
+
 EOF
-exit 1
+    if [[ "$#" -ne 0 ]]; then
+        echo "Error: $@"
+        exit 1
+    fi
+    exit
 }
-
-ARGS="$@"
-unset no-screens
-while [[ "$1" != "" ]]; do
-    case $1 in
-        --help|-h)          usage;;
-        --publish)          publish="yes";;
-        -n|--no-screens)    no_screens='';;
-        *)                  if [ -n "$appname" ]; then
-                                usage
-                            else
-                                appname=$1
-                            fi;;
-    esac
-    shift
-done
-
-[[ -n "$appname" ]] || usage
-[[ -n "$BT_DEBUG" ]] && set -x
-
-export BT=$(dirname $(readlink -f $0))
-export BT_CONFIG=$BT/config
-. $BT_CONFIG/common.cfg
-
-if [[ "$publish" == "yes" ]]; then
-    [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
-    [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
-    [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
-else
-    warning "--publish was not specified"
-fi
 
 clone_or_pull() {
     # If $dir doesn't exist, clone $repo. If it does, update from origin master
@@ -91,12 +70,10 @@ get_version() {
     echo $pkg_info | cut -d' ' -f2
 }
 
-install_pkg() {
-    _pkg=$1
-    _url=$2
-    wget -O /tmp/$_pkg $_url/$_pkg
-    apt install /tmp/$_pkg
-    rm -rf /tmp/$_pkg
+install() {
+    info "Updating apt database and installing dependencies"
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
 }
 
 git_unshallow() {
@@ -113,121 +90,189 @@ git_unshallow() {
     cd -
 }
 
+get_codename() {
+    local tkl_ver=$1
+    case $tkl_ver in
+        16*)
+            TKL_CODENAME=buster;;
+        17*)
+            TKL_CODENAME=bullseye;;
+        18*)
+            TKL_CODENAME=bookworm;;
+        19*)
+            TKL_CODENAME=trixie;;
+        *)
+            fatal "Unrecognised TKL version: $tkl_ver";;
+    esac
+}
 
+ARGS="$@"
+unset no-screens use_existing appname skip_setup TKL_CODENAME
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --help|-h)          usage;;
+        --publish)          publish="yes";;
+        -n|--no-screens)    no_screens="true";;
+        -s|--skip-setup)    skip_setup="true";;
+        -u|--use-existing)  use_existing="true";;
+        *)                  if [[ -n "$appname" ]]; then
+                                usage "Accepts only one appliance name"
+                            else
+                                appname=$1
+                            fi;;
+    esac
+    shift
+done
+
+[[ -n "$appname" ]] || usage "Must give one app name"
+[[ -n "$BT_DEBUG" ]] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+
+if [[ "$publish" == "yes" ]]; then
+    unset msg
+    [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
+    [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
+    [[ -n "$BT_PUBLISH_SCREENS" ]] || fatal "BT_PUBLISH_SCREENS not set"
+    [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
+    [[ -z "$use_existing" ]] || usage "conflicting options: --publish / -u|--use-existing"
+    [[ -z "$skip_setup" ]] || usage "conflicting options: --publish / -s|--skip-setup"
+else
+    warning "--publish was not specified"
+fi
 
 cd $BT
 COMMIT_ID=$(git rev-parse --short HEAD)
-# Leverage tkldev-setup to ensure important repos are cloned and at latest
-# commit; also ensures RELEASE & ARCH are set.
-tkldev-setup $appname \
+if [[ -z "$skip_setup" ]]; then
+    # Leverage tkldev-setup to ensure important repos are cloned and at latest
+    # commit; also ensures RELEASE & ARCH are set.
+    tkldev-setup $appname \
         || warning "tkldev-setup failed. Attempting to continue anyway."
 
-# if TKL version doesn't match host, check out the relevant branches and
-# attempt to download the right bootstrap; otherwise build it
-TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
-TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
-    $BT_PRODUCTS/$appname/changelog)
-if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
-    warning "Host TKL version ($TKL_HOST_VER) does not match guest version" \
-       " ($TKL_BUILD_VER)"
-    case $TKL_BUILD_VER in
-        16)
-            TKL_CODENAME=buster;;
-        17)
-            TKL_CODENAME=bullseye;;
-        18)
-            TKL_CODENAME=bookworm;;
-        19)
-            TKL_CODENAME=trixie;;
-        *)
-            fatal "Unrecognised TKL version: $TKL_BUILD_VER";;
-    esac
-    export RELEASE=debian/$TKL_CODENAME
-    git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
-    # if buildtasks has changed, restart bt-iso
-    cd $BT
-    if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
-        exec ./$(basename $0) $ARGS
+    # unless -n|--no-screens set up clicksnap and check for clicksnap file
+    if [[ -z "$no_screens" ]]; then
+        if [[ ! -f /root/clicksnap-setup.done ]]; then
+            info "Setting up clicksnap and dockerize"
+            $BT/bin/clicksnap-setup $appname
+            touch /root/clicksnap-setup.done
+        fi
+        which jq >/dev/null || install jq
     fi
-    cd -
-    git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
-    KEY=$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
-    IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-    BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$(dpkg --print-architecture)"
-    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME"
 
-    if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
-        info "Attempting to download $BOOTSTRAP_NAME"
-        mkdir -p $(dirname $BOOTSTRAP_PATH)
-        cd $(dirname $BOOTSTRAP_PATH)
-        exit_code=0
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
-        wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
-        if [[ "$exit_code" -eq 0 ]]; then
-            info "verifying $BOOTSTRAP_NAME"
-            TMP_KEYRING="$(mktemp -d)/tmp.gpg"
-            GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
-            $GPG --import $FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
-            $GPG --verify $BOOTSTRAP_NAME.tar.gz.hash
+    # if TKL version doesn't match host, check out the relevant branches and
+    # attempt to download the right bootstrap; otherwise build it
+    TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
+    TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
+        $BT_PRODUCTS/$appname/changelog)
+    if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
+        warning "Host TKL version ($TKL_HOST_VER) does not match guest version" \
+                " ($TKL_BUILD_VER)"
+        unset TKL_CODENAME
+        get_codename $TKL_BUILD_VER
+        export RELEASE=debian/$TKL_CODENAME
+        git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
+        # if buildtasks has changed, restart bt-iso
+        cd $BT
+        if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
+            exec ./$(basename $0) $ARGS
+        fi
+        cd -
+        git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
+        KEY=$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
+        IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
+        BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$(dpkg --print-architecture)"
+        BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME"
 
-            info "unpacking $BOOTSTRAP_NAME"
-            mkdir $BOOTSTRAP_PATH
-            tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
-            cd -
-        else
-            warning "Downloading bootstrap failed."
-            info "Attempting to build bootstrap."
-            unset PUBLISH
-            BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
-            [[ "$publish" != "yes" ]] || PUBLISH="--publish"
-            $BT/bt-bootstrap $PUBLISH --no-clean --force \
-                || fatal "Building bootstrap failed... :("
-            rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
-                $FAB_PATH/bootstraps/$TKL_CODENAME/
-            # create symlinks so bin/generate-buildenv completes successfully
-            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz \
-                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
-            ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash \
-                $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
+        if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
+            info "Attempting to download $BOOTSTRAP_NAME"
+            mkdir -p $(dirname $BOOTSTRAP_PATH)
+            cd $(dirname $BOOTSTRAP_PATH)
+            exit_code=0
+            wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz || exit_code=$?
+            wget -nc $IMAGES/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash || exit_code=$?
+            if [[ "$exit_code" -eq 0 ]]; then
+                info "verifying $BOOTSTRAP_NAME"
+                TMP_KEYRING="$(mktemp -d)/tmp.gpg"
+                GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
+                $GPG --import $FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
+                $GPG --verify $BOOTSTRAP_NAME.tar.gz.hash
+
+                info "unpacking $BOOTSTRAP_NAME"
+                mkdir $BOOTSTRAP_PATH
+                tar -zxf $BOOTSTRAP_NAME.tar.gz -C $BOOTSTRAP_PATH
+                cd -
+            else
+                warning "Downloading bootstrap failed."
+                info "Attempting to build bootstrap."
+                unset PUBLISH
+                BOOTSTRAP_SRC=$(dirname $FAB_PATH)/bootstrap
+                [[ "$publish" != "yes" ]] || PUBLISH="--publish"
+                $BT/bt-bootstrap $PUBLISH --no-clean --force \
+                    || fatal "Building bootstrap failed... :("
+                rsync --delete -Hac $BOOTSTRAP_SRC/build/bootstrap/ \
+                    $FAB_PATH/bootstraps/$TKL_CODENAME/
+                # create symlinks so bin/generate-buildenv completes successfully
+                ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz \
+                    $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz
+                ln -s $BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash \
+                    $(dirname $BOOTSTRAP_PATH)/$BOOTSTRAP_NAME.tar.gz.hash
+            fi
         fi
     fi
 fi
 
-info "Preperation done. Building appliance $appname."
 cd $BT_PRODUCTS/$appname
-deck -D build/root.sandbox || true
-make clean || true
-make || true
+if [[ -n "$use_existing" ]]; then
+    ISO=build/product.iso
+    [[ -f "$ISO" ]] || fatal "iso $PWD/$ISO not found"
+else
+    info "Preperation done. Building appliance $appname."
+    cd $BT_PRODUCTS/$appname
+    deck -D build/root.sandbox || true
+    make clean || true
+    make || true
 
-if [ ! -e build/product.iso ]; then
-    if [ -z "$BT_DEBUG" ]; then
-        deck -D build/root.sandbox >/dev/null 2>&1 || true
-        make clean >/dev/null 2>&1 || true
+    if [[ ! -e build/product.iso ]]; then
+        if [[ -z "$BT_DEBUG" ]]; then
+            deck -D build/root.sandbox >/dev/null 2>&1 || true
+            make clean >/dev/null 2>&1 || true
+        fi
+        fatal "Build failed..."
     fi
-    fatal "Build failed..."
-fi
-
-mkdir -p $BT_ISOS
-$BT/bin/iso-release --force $BT_ISOS
-
-if [[ "$publish" == "yes" ]]; then
-    name=$(cat build/root.sandbox/etc/turnkey_version)
-    $BT/bin/iso-publish $BT_ISOS/$name.iso
 fi
 
 if [[ -z "$no_screens" ]]; then
-    if [[ ! -f /root/clicksnap-setup.done ]]; then
-        info "Setting up clicksnap and dockerize"
-        $BT/bin/clicksnap-setup
-        touch /root/clicksnap-setup.done
+    if [[ -n "$use_existing" ]]; then
+        info "Product iso being loaded as docker container"
+        image_name=$(dockerize --iso build/product.iso --name $appname | tail -1)
+    else
+        info "Product rootfs being loaded as docker container"
+        image_name=$(dockerize --rootfs build/root.sandbox --deck | tail -1)
     fi
-    info "Product rootfs being loaded as docker container"
-    cont_name=$(DOCKER=podman dockerize.sh --deck build/root.sandbox)
-    info "Starting product docker container"
-    podman ...
+    info "Creating new product docker container from image and starting"
+    cont_id=$(podman create $image_name)
+    podman run -dt --tmpfs /tmp --tmpfs /run --tmpfs /run/lock $cont_id >/dev/null
+    app_ip=$(podman inspect $cont_id | jq -r '.[].NetworkSettings.IPAddress')
+    screenshot_dir=$BT_PRODUCTS/$appname/screens
+    mkdir -p $screenshot_dir
+    export TKL_SCREENSHOT_PATH=$screenshot_dir
+    podman run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-chrome:4.7.2-20221219
+    clicksnap test $appname https://$app_ip/
 fi
 
-if [ -z "$BT_DEBUG" ]; then
+mkdir -p $BT_ISOS
+args="--force"
+[[ -z "$no_screens" ]] || args="$args --no-screens"
+$BT/bin/iso-release $args $BT_ISOS
+
+if [[ "$publish" == "yes" ]]; then
+    name=$(cat build/root.sandbox/etc/turnkey_version)
+    $BT/bin/iso-publish $args $BT_ISOS/$name.iso
+fi
+
+if [[ -z "$BT_DEBUG" ]]; then
     deck -D build/root.sandbox
     make clean
 fi
