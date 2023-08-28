@@ -1,13 +1,12 @@
 #!/bin/bash -e
-# Copyright (c) 2023 TurnKey GNU/Linux - http://www.turnkeylinux.org
-# 
+# Copyright (c) 2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
 # This file is part of buildtasks.
-# 
+#
 # Buildtasks is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
-
 
 fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 warn() { echo -e "WARNING [$(basename $0)]: $@"; }
@@ -30,8 +29,8 @@ Environment::
     BT_DEBUG        turn on debugging
 
 EOF
-    if [[ "$#" -ne 0 ]]; then
-        echo "Error: $@"
+    if [[ -n "$1" ]]; then
+        echo "Error: $@" >&2
         exit 1
     fi
     exit
@@ -61,6 +60,7 @@ done
 
 install() {
     info "Updating apt cache and installing deps:" $@
+    info "installing $@"
     apt-get -qq update
     DEBIAN_FRONTEND=noninteractive apt-get -y install $@
 }
@@ -108,7 +108,8 @@ done
 
 case "$(which cargo || echo 'fail')" in
     "$HOME/.cargo/bin/cargo")
-        true;;
+        info "Rust installed via rustup detected, attempting update"
+        rustup update;;
     /usr/bin/cargo)
         warn "system installed rust detected; continuing but may cause issues\n" \
              "   - if you encountner issues, please remove rust and rerun";;
