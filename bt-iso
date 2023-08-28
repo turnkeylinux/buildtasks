@@ -155,6 +155,19 @@ if [[ -z "$skip_setup" ]]; then
             info "Setting up clicksnap and dockerize"
             $BT/bin/clicksnap-setup $appname
             touch /root/clicksnap-setup.done
+        else
+            setup_time=$(date -r /root/clicksnap-setup.done +%s)
+            allowed_age=$(( $setup_time + 86400 )) # 24 hours
+            if [[ $allowed_age -lt $(date +%s) ]]; then
+                info "Attempting clicksnap update"
+                clone_or_pull /turnkey/public/clicksnap turnkeylinux/clicksnap
+                touch /root/clicksnap-setup.done
+            fi
+            app=$(sed "s|-|_|g" <<<$appname)
+            if ! ls $BASE_DIR/clicksnap/src/apps/ | grep -q -w "$app"; then
+                fatal "Clicksnap code for $app not found (checked in /turnkey"\
+                      "/public/clicksnap/src/apps/)"
+            fi
         fi
     fi
 
