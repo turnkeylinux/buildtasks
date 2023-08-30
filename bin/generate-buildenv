@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2016-2022 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2016-2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -13,7 +13,7 @@ warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $(basename $0) target target-args
 Print build environment related to target build type
 
@@ -30,16 +30,17 @@ Targets::
     openstack   path/to/iso.hash
 
 EOF
-exit 1
+    exit 1
 }
 
 BT=$(dirname $(dirname $(readlink -f $0)))
 BT_CONFIG=$BT/config
 . $BT/config/common.cfg
 
-[ -z "$RELEASE" ] || CODENAME=$(basename $RELEASE)
-[ -n "$CODENAME" ] || CODENAME=$(lsb_release -s -c)
-[ -n "$ARCH" ] || ARCH=$(dpkg --print-architecture)
+[[ -z "$RELEASE" ]] || CODENAME=$(basename $RELEASE)
+[[ -n "$CODENAME" ]] || CODENAME=$(lsb_release -s -c)
+[[ -n "$ARCH" ]] || ARCH=$(dpkg --print-architecture)
+[[ -n "$TKL_PUB" ]] || TKL_PUB=/turnkey/public
 
 _git_state() {
     dir=$1
@@ -86,6 +87,8 @@ bt_iso() {
     _git_state $FAB_PATH/cdroots
     _git_state $BT_PRODUCTS/core
     _git_state $BT_PRODUCTS/$appname
+    _git_state $TKL_PUB/clicksnap
+    _git_state $TKL_PUB/tkldev-docker
     _git_state $BT_PROFILES
 
     bootstrap_hash=$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.hash
@@ -94,6 +97,7 @@ bt_iso() {
 
     echo "fab $(fab --version)"
     echo "deck $(deck --version)"
+    echo "podman $(podman --version)"
 }
 
 bt_img() {
@@ -113,7 +117,13 @@ bt_img() {
 }
 
 bt_ec2() {
-    echo "boto $(python -c 'import boto; print boto.__version__')"
+    if which python >/dev/null; then
+        echo "boto (py2) $(python -c 'import boto; print boto.__version__')"
+    else
+        echo "/usr/bin/python not found - trying python2"
+        echo "boto (py2) $(python2 -c 'import boto; print boto.__version__')"
+    fi
+    echo "boto (py3) $(python3 -c 'import boto; print boto.__version__')"
 }
 
 bt_vm() {

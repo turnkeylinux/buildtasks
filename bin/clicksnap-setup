@@ -1,0 +1,130 @@
+#!/bin/bash -e
+# Copyright (c) 2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
+#
+# This file is part of buildtasks.
+#
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warn() { echo -e "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+    cat<<EOF
+Syntax: $(basename $0) [APP_NAME]
+Setup/update system ready for bt-iso (clicksnap & deps)
+
+Option::
+
+    APP_NAME        Optionally include APP_NAME so script can bail early if
+                    the app screenshot code doesn't exist
+
+Environment::
+
+    BASE_DIR        base dir to clone clicksnap and tkldev-docker source into
+                    - if not set, will fallback to /turnkey/public/
+    BT_DEBUG        turn on debugging
+
+EOF
+    if [[ -n "$1" ]]; then
+        echo "Error: $@" >&2
+        exit 1
+    fi
+    exit
+}
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(dirname $(readlink -f $0)))
+export BT_CONFIG=$BT/config
+
+[[ -n "$BASE_DIR" ]] || BASE_DIR=/turnkey/public
+mkdir -p $BASE_DIR
+GH_URL=https://github.com/turnkeylinux
+
+unset app
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h )    usage;;
+        *)             if [[ -z "$app" ]]; then
+                            app="$1"
+                       else
+                           usage "Unknown option/multiple app names given: '$1'"
+                       fi;;
+    esac
+    shift
+done
+
+install() {
+    info "Updating apt cache and installing deps:" $@
+    info "installing $@"
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
+}
+
+git_pull() {
+    local dir=$1
+    local app=$2
+    cd $dir
+    local remote=$(sed -En "s|(^[a-zA-Z0-9_-]*)[[:space:]].*|\1|p" \
+                    <<<$(git remote -v | grep -m1 "turnkeylinux/$app"))
+    git pull $remote master
+}
+
+# dl & check for screenshot code first so we can bail as early as possible
+for dl in tkldev-docker clicksnap; do
+    if [[ -e "$BASE_DIR/$dl" ]]; then
+        if [[ -d "$BASE_DIR/$dl/.git" ]]; then
+            info "$dl already installed, checking for updates"
+            cd "$BASE_DIR/$dl"
+            git_pull "$BASE_DIR/$dl" "$dl"
+        else
+            fatal "$BASE_DIR/$dl exists but is not a git repo"
+        fi
+    else
+        info "Downloading $dl source"
+        git clone --depth=1 $GH_URL/$dl $BASE_DIR/$dl
+    fi
+done
+
+app=$(sed "s|-|_|g" <<<$app)
+if [[ -z "$app" ]]; then
+    warn "App name not given - continuing, but may fail later"
+elif ! ls $BASE_DIR/clicksnap/src/apps/ | grep -q -w "$app" \
+        && [[ -z "$no_screens" ]] ; then
+    fatal "Clicksnap code for $app not found (checked in $BASE_DIR/clicksnap/src/apps/)"
+fi
+
+# sed, fab & deck should be installed, but just in case
+deps="podman sed fab deck"
+missing=''
+for dep in $deps; do
+    which $dep >/dev/null || missing="$missing $dep"
+done
+[[ -z "$missing" ]] || install $missing
+
+case "$(which cargo || echo 'fail')" in
+    "$HOME/.cargo/bin/cargo")
+        info "Rust installed via rustup detected, attempting update"
+        rustup update;;
+    /usr/bin/cargo)
+        warn "system installed rust detected; continuing but may cause issues\n" \
+             "   - if you encountner issues, please remove rust and rerun";;
+    fail)
+        info "Installing rust via rustup"
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > $HOME/.bashrc.d/rust
+        chmod +x $HOME/.bashrc.d/rust
+        source $HOME/.bashrc.d/rust;;
+    *)
+        fatal "Unexpected cargo path: '$1'";;
+esac
+
+cd $BASE_DIR/clicksnap
+info "Building & installing clicksnap"
+cargo build
+ln -sf $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
+ln -sf $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize

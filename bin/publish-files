@@ -1,6 +1,6 @@
 #!/bin/bash -e
 # depends: awscli
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2023 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -14,7 +14,7 @@ fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $0 file...fileN
 Publish files (ignoring file paths) to PUBLISH_DEST
 
@@ -27,15 +27,15 @@ Environment::
     BT_CONFIG       - buildtasks config directory
     PUBLISH_DEST    - destination s3://bucket[/prefix]
 EOF
-exit 1
+    exit 1
 }
 
-if [[ "$#" < "1" ]]; then
+if [[ $# -lt 1 ]]; then
     usage
 fi
 
-[ -n "$BT_CONFIG" ] || fatal "BT_CONFIG not set"
-[ -n "$PUBLISH_DEST" ] || fatal "PUBLISH_DEST not set"
+[[ -n "$BT_CONFIG" ]] || fatal "BT_CONFIG not set"
+[[ -n "$PUBLISH_DEST" ]] || fatal "PUBLISH_DEST not set"
 
 . $BT_CONFIG/aws.cfg
 
@@ -53,4 +53,3 @@ done
 
 cd -
 rm -rf $tmpdir
-

@@ -84,7 +84,7 @@ mkdir -p $O
 
 # hack for cloudtasks issues with pre command
 if [ ! -e /root/docker-setup.done ]; then
-    /turnkey/buildtasks/bin/docker-setup
+    $BT/bin/docker-setup
     touch /root/docker-setup.done
 fi
 
