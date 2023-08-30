@@ -44,11 +44,15 @@ BT_CONFIG=$BT/config
 
 _git_state() {
     dir=$1
-    cd $dir
-    commit=$(git rev-parse --short HEAD)
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    status=$(git status --porcelain | tr '\n' ' ')
-    echo "$dir $commit $branch $status"
+    if [[ -d "$dir" ]]; then
+        cd $dir
+        commit=$(git rev-parse --short HEAD)
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        status=$(git status --porcelain | tr '\n' ' ')
+        echo "$dir $commit $branch $status"
+    else
+        echo "$dir - NOT FOUND"
+    fi
 }
 
 _common() {
@@ -97,7 +101,11 @@ bt_iso() {
 
     echo "fab $(fab --version)"
     echo "deck $(deck --version)"
-    echo "podman $(podman --version)"
+    if which podman >/dev/null; then
+        echo "$(podman --version)"
+    else
+        echo "podman - NOT FOUND"
+    fi
 }
 
 bt_img() {
