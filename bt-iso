@@ -325,7 +325,9 @@ fi
 if [[ -z "$BT_DEBUG" ]]; then
     deck -D build/root.sandbox
     make clean
-    info "stopping $appname container: $(podman stop $app_cont_id)"
-    info "removing $appname container: $(podman rm $app_cont_id)"
-    info "removing $appname image: $(podman rmi $image_name)"
+    if [[ -z "no_screens" ]]; then
+        info "stopping $appname container: $(podman stop $app_cont_id)"
+        info "removing $appname container: $(podman rm $app_cont_id)"
+        info "removing $appname image: $(podman rmi $image_name)"
+    fi
 fi
