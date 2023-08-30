@@ -125,6 +125,17 @@ done
 [[ -n "$appname" ]] || usage "Must give one app name"
 [[ -n "$BT_DEBUG" ]] && set -x
 
+# adjust which clicksnap module to use where need be
+if [[ -z "$no_screens" ]]; then
+    case $appname in
+        tkldev)
+            info "TKLDev build - disabling screenshots as no web UI"
+            no_screens="true";;
+        *)
+            clicksnap_mod=$(sed "s|-|_|g" <<<$appname);;
+    esac
+fi
+
 export BT=$(dirname $(readlink -f $0))
 export BT_CONFIG=$BT/config
 . $BT_CONFIG/common.cfg
@@ -142,6 +153,7 @@ else
 fi
 
 cd $BT
+BASE_DIR=/turnkey/public
 COMMIT_ID=$(git rev-parse --short HEAD)
 if [[ -z "$skip_setup" ]]; then
     # Leverage tkldev-setup to ensure important repos are cloned and at latest
@@ -160,13 +172,13 @@ if [[ -z "$skip_setup" ]]; then
             allowed_age=$(( $setup_time + 86400 )) # 24 hours
             if [[ $allowed_age -lt $(date +%s) ]]; then
                 info "Attempting clicksnap update"
-                clone_or_pull /turnkey/public/clicksnap turnkeylinux/clicksnap
+                clone_or_pull $BASE_DIR/clicksnap turnkeylinux/clicksnap
                 touch /root/clicksnap-setup.done
             fi
-            app=$(sed "s|-|_|g" <<<$appname)
-            if ! ls $BASE_DIR/clicksnap/src/apps/ | grep -q -w "$app"; then
-                fatal "Clicksnap code for $app not found (checked in /turnkey"\
-                      "/public/clicksnap/src/apps/)"
+            if ! ls $BASE_DIR/clicksnap/src/apps/ \
+                    | grep -q -w "$clicksnap_mod"; then
+                fatal "Clicksnap code for $clicksnap_mod not found" \
+                      " (checked in /turnkey/public/clicksnap/src/apps/)"
             fi
         fi
     fi
