@@ -14,7 +14,7 @@ warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $(basename $0) [ --publish ]
 Builds appliance bootstrap-CODENAME-ARCH.tar.gz
 
@@ -24,6 +24,8 @@ Options::
                           outdir if they exist.
     --publish           - publish bootstrap tarball and release files.
     --no-clean          - DO NOT run 'make clean' on completion.
+    --install           - Also install the new bootstrap locally
+                          (FAB_PATH/boostraps/CODENAME)
 
 Environment::
 
@@ -34,7 +36,7 @@ Environment::
     FAB_ARCH            - If not set defaults to system architecture.
     FAB_PATH            - Base Fab path (set by default on TKLDev)
 EOF
-exit 1
+    exit 1
 }
 
 while [ "$1" != "" ]; do
@@ -43,6 +45,7 @@ while [ "$1" != "" ]; do
         --force)    force="yes";;
         --publish)  publish="yes";;
         --no-clean) clean="no";;
+        --install)  install="yes";;
         *)          fatal "Unknown argument '$1'.";;
     esac
     shift
@@ -77,6 +80,7 @@ export CODENAME=$(basename $RELEASE)
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    $BT/bin/ec2-setup
 else
     warning "--publish was not specified"
 fi
@@ -107,7 +111,13 @@ else
 fi
 
 make clean || true
-make || true
+
+if [[ "$install" == "yes" ]]; then
+    make install || true
+    make bootstrap.tar.gz || true
+else
+    make bootstrap.tar.gz || true
+fi
 
 ls -l build
 
@@ -132,5 +142,5 @@ if [ "$publish" == "yes" ]; then
 fi
 
 if [[ -z "$BT_DEBUG" ]] && [[ "$clean" != "no" ]]; then
-    make clean
+    make clean || true
 fi
