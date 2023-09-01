@@ -80,7 +80,7 @@ export CODENAME=$(basename $RELEASE)
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
-    $BT/bin/ec2-setup
+    which aws >/dev/null || $BT/bin/aws-setup --awscli
 else
     warning "--publish was not specified"
 fi

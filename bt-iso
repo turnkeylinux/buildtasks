@@ -148,6 +148,7 @@ if [[ "$publish" == "yes" ]]; then
     [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
     [[ -z "$use_existing" ]] || usage "conflicting options: --publish / -u|--use-existing"
     [[ -z "$skip_setup" ]] || usage "conflicting options: --publish / -s|--skip-setup"
+    which aws >/dev/null || $BT/bin/aws-setup --awscli
 else
     warning "--publish was not specified"
 fi
