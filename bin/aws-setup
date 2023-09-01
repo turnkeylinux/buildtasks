@@ -16,25 +16,22 @@ info() { echo "INFO [$(basename $0)]: $@"; }
 usage() {
 cat<<EOF
 Syntax: $(basename $0)
-Setup/update system ready for bt-ec2
+Setup/update system ready for bt-x --publish and/or bt-ec2
+
+Options::
+
+    --awscli        Just install awscli
+                    (support for --publish only - not bt-ec2)
 
 Environment::
 
-    BT_DEBUG                turn on debugging
+    BT_DEBUG        turn on debugging
 
 EOF
 exit 1
 }
 
-while [ "$1" != "" ]; do
-    case $1 in
-        --help|-h )    usage;;
-        *)             usage;;
-    esac
-    shift
-done
-
-[ -n "$BT_DEBUG" ] && set -x
+[[ -n "$BT_DEBUG" ]] && set -x
 
 install() {
     info "installing $@"
@@ -42,4 +39,14 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install $@
 }
 
-install python3-boto python3-boto3 awscli
+pkgs="python3-boto python3-boto3 awscli"
+while [ "$1" != "" ]; do
+    case $1 in
+        --awscli)       pkgs="awscli";;
+        --help|-h)      usage;;
+        *)              usage;;
+    esac
+    shift
+done
+
+install $pkgs
