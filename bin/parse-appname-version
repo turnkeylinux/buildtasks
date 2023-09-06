@@ -57,10 +57,7 @@ case $codename in
     squeeze|wheezy|jessie|stretch)
         fatal "$codename no longer supported"
         ;;
-    buster|bullseye)
-        ;;
-    bookworm)
-        warning "$codename technically unsupported; support may be incomplete/problematic"
+    buster|bullseye|bookworm|trixie)
         ;;
     *)
         fatal "unrecognized codename: $codename"

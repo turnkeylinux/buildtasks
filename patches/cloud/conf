@@ -17,7 +17,8 @@ cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
 
 # disable systemd confconsole.service (as of v16.0 it's no longer a stand
 # alone service, hence why I've also added ' || true').
-systemctl disable confconsole || true
+systemctl disable confconsole \
+    || echo "[$(basename $0)] disabling confconsole service failed - expected when building v17.0+"
 
 # disable networking options in confconsole
 sed -i "/networking false/ s|^#||" /etc/confconsole/confconsole.conf

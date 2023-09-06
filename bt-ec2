@@ -14,13 +14,13 @@ warning() { echo "WARNING [$(basename $0)]: $@"; }
 info() { echo "INFO [$(basename $0)]: $@"; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $(basename $0) [ --options ] appname-version
 Converts appliance appname-version to EC2 EBS-backed HVM AMI
 
 Arguments::
 
-    appname-version     - e.g., core-16.2-jessie-amd64
+    appname-version     - e.g., core-18.0-bookworm-amd64
 
 Options::
 
@@ -42,7 +42,7 @@ Environment::
 
     BT_DEBUG            - turn on debugging
 EOF
-exit 1
+    exit 1
 }
 
 unset ebs_opts force secupdates increment pvmshim appver
@@ -86,9 +86,8 @@ fi
 
 get_version() {
     pkg=$1
-    pkg_info=$(dpkg -l | grep ^ii | tr -s [[:blank:]] ' ' | cut -d' ' -f2,3 \
-        | grep "^$pkg[ |:]")
-    echo $pkg_info | cut -d' ' -f2 
+    dpkg -l \
+        | sed -En "s|^ii[[:space:]]+$pkg[[:space:]]+([0-9a-g\+\.~-]+)[[:space:]]+.*|\1|p"
 }
 
 install_pkg() {
@@ -101,13 +100,14 @@ install_pkg() {
 
 if [[ ! -f /usr/bin/ec2metadata ]]; then
     codename=$(lsb_release -sc)
-    if [[ "$codename" == "buster" ]]; then
-        pkgs="ec2metadata python-boto3"
-    elif [[ "$codename" == "bullseye" ]]; then
-        pkgs="tkl-ec2metadata"
-    else
-        fatal "Expected buster or bullseye host"
-    fi
+    case $codename in
+        buster)
+            pkgs="ec2metadata python-boto3";;
+        bullseye|bookworm|trixie)
+            pkgs="tkl-ec2metadata";;
+        *)
+            fatal "Expected codename: $codename";;
+    esac
     apt-get update -qq
     apt-get install -y $pkgs
 fi
@@ -130,7 +130,12 @@ if [[ ! "$appversion" =~ ^([0-9.]+)$ ]]; then
 fi
 
 os_arch=$(dpkg --print-architecture)
-[ "$arch" == "$os_arch" ] || fatal "os_arch mismatch: $arch != $os_arch"
+[[ "$arch" == "$os_arch" ]] || fatal "os_arch mismatch: $arch != $os_arch"
+
+if [[ ! -e /root/ec2-setup.done ]]; then
+    $BT/bin/ec2-setup
+    touch /root/ec2-setup.done
+fi
 
 O=$BT_BUILDS/ec2
 mkdir -p $O
@@ -176,7 +181,7 @@ function _cleanup() {
     umount -l $rootfs/proc || true
     mv $rootfs/_proxy_backup $rootfs/$proxy || true
 
-    if [ -z "$BT_DEBUG" ] && ! (mount | grep -q $(basename $rootfs)); then
+    if [[ -z "$BT_DEBUG" ]] && ! (mount | grep -q $(basename $rootfs)); then
         rm -rf $rootfs
         rm -rf $cdroot
     fi
@@ -195,8 +200,8 @@ fi
 tklpatch-apply $rootfs $BT/patches/headless
 tklpatch-apply $rootfs $BT/patches/cloud
 tklpatch-apply $rootfs $BT/patches/ec2
-[ "$secupdates" == "yes" ] && tklpatch-apply $rootfs $BT/patches/secupdates
-[ "$pvmshim" == "yes" ] && tklpatch-apply $rootfs $BT/patches/ec2-pvmshim
+[[ "$secupdates" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/secupdates
+[[ "$pvmshim" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/ec2-pvmshim
 
 umount -l $rootfs/dev || true
 umount -l $rootfs/sys || true
