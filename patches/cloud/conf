@@ -31,3 +31,12 @@ sed -i "/eth1/ s|^#||" /etc/network/interfaces
 
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
+
+# ensure grub is correctly configured
+bootdisk=$(ls /dev/*da) || echo "FATAL: bootdisk not found" && exit 1
+if [[ $(wc -l <<<"$bootdisk" ) -eq 1 ]]; then
+    debconf-set-selections <<< "grub-pc grub-pc/install_devices multiselect $bootdisk"
+else
+    echo "FATAL: got multiple possibile bootdisks:" $bootdisk
+    exit 1
+fi
