@@ -165,12 +165,12 @@ tklpatch-extract-iso $BT_ISOS/$isofile
 
 proxy=/etc/apt/apt.conf.d/00proxy
 info "Checking for proxy ports"
-grep -r '127.0.0.1:3128' /etc/apt/apt.conf.d/ || true
-grep -r '127.0.0.1:8124' /etc/apt/apt.conf.d/ || true
-if netstat -tlnp | grep -q polipo; then
+polipo=$(grep -rl '127.0.0.1:8124' /etc/apt/apt.conf.d/) || [[ $? -eq 1 ]]
+squid=$(grep -rl '127.0.0.1:3128' /etc/apt/apt.conf.d/) || [[ $? -eq 1 ]]
+if [[ "$polipo" == "$proxy" ]] && netstat -tlnp | grep -q polipo; then
     cp $rootfs/$proxy $rootfs/_proxy_backup
     sed -i "s|3128|8124|"  $rootfs/$proxy
-elif [[ -f "$rootfs/_proxy_backup" ]]; then
+elif [[ "$squid" == "$proxy" ]] && [[ -f "$rootfs/_proxy_backup" ]]; then
     # assume that it's left over backup that didn't make it back
     mv "$rootfs/_proxy_backup" "$rootfs/$proxy"
 fi
@@ -179,7 +179,10 @@ function _cleanup() {
     umount -l $rootfs/dev || true
     umount -l $rootfs/sys || true
     umount -l $rootfs/proc || true
-    mv $rootfs/_proxy_backup $rootfs/$proxy || true
+    if [[ -f "$rootfs/_proxy_backup" ]]; then
+        info "Restoring $rootfs/_proxy_backup to $rootfs/$proxy"
+        mv $rootfs/_proxy_backup $rootfs/$proxy
+    fi
 
     if [[ -z "$BT_DEBUG" ]] && ! (mount | grep -q $(basename $rootfs)); then
         rm -rf $rootfs

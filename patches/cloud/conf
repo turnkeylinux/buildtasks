@@ -33,10 +33,15 @@ sed -i "/eth1/ s|^#||" /etc/network/interfaces
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
 # ensure grub is correctly configured
-bootdisk=$(ls /dev/*da) || echo "FATAL: bootdisk not found" && exit 1
-if [[ $(wc -l <<<"$bootdisk") -eq 1 ]]; then
+bootdisk=$(find /dev -type b -name "*da")
+disks=$(wc -l <<<"$bootdisk")
+if [[ $disks -eq 1 ]]; then
     debconf-set-selections <<< "grub-pc grub-pc/install_devices multiselect $bootdisk"
 else
-    echo "FATAL: got multiple possibile bootdisks:" $bootdisk
+    if [[ $disks -eq 0 ]]; then
+        echo "FATAL: could not find bootdisk"
+    else
+        echo "FATAL: got multiple possibile bootdisks:" $bootdisk
+    fi
     exit 1
 fi
