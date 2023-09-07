@@ -123,7 +123,7 @@ while [[ "$1" != "" ]]; do
 done
 
 [[ -n "$appname" ]] || usage "Must give one app name"
-[[ -n "$BT_DEBUG" ]] && set -x
+[[ -z "$BT_DEBUG" ]] || set -x
 
 # adjust which clicksnap module to use where need be
 if [[ -z "$no_screens" ]]; then
@@ -179,7 +179,7 @@ if [[ -z "$skip_setup" ]]; then
             if ! ls $BASE_DIR/clicksnap/src/apps/ \
                     | grep -q -w "$clicksnap_mod"; then
                 fatal "Clicksnap code for $clicksnap_mod not found" \
-                      " (checked in /turnkey/public/clicksnap/src/apps/)"
+                      " (checked in $BASE_DIR/clicksnap/src/apps/)"
             fi
         fi
     fi
@@ -200,6 +200,7 @@ if [[ -z "$skip_setup" ]]; then
         cd $BT
         if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
             exec ./$(basename $0) $ARGS
+            exit
         fi
         cd -
         git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
@@ -269,10 +270,12 @@ fi
 if [[ -z "$no_screens" ]]; then
     if [[ -n "$use_existing" ]]; then
         info "Product iso being loaded as docker container"
-        image_name=$(dockerize --quiet --iso build/product.iso --name $appname)
+        # TODO make dockerize output more quiet when --quiet used - workaround via tail
+        image_name=$(dockerize --quiet --iso build/product.iso --name $appname | tail -1)
     else
         info "Product rootfs being loaded as docker container"
-        image_name=$(dockerize --quiet --rootfs build/root.sandbox --deck)
+        # TODO make dockerize output more quiet when --quiet used - workaround via tail
+        image_name=$(dockerize --quiet --rootfs build/root.sandbox --deck | tail -1)
     fi
     
     info "Creating new product docker container from image and starting"
