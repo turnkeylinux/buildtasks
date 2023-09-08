@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # Copyright (c) 2016-2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
@@ -55,6 +55,20 @@ _git_state() {
     fi
 }
 
+_py_check() {
+    local py_ex=$1
+    local py_ver=$2
+    local lib=$3
+    local py_path="$(which $py_ex || true)"
+    if [[ "$py_ver" -eq 2 ]]; then
+        echo "$lib (py2) $($py_ex -c "import $lib; print $lib.__version__" 2>/dev/null || echo "(none)")"
+    elif [[ "$py_ver" -eq 3 ]]; then
+        echo "$lib (py3) $($py_ex -c "import $lib; print($lib.__version__)" 2>/dev/null || echo "(none)")"
+    else
+        fatal "Python version (py_ver) must be 2 or 3 (got $py_ver)"
+    fi
+}
+
 _common() {
     _git_state $BT
     echo "turnkey_version $(cat /etc/turnkey_version)"
@@ -65,10 +79,21 @@ _common() {
     else
         echo "ami-id unknown - ec2metadata not installed"
     fi
-    echo "awscli (py2) $(python2 -c 'import awscli; print awscli.__version__' 2>/dev/null || echo not-installed)"
-    echo "awscli (py3) $(python3 -c 'import awscli; print(awscli.__version__)' 2>/dev/null || echo not-installed)"
-    echo "boto (py3) $(python3 -c 'import boto; print(boto.__version__)' 2>/dev/null || echo not-installed)"
-    echo "boto3 (py3) $(python3 -c 'import boto3; print(boto3.__version__)' 2>/dev/null || echo not-installed)"
+    local py_ver=''
+    if which python >/dev/null; then
+        py_ver=$(python --version 2>&1 | sed -En "s|.*[[:space:]]([2-3])\..*|\1|p")
+    fi
+    for lib in awscli boto boto3; do
+        if [[ -n "$py_ver" ]]; then
+            _py_check python $py_ver $lib
+        fi
+        if which python2 >/dev/null; then
+            _py_check python2 2 $lib
+        fi
+        if which python3 >/dev/null; then
+            _py_check python3 3 $lib
+        fi
+    done
 }
 
 _optimized() {
@@ -104,7 +129,7 @@ bt_iso() {
     if which podman >/dev/null; then
         echo "$(podman --version)"
     else
-        echo "podman - NOT FOUND"
+        echo "podman (NOT FOUND)"
     fi
 }
 
@@ -125,13 +150,18 @@ bt_img() {
 }
 
 bt_ec2() {
-    if which python >/dev/null; then
-        echo "boto (py2) $(python -c 'import boto; print boto.__version__')"
-    else
-        echo "/usr/bin/python not found - trying python2"
-        echo "boto (py2) $(python2 -c 'import boto; print boto.__version__')"
-    fi
-    echo "boto (py3) $(python3 -c 'import boto; print boto.__version__')"
+    for pkg in awscli python-boto python-boto3 python3-boto python3-boto3; do
+        result=$(dpkg-query -W $pkg 2>/dev/null) || result=''
+        if [[ -n "$result" ]]; then
+            if [[ $(wc -w <<<"$result") -eq 2 ]]; then
+                echo "$result"
+            elif [[ $(wc -w <<<"$result") -eq 1 ]]; then
+                echo -e "$result\t(none)"
+            fi
+        else
+            echo -e "$pkg\t(not found)"
+        fi
+    done
 }
 
 bt_vm() {
