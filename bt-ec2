@@ -45,6 +45,7 @@ EOF
     exit 1
 }
 
+ARGS="$*"
 unset ebs_opts force secupdates increment pvmshim appver
 while [ "$1" != "" ]; do
     case $1 in
@@ -84,19 +85,40 @@ else
     warning "--publish was not specified"
 fi
 
+git_unshallow() {
+    local branch=$1
+    # assume TKL remote is 'origin'
+    local remote=origin
+    if [[ "$(git symbolic-ref --short HEAD)" != "$branch" ]]; then
+        git remote set-branches origin '*'
+        git fetch origin --unshallow 2>/dev/null || git fetch origin
+        git checkout $branch
+    fi
+}
+
 get_version() {
     pkg=$1
     dpkg -l \
         | sed -En "s|^ii[[:space:]]+$pkg[[:space:]]+([0-9a-g\+\.~-]+)[[:space:]]+.*|\1|p"
 }
 
-install_pkg() {
-    _pkg=$1
-    _url=$2
-    wget -O /tmp/$_pkg $_url/$_pkg
-    apt-get install /tmp/$_pkg
-    rm -rf /tmp/$_pkg
-}
+
+[[ "$PWD" == "$BT" ]] || cd $BT
+COMMIT_ID=$(git rev-parse --short HEAD)
+# if TKL version doesn't match host, check out the relevant branch
+TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
+TKL_BUILD_VER=$(sed -nE "s|[a-z0-9-]*-([0-9]+).*|\1|p" <<<$appver)
+if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
+    warning "Host TKL version ($TKL_HOST_VER) does not match guest version"
+            " ($TKL_BUILD_VER)"
+    git_unshallow "$TKL_BUILD_VER.x"
+    # if buildtasks has changed, restart bt-iso
+    if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
+        info "Restarting $(basename $0)"
+        exec ./$(basename $0) $ARGS
+        exit
+    fi
+fi
 
 if [[ ! -f /usr/bin/ec2metadata ]]; then
     codename=$(lsb_release -sc)
