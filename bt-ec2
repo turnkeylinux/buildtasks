@@ -109,8 +109,8 @@ COMMIT_ID=$(git rev-parse --short HEAD)
 TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
 TKL_BUILD_VER=$(sed -nE "s|[a-z0-9-]*-([0-9]+).*|\1|p" <<<$appver)
 if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
-    warning "Host TKL version ($TKL_HOST_VER) does not match guest version"
-            " ($TKL_BUILD_VER)"
+    warning "Host TKL version ($TKL_HOST_VER) does not match guest version"\
+            "($TKL_BUILD_VER)"
     git_unshallow "$TKL_BUILD_VER.x"
     # if buildtasks has changed, restart bt-iso
     if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
