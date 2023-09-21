@@ -178,8 +178,13 @@ if [[ -z "$skip_setup" ]]; then
             fi
             if ! ls $BASE_DIR/clicksnap/src/apps/ \
                     | grep -q -w "$clicksnap_mod"; then
-                fatal "Clicksnap code for $clicksnap_mod not found" \
-                      " (checked in $BASE_DIR/clicksnap/src/apps/)"
+                # double check that it doesn't reuse another module
+                if ! grep -q "^    h.insert(\"$clicksnap_mod\", Box::new(" \
+                        $BASE_DIR/clicksnap/src/apps/mod.rs; then
+
+                    fatal "Clicksnap code for $clicksnap_mod not found" \
+                          " (checked in $BASE_DIR/clicksnap/src/apps/)"
+                fi
             fi
         fi
     fi
@@ -256,6 +261,7 @@ else
     cd $BT_PRODUCTS/$appname
     deck -D build/root.sandbox || true
     make clean || true
+    mkdir -p build
     make 2>&1 | tee build/log || true
 
     if [[ ! -e build/product.iso ]]; then
