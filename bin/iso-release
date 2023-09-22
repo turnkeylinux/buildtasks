@@ -96,12 +96,13 @@ if [[ -z "$no_screens" ]]; then
     prefix=$(echo "$name" | \
         sed -En "s|turnkey-([a-z0-9-]+-[0-9]+\.[0-9]+[brc0-9]*)-.*|\1|p")
     for screen in build/screens/*.png; do
-        if [[ "$screen" == 'screenshot-'* ]]; then
-            new_name=$(echo $(basename $screen) \
+        screen_file=$(basename screen)
+        if [[ "$screen_file" == 'screenshot-'* ]]; then
+            new_name=$(echo $screen_file \
                         | sed -En "s|screenshot-(.*\.png)|\1|p")
             cp $screen $O/$name.screens/$prefix-$new_name
         else
-            cp $screen $O/$name.screens/$prefix-$screen
+            cp $screen $O/$name.screens/$prefix-$screen_file
         fi
     done
 fi
