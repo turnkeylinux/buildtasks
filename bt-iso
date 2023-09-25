@@ -319,7 +319,22 @@ if [[ -z "$no_screens" ]]; then
     done
 
     info "taking screenshots"
-    TKL_SCREENSHOT_PATH=$TKL_SCREENSHOT_PATH clicksnap test $appname https://$app_ip/
+    count=0
+    while [[ "$count" -lt 10 ]]; do
+        count=$((count + 1))
+        exit_code=0
+        info "attempt $count"
+        TKL_SCREENSHOT_PATH=$TKL_SCREENSHOT_PATH clicksnap test $appname https://$app_ip/ \
+            || exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
+            info "Success"
+            break
+        else
+            info "Clicksnap failed - guessing container not yet ready - waiting"
+            sleep 1
+        fi
+    done
+    [[ $exit_code -eq 0 ]] || fatal "Screenshots failed after 10 attempts"
 fi
 
 mkdir -p $BT_ISOS
@@ -335,7 +350,7 @@ fi
 if [[ -z "$BT_DEBUG" ]]; then
     deck -D build/root.sandbox
     make clean
-    if [[ -z "no_screens" ]]; then
+    if [[ -z "$no_screens" ]]; then
         info "stopping $appname container: $(podman stop $app_cont_id)"
         info "removing $appname container: $(podman rm $app_cont_id)"
         info "removing $appname image: $(podman rmi $image_name)"
