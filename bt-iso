@@ -319,6 +319,17 @@ if [[ -z "$no_screens" ]]; then
     done
 
     info "taking screenshots"
+    INIT_CONF=/turnkey/public/tkldev-docker/inithooks.conf
+    if [[ -f "$INIT_CONF" ]]; then
+        info "Loading default conf and adding fqdn to selenium hosts file"
+        source $INIT_CONF
+        # comment out any existing entries first
+        podman exec -u 0 $sel_cont_id /bin/sh -c "sed -i '\|$APP_DOMAIN|s|^|#|' /etc/hosts"
+        # now add correct entry
+        podman exec -u 0 $sel_cont_id /bin/sh -c "echo '$app_ip $APP_DOMAIN' >> /etc/hosts"
+    else
+        warning "$INIT_CONF not found - continuing with password defaults - may fail"
+    fi
     count=0
     while [[ "$count" -lt 10 ]]; do
         count=$((count + 1))
