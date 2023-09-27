@@ -34,6 +34,14 @@ Options::
 
 Environment::
 
+    WEBDRIVER_CONNECT_ATTEMPTS
+                        - number of times to (re)try connection to webdriver
+                          container (for screenshots)
+                          DEFAULT: $WEBDRIVER_CONNECT_ATTEMPTS
+    WEBDRIVER_CONNECT_TIMEOUT
+                        - time (in seconds) to wait between webdriver
+                          connection attempts (for screenshots)
+                          DEFAULT: $WEBDRIVER_CONNECT_TIMEOUT
     BT_DEBUG            - turn on debugging
 
 EOF
@@ -104,6 +112,8 @@ container_status() {
     podman container inspect $1 --format "{{.State.Status}}"
 }
 
+export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-10}
+export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-1}
 ARGS="$@"
 unset no_screens use_existing appname skip_setup TKL_CODENAME
 while [[ "$1" != "" ]]; do
@@ -293,19 +303,30 @@ if [[ -z "$no_screens" ]]; then
     SELENIUM_CONT=docker.io/selenium/standalone-chrome
     SELENIUM_TAG=4.7.2-20221219
 
+    info "Starting selenium container"
+    INIT_CONF=/turnkey/public/tkldev-docker/inithooks.conf
+    unset add_hosts
+    if [[ -f "$INIT_CONF" ]]; then
+        info "Loading default conf and adding fqdn to selenium hosts file"
+        source $INIT_CONF
+        [[ -n "$APP_DOMAIN" ]] || fatal "APP_DOMAIN not set, please check $INIT_CONF"
+        add_hosts="--add-host=${APP_DOMAIN}:${app_ip}"
+    else
+        warning "$INIT_CONF not found - continuing with password defaults - may fail"
+    fi
+
     # check if selenium container already exists
     existing_instance=$(podman ps -a --format "{{.ID}}:{{.Image}}" \
                 | grep "$SELENIUM_CONT:$SELENIUM_TAG" || [[ $? == 1 ]])
     existing_id=$(sed -En "s|(^[a-f0-9]+):.*|\1|p" <<<"$existing_instance")
     if [[ -n "$existing_id" ]]; then
-        info "starting existing selenium container - assuming configured ok"
-        podman container start $existing_id >/dev/null
-        sel_cont_id=$existing_id
-    else
-        info "starting new selenium webdriver container (may require download)"
-        sel_cont_id=$(podman run -d -p 4444:4444 -p 7900:7900 \
-                        --shm-size="2g" $SELENIUM_CONT:$SELENIUM_TAG)
+        info "existing selenium container found - cleaning"
+        podman container stop $existing_id >/dev/null 2>&1 || [[ $? -eq 1 ]]
+        podman container rm $existing_id >/dev/null 2>&1 || [[ $? -eq 1 ]]
     fi
+    info "starting new selenium webdriver container (may require download)"
+    sel_cont_id=$(podman run -d -p 4444:4444 -p 7900:7900 $add_hosts \
+                        --shm-size="2g" $SELENIUM_CONT:$SELENIUM_TAG)
 
     # wait until container status is 'running'
     while [[ $(container_status $sel_cont_id) != "running" ]]; do
@@ -313,30 +334,19 @@ if [[ -z "$no_screens" ]]; then
     done
     info "container running - waiting for connection"
     for ping in {1..20}; do
-        if ! curl localhost:4444 >/dev/null 2>&1; then
+        if ! curl localhost:7900 >/dev/null 2>&1; then
            sleep 1
         fi
     done
 
     info "taking screenshots"
-    INIT_CONF=/turnkey/public/tkldev-docker/inithooks.conf
-    if [[ -f "$INIT_CONF" ]]; then
-        info "Loading default conf and adding fqdn to selenium hosts file"
-        source $INIT_CONF
-        # comment out any existing entries first
-        podman exec -u 0 $sel_cont_id /bin/sh -c "sed -i '\|$APP_DOMAIN|s|^|#|' /etc/hosts"
-        # now add correct entry
-        podman exec -u 0 $sel_cont_id /bin/sh -c "echo '$app_ip $APP_DOMAIN' >> /etc/hosts"
-    else
-        warning "$INIT_CONF not found - continuing with password defaults - may fail"
-    fi
     count=0
     while [[ "$count" -lt 10 ]]; do
         count=$((count + 1))
         exit_code=0
         info "attempt $count"
-        TKL_SCREENSHOT_PATH=$TKL_SCREENSHOT_PATH clicksnap test $appname https://$app_ip/ \
-            || exit_code=$?
+        # note TKL_SCREENSHOT_PATH exported above
+        clicksnap test $appname https://${APP_DOMAIN}/ || exit_code=$?
         if [[ $exit_code -eq 0 ]]; then
             info "Success"
             break
