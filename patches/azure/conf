@@ -1,0 +1,34 @@
+#!/bin/bash +ex
+
+install() {
+    apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o DPkg::Options::=--force-confdef \
+        -o DPkg::Options::=--force-confold \
+        install $@
+}
+
+
+
+# Added recommended default grub settings
+DEFAULT=/etc/default/grub
+sed -i 's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200 earlyprintk=ttyS0,115200 rootdelay=30"/' $DEFAULT 
+
+# Should we be adding these repos or replacing the normal debian repos?
+cat <<EOF >> /etc/apt/sources.list.d/azure.list
+deb http://debian-archive.trafficmanager.net/debian jessie-backports main
+deb-src http://debian-archive.trafficmanager.net/debian jessie-backports main
+deb http://debian-archive.trafficmanager.net/debian-azure jessie main
+deb-src http://debian-archive.trafficmanager.net/debian-azure jessie main
+EOF
+
+gpg --keyserver pgpkeys.mit.edu --recv-key 06EA49E9A86CAD7F
+gpg -a --export 06EA49E9A86CAD7F | apt-key add -
+
+apt-key update
+
+install waagent
+
+waagent -force -deprovision -verbose
+
+export HISTSIZE=0

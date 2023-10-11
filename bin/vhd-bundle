@@ -1,0 +1,154 @@
+#!/bin/bash -e
+# depends: qemu grub2 parted kpartx zip ovftool
+# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $0 rootfs
+Bundles rootfs into VHD optimized builds
+
+Arguments::
+
+    rootfs          - root filesystem path
+
+Environment::
+
+    VM_URL        - Product URL ($VM_URL)
+    VM_MEMORY     - Amount of memory - integer ($VM_MEMORY)
+    VM_FULLNAME   - Display name of image ($VM_FULLNAME)
+    VM_GUESTOS    - Guest OS of image ($VM_GUESTOS)
+
+EOF
+exit 1
+}
+
+if [[ "$#" != "1" ]]; then
+    usage
+fi
+
+rootfs=$1
+name=$(basename $rootfs .rootfs)
+
+[ -n "$VM_URL" ] || fatal "VM_URL not set"
+[ -n "$VM_MEMORY" ] || fatal "VM_MEMORY not set"
+[ -n "$VM_FULLNAME" ] || fatal "VM_FULLNAME not set"
+[ -n "$VM_GUESTOS" ] || fatal "VM_GUESTOS not set"
+
+# image size consts.
+
+# made default size smaller for testing
+# azure docs recommend disabling LVM
+info "creating raw image ($VM_SIZE sparse) and partitions"
+qemu-img create -f raw $rootfs.raw 4G # made default size smaller for testing
+parted --script $rootfs.raw mklabel msdos
+parted --script -- $rootfs.raw mkpart primary 512M 3512M
+parted --script -- $rootfs.raw set 1 boot on
+
+info "setting up loop device"
+loopdev=$(losetup --show -f $rootfs.raw)
+kpartx -as $loopdev
+
+
+info "creating filesystem"
+mkfs.ext4 /dev/mapper/$(basename $loopdev)p1
+
+looproot=$(losetup --show -f /dev/mapper/`basename $loopdev`p1)
+mkdir $rootfs.fs
+mount $looproot $rootfs.fs
+rsync -a -t -r -S -I -H $rootfs/ $rootfs.fs
+
+
+info "mount binding dev and proc"
+mount --rbind --make-rslave /dev $rootfs.fs/dev
+mount --rbind --make-rslave /sys $rootfs.fs/sys
+mount --rbind --make-rslave /proc $rootfs.fs/proc
+
+info "installing and configuring grub"
+grubcfg=$rootfs.fs/boot/grub/grub.cfg
+
+
+devicemap=$rootfs.fs/boot/grub/device.map
+
+cat > $devicemap <<EOF
+(hd0)	$loopdev
+EOF
+
+UUID=$(blkid -o value -s UUID /dev/mapper/`basename $loopdev`p1)
+
+info "creating fstab"
+fstab="$rootfs.fs/etc/fstab"
+
+echo -e "proc\t\t\t/proc\tproc\tnodev,noexec,nosuid\t0\t0" > $fstab
+echo -e "UUID=$UUID\t/\text4\tdefaults\t0\t2" >> $fstab
+
+tklpatch-apply $rootfs $BT/patches/azure
+
+grub-install --force --modules='part_msdos ext2 search_fs_uuid' --root-directory=$rootfs.fs $loopdev
+
+# remove / add executable perm to os-prober to stop duplicate grub entries
+chroot $rootfs.fs chmod -x /etc/grub.d/30_os-prober
+chroot $rootfs.fs grub-mkconfig -o /boot/grub/grub.cfg
+chroot $rootfs.fs chmod +x /etc/grub.d/30_os-prober
+
+info "tweaking grub settings"
+sed -i "/loopback/d; /set root=(loop/d; s|\(root=\).* ro|\1UUID=$UUID ro dolvm|" $grubcfg
+#remove temp grub/device.map 
+rm -f $devicemap
+
+info "umounting the jumble..."
+umount $rootfs.fs/proc
+grep $rootfs.fs/sys /proc/mounts | cut -f2 -d" " | sort -r | xargs umount -n
+umount $rootfs.fs/dev
+umount $rootfs.fs/
+rmdir $rootfs.fs
+
+info "resizing raw image (to align to 1MB)"
+#qemu-img convert -f raw $rootfs.raw -O vmdk -o compat6 $name.vmdk
+MB=$((1024*1024))
+old_size=$(qemu-img info -f raw $rootfs.raw | sed -r -n "/virtual/{s/.*\(([0-9]+) bytes.*/\1/p}")
+new_size=$((($old_size/$MB+1)*$MB))
+qemu-img resize -f raw $rootfs.raw $new_size
+
+info "converting raw image to vhd"
+qemu-img convert -f raw $rootfs.raw -O vpc -o subformat=fixed,force_size $name.vhd -p
+
+
+
+info "cleaning up"
+kpartx -d /dev/mapper/`basename $loopdev`p1
+losetup -d $loopdev
+
+info "setting up image directory"
+mkdir $name
+mv $name.vhd $name/
+
+cat > $name/README.txt <<EOF
+For virtualization specific documentation, please refer to:
+http://www.turnkeylinux.org/docs/virtualization
+EOF
+
+chown -R root:root $name
+chmod 600 $name/*
+chmod 644 $name/$name.vhd
+
+info "generating vhd zip"
+zip -r -T $name-vhd.zip $name
+
+
+if [ -z "$BT_DEBUG" ]; then
+    info "performing final cleanup"
+    rm -rf $name
+    #rm -f $rootfs.raw
+fi
+
