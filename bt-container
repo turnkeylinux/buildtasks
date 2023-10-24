@@ -80,6 +80,7 @@ case "$codename" in
     buster)     debianversion="debian-10" ;;
     bullseye)   debianversion="debian-11" ;;
     bookworm)   debianversion="debian-12" ;;
+    trixie)     debianversion="debian-13" ;;
     *)       fatal "debianversion could not be determined" ;;
 esac
 
