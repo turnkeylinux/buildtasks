@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 # Original author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
-# Since modified by: TurnKey Linux (c)2014-2022
+# Since modified by: TurnKey Linux (c)2014-2023
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
@@ -18,16 +18,14 @@ esac
 OLD_KERNEL=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-|linux-image-|')
 OLD_KERNEL_VER=$(echo /boot/vmlinuz-* | sed 's|/boot/vmlinuz-||')
 
-mv /usr/sbin/update-grub /usr/sbin/update-grub.orig
+# grub will be removed later
+rm /usr/sbin/update-grub
 ln -s /bin/true /usr/sbin/update-grub
 
 debconf-set-selections << EOF
 $OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
 EOF
 DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
-
-rm /usr/sbin/update-grub
-mv /usr/sbin/update-grub.orig /usr/sbin/update-grub
 
 # stop auto-secupdates complaining
 mkdir -p /lib/modules
@@ -40,6 +38,11 @@ systemctl mask ssh.socket
 
 # disable systemd-resolved.service - closes #1766
 systemctl mask systemd-resolved.service
+
+# mask Kernel Config & Debug mounts - doesn't work on LXC - see:
+# https://github.com/lxc/lxc/issues/3903
+systemctl mask sys-kernel-debug.mount
+systemctl mask sys-kernel-config.mount
 
 # disable tklbam fixclock-hook - can't set time in a container (closes #1170)
 chmod -x /etc/tklbam/hooks.d/fixclock
