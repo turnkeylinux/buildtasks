@@ -31,7 +31,7 @@ DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 mkdir -p /lib/modules
 
 # remove ntp, jitterentropy & acpi daemons
-apt-get purge --autoremove -y ntp jitterentropy-rngd acpid  || true
+apt-get purge -y ntpsec jitterentropy-rngd acpid  || true
 
 # disable ssh.socket so that sshd runs reliably - closes #1722
 systemctl mask ssh.socket
