@@ -109,6 +109,8 @@ $BT/bin/build-tag $rootfs proxmox
 
 # bundle proxmox tarball using stupid naming convention
 stupidname="${debianversion}-turnkey-${appname}_${appversion}-1_${arch}"
+# remove postfix sockets to stop tar whinging
+find $rootfs/var/spool/postfix/ -type c -delete
 info "creating Proxmox container build ($stupidname.tar.gz)"
 tar -C $rootfs -zcf $stupidname.tar.gz .
 
