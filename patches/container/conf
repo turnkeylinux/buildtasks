@@ -25,7 +25,8 @@ ln -s /bin/true /usr/sbin/update-grub
 debconf-set-selections << EOF
 $OLD_KERNEL $OLD_KERNEL/prerm/removing-running-kernel-$OLD_KERNEL_VER boolean false
 EOF
-DEBIAN_FRONTEND=noninteractive apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
+export DEBIAN_FRONTEND=noninteractive
+apt-get -y purge $OLD_META_KERNEL $OLD_KERNEL
 
 # stop auto-secupdates complaining
 mkdir -p /lib/modules
@@ -60,8 +61,13 @@ chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks
 
-# clean up unrequired package(s)
-apt-get autoremove -y
+# clean up unrequired package(s); make sure wireguard-tools isn't
+if apt-get autoremove --simulate | grep -q wireguard; then
+    echo "FATAL: Wireguard package to be removed - exiting"
+    exit 1
+else
+    apt-get autoremove --purge -y
+fi
 
 # remove postfix /dev/[u]random to support unprivileged containers
 # note that it breaks ldap/postfix integration - see issue #855
