@@ -93,8 +93,8 @@ else
 fi
 
 info "Verifying checksum."
-sum1=$(sha256sum $filepath | cut -d " " -f 1)
-sum2=$(grep -A 1 sha256sum $hashpath | head -n 2 | tail -n 1 | sed "s/^ *//; s/ .*//")
+sum1=$(sha512sum $filepath | cut -d " " -f 1)
+sum2=$(grep -A 1 sha512sum $hashpath | head -n 2 | tail -n 1 | sed "s/^ *//; s/ .*//")
 if [ ! "$sum1" == "$sum2" ]; then
     fatal "$filepath checksum verification failed."
 fi
