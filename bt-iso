@@ -112,7 +112,7 @@ container_status() {
     podman container inspect $1 --format "{{.State.Status}}"
 }
 
-export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-10}
+export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-120}
 export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-1}
 ARGS="$@"
 unset no_screens use_existing appname skip_setup TKL_CODENAME
@@ -297,7 +297,7 @@ if [[ -z "$no_screens" ]]; then
     info "Creating new product docker container from image and starting"
     app_cont_id=$(podman run -dt --tmpfs /tmp --tmpfs /run --tmpfs /run/lock $image_name)
     app_ip=$(podman inspect $app_cont_id --format "{{.NetworkSettings.IPAddress}}")
-    
+
     export TKL_SCREENSHOT_PATH=$BT_PRODUCTS/$appname/build/screens
     mkdir -p $TKL_SCREENSHOT_PATH
     SELENIUM_CONT=docker.io/selenium/standalone-chrome
@@ -337,11 +337,20 @@ if [[ -z "$no_screens" ]]; then
         if ! curl localhost:7900 >/dev/null 2>&1; then
            sleep 1
         fi
+        if [[ "$appname" != 'tkldev' ]]; then
+            if ! curl --insecure https://$app_ip:12321 >/dev/null 2>&1; then
+                sleep 1
+            fi
+        else
+            # TODO need to handle tkldev here; just sleeping for now...
+            sleep 1
+        fi
     done
 
     info "taking screenshots"
     count=0
-    while [[ "$count" -lt 10 ]]; do
+    max_tries=60
+    while [[ "$count" -lt $max_tries ]]; do
         count=$((count + 1))
         exit_code=0
         info "attempt $count"
@@ -355,7 +364,7 @@ if [[ -z "$no_screens" ]]; then
             sleep 1
         fi
     done
-    [[ $exit_code -eq 0 ]] || fatal "Screenshots failed after 10 attempts"
+    [[ $exit_code -eq 0 ]] || fatal "Screenshots failed after $max_tries attempts"
 fi
 
 mkdir -p $BT_ISOS
