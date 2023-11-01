@@ -40,6 +40,13 @@ filename=$(basename $1)
 # if release not set, assume same as host
 RELEASE=${RELEASE:-debian/$(lsb_release -sc)}
 CODENAME=$(basename $RELEASE)
+if [[ "$filename" == "debian"*".tar.gz" ]]; then
+    BRANCH="$(sed -En 's|^.*_([0-9]+)\.[0-9]-[1-9].*|\1|p'<<<$filename).x"
+elif [[ "$filename" == "turnkey"*".iso" ]]; then
+    BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<$filename ).x"
+else
+    fatal "Unexpected filename: $filename"
+fi
 
 info "generating sha256sum hash"
 SHA256SUM="$(sha256sum $filepath | cut -d " " -f 1)  $filename"
@@ -49,13 +56,13 @@ SHA512SUM="$(sha512sum $filepath | cut -d " " -f 1)  $filename"
 
 TKL_KEY=tkl-$CODENAME-images.asc
 KEY_EMAIL=release-$CODENAME-images@turnkeylinux.org
+
+KEY_URL=https://raw.githubusercontent.com/turnkeylinux/common/$BRANCH/keys/$TKL_KEY
+
 # first try local common
 if [[ -f "$FAB_PATH/common/keys/$TKL_KEY" ]]; then
     GET_KEY_COM="cat $FAB_PATH/common/keys/$TKL_KEY"
 else
-    # set BRANCH - default to master
-    BRANCH=${BRANCH:-master}
-    KEY_URL=https://raw.githubusercontent.com/turnkeylinux/common/$BRANCH/keys/$TKL_KEY
     GET_KEY_COM="curl $KEY_URL"
 fi
 TMP_KEYRING=/tmp/temp.gpg
