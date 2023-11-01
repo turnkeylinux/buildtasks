@@ -112,8 +112,8 @@ container_status() {
     podman container inspect $1 --format "{{.State.Status}}"
 }
 
-export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-120}
-export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-1}
+export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-200}
+export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-5}
 ARGS="$@"
 unset no_screens use_existing appname skip_setup TKL_CODENAME
 while [[ "$1" != "" ]]; do
@@ -361,7 +361,7 @@ if [[ -z "$no_screens" ]]; then
             break
         else
             info "Clicksnap failed - guessing container not yet ready - waiting"
-            sleep 1
+            sleep 5
         fi
     done
     [[ $exit_code -eq 0 ]] || fatal "Screenshots failed after $max_tries attempts"
