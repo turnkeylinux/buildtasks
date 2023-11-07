@@ -361,7 +361,7 @@ if [[ -z "$no_screens" ]]; then
             break
         else
             info "Clicksnap failed - guessing container not yet ready - waiting"
-            sleep 5
+            sleep 2
         fi
     done
     [[ $exit_code -eq 0 ]] || fatal "Screenshots failed after $max_tries attempts"
