@@ -128,3 +128,4 @@ info "Building & installing clicksnap"
 cargo build
 ln -sf $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
 ln -sf $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize
+ln -sf $BASE_DIR/tkldev-docker/wait-ready.sh /usr/local/bin/tkl-docker-wait-ready
