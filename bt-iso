@@ -347,6 +347,8 @@ if [[ -z "$no_screens" ]]; then
         fi
     done
 
+    tkl-docker-wait-ready "$app_cont_id"
+
     info "taking screenshots"
     count=0
     max_tries=60
