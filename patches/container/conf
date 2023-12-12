@@ -45,9 +45,6 @@ systemctl mask systemd-resolved.service
 systemctl mask sys-kernel-debug.mount
 systemctl mask sys-kernel-config.mount
 
-# disable tklbam fixclock-hook - can't set time in a container (closes #1170)
-chmod -x /etc/tklbam/hooks.d/fixclock
-
 # remove /etc/fstab - workaround #1139
 rm -rf /etc/fstab
 
