@@ -349,6 +349,14 @@ if [[ -z "$no_screens" ]]; then
 
     tkl-docker-wait-ready "$app_cont_id"
 
+    # set schema - most should be https, but there is at least one exception
+    case $appname in
+        gitlab)
+            schema=http;;
+        *)
+            schema=https;;
+    esac
+
     info "taking screenshots"
     count=0
     max_tries=60
@@ -357,7 +365,7 @@ if [[ -z "$no_screens" ]]; then
         exit_code=0
         info "attempt $count"
         # note TKL_SCREENSHOT_PATH exported above
-        clicksnap test $appname https://${APP_DOMAIN}/ || exit_code=$?
+        clicksnap test $appname ${schema}://${APP_DOMAIN}/ || exit_code=$?
         if [[ $exit_code -eq 0 ]]; then
             info "Success"
             break
