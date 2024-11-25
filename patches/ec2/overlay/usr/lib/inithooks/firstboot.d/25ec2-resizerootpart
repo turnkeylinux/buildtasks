@@ -4,11 +4,16 @@
 [[ -n "$_TURNKEY_INIT" ]] && exit 0
 
 ROOT_PART="$(findfs PARTLABEL=rootfs)"
-ROOT_PART_NUM="$(echo "$ROOT_PART" | tr -cd '0-9')"
 ROOT_DEV="$(lsblk -pno PKNAME "$ROOT_PART")"
 
-echo "Growing root partition $ROOT_PART on $ROOT_DEV..."
-growpart "$ROOT_DEV" "$ROOT_PART_NUM"
+ROOT_PART_NUM="${ROOT_PART/#${ROOT_DEV}}"
+ROOT_PART_NUM="${ROOT_PART_NUM/p}"
 
-echo "Growing root FS on $ROOT_PART..."
-resize2fs "$ROOT_PART"
+echo "Checking if root partition #$ROOT_PART_NUM ($ROOT_PART) on $ROOT_DEV can be grown..."
+if growpart -N "$ROOT_DEV" "$ROOT_PART_NUM"; then
+  echo "Growing root partition #$ROOT_PART_NUM ($ROOT_PART) on $ROOT_DEV..."
+  growpart "$ROOT_DEV" "$ROOT_PART_NUM"
+
+  echo "Growing root FS on $ROOT_PART..."
+  resize2fs "$ROOT_PART"
+fi
