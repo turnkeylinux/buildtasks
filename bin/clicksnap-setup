@@ -12,6 +12,10 @@ fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
 warn() { echo -e "WARNING [$(basename "$0")]: $*"; }
 info() { echo "INFO [$(basename "$0")]: $*"; }
 
+# XXX this is only a temporary measure
+# see: https://github.com/turnkeylinux/tracker/issues/2033
+RUST_V=1.76.0
+
 usage() {
     local msg="$*"
     cat<<EOF
@@ -112,7 +116,9 @@ done
 case "$(which cargo || echo 'fail')" in
     "$HOME/.cargo/bin/cargo")
         info "Rust installed via rustup detected, attempting update"
+        # TODO see note re $RUST_V above
         rustup update
+        rustup default "$RUST_V"
         ;;
     /usr/bin/cargo)
         warn "system installed rust detected; continuing but may cause issues\n" \
@@ -120,6 +126,9 @@ case "$(which cargo || echo 'fail')" in
     fail)
         info "Installing rust via rustup"
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        # TODO see note re $RUST_V above
+        rustup update "$RUST_V"
+        rustup default "$RUST_V"
         echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > "$HOME"/.bashrc.d/rust
         chmod +x "$HOME"/.bashrc.d/rust
         source "$HOME/.bashrc.d/rust";;
