@@ -169,11 +169,16 @@ export BT
 export BT_CONFIG="$BT/config"
 . "$BT_CONFIG/common.cfg"
 
-INIT_CONF=/turnkey/public/tkldev-docker/inithooks.conf
-if [[ ! -f "$INIT_CONF" ]]; then
+TKLDEV_DOCKER=${TKLDEV_DOCKER:-/turnkey/public/tkldev-docker}
+INIT_CONF="$TKLDEV_DOCKER/inithooks.conf"
+
+if [[ ! -d "$TKLDEV_DOCKER" ]]; then
+    msg="TKLDev-Docker repo not found ($TKLDEV_DOCKER)  - clone repo to"
+    check_debug "$msg $TKLDEV_DOCKER or set TKLDEV_DOCKER env var"
+elif [[ ! -f "$INIT_CONF" ]]; then
     check_debug "Inithooks preseed file ($INIT_CONF) not found"
 else
-    . "$INIT_CONF"
+    source "$INIT_CONF"
 fi
 if [[ -z "$APP_DOMAIN" ]]; then
     check_debug "APP_DOMAIN not set"
