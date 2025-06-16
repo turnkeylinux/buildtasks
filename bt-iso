@@ -178,15 +178,14 @@ TKLDEV_DOCKER=${TKLDEV_DOCKER:-/turnkey/public/tkldev-docker}
 INIT_CONF="$TKLDEV_DOCKER/inithooks.conf"
 
 if [[ "$skip_setup" != "true" ]]; then
-    clone_or_pull https://github.com/turnkeylinux/tkldev-docker.git \
-        "$TKLDEV_DOCKER"
+    clone_or_pull "$TKLDEV_DOCKER" turnkeylinux/tkldev-docker
 elif [[ ! -d "$TKLDEV_DOCKER" ]]; then
      check_debug "tkldev-docker repo not found: $TKLDEV_DOCKER"
 elif [[ ! -f "$INIT_CONF" ]]; then
     check_debug "Inithooks preseed file ($INIT_CONF) not found"
-else
-    source "$INIT_CONF"
 fi
+
+source "$INIT_CONF"
 if [[ -z "$APP_DOMAIN" ]]; then
     check_debug "APP_DOMAIN not set"
 fi
