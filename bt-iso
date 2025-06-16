@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2025 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -55,26 +55,31 @@ EOF
 
 clone_or_pull() {
     # If $dir doesn't exist, clone $repo. If it does, update from origin master
-    dir=$1
-    repo=$2
+    local dir=$1
+    local repo=$2
     if [[ -z "$dir" ]] || [[ -z "$repo" ]]; then
         fatal "One or more empty values passed to function: ${FUNCNAME[*]}."
     fi
     if [ ! -e "$dir" ]; then
+        mkdir -p "$(dirname "$dir")"
         info "Attempting to clone repo $repo to $dir."
         cd "$(dirname "$dir")"
         git clone "https://github.com/$repo" "$dir"
         cd "$dir"
     else
-        info "Repo $repo found, attempting to update"
+        info "Directory $repo found, attempting to update"
+        if [[ ! -d "$dir/.git" ]]; then
+            check_debug "Does not appear to be a git repo (no .git)"
+        fi
         cd "$dir"
         git pull origin master
     fi
 }
 
 get_version() {
-    pkg=$1
-    sp="[[:space:]]"
+    local pkg=$1
+    local sp="[[:space:]]"
+    local pkg_info
     pkg_info=$(dpkg -l \
         | sed -En "s|^ii.*($pkg)$sp*([0-9a-z\.-:]*)$sp*amd64$sp*.*|\1 \2|p")
     echo "$pkg_info" | cut -d' ' -f2
@@ -172,11 +177,11 @@ source "$BT_CONFIG/common.cfg"
 TKLDEV_DOCKER=${TKLDEV_DOCKER:-/turnkey/public/tkldev-docker}
 INIT_CONF="$TKLDEV_DOCKER/inithooks.conf"
 
-if [[ ! -d "$TKLDEV_DOCKER" ]] && [[ "skip_setup" != "true" ]]; then
-    warning "TKLDev-Docker repo not found ($TKLDEV_DOCKER); cloning"
-    mkdir -p $(dirname "$TKLDEV_DOCKER")
-    git clone https://github.com/turnkeylinux/tkldev-docker.git \
+if [[ "$skip_setup" != "true" ]]; then
+    clone_or_pull https://github.com/turnkeylinux/tkldev-docker.git \
         "$TKLDEV_DOCKER"
+elif [[ ! -d "$TKLDEV_DOCKER" ]]; then
+     check_debug "tkldev-docker repo not found: $TKLDEV_DOCKER"
 elif [[ ! -f "$INIT_CONF" ]]; then
     check_debug "Inithooks preseed file ($INIT_CONF) not found"
 else
@@ -227,7 +232,7 @@ if [[ -z "$skip_setup" ]]; then
                 touch /root/clicksnap-setup.done
             fi
         fi
-        if ! grep -q $appname <<<$(clicksnap list); then
+        if ! grep -q "$appname" <<<"$(clicksnap list)"; then
             fatal "Clicksnap code for $appname not found"
         fi
     fi
@@ -378,7 +383,7 @@ if [[ -z "$no_screens" ]]; then
         sleep 1
     done
     info "container running - waiting for connection"
-    for ping in {1..20}; do
+    for _ in {1..20}; do  # ping container to ensure it's available
         if ! curl localhost:7900 >/dev/null 2>&1; then
            sleep 1
         fi
