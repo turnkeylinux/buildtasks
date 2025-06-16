@@ -167,14 +167,16 @@ link=$(readlink -f "$0")
 BT=$(dirname "$link")
 export BT
 export BT_CONFIG="$BT/config"
-. "$BT_CONFIG/common.cfg"
+source "$BT_CONFIG/common.cfg"
 
 TKLDEV_DOCKER=${TKLDEV_DOCKER:-/turnkey/public/tkldev-docker}
 INIT_CONF="$TKLDEV_DOCKER/inithooks.conf"
 
-if [[ ! -d "$TKLDEV_DOCKER" ]]; then
-    msg="TKLDev-Docker repo not found ($TKLDEV_DOCKER)  - clone repo to"
-    check_debug "$msg $TKLDEV_DOCKER or set TKLDEV_DOCKER env var"
+if [[ ! -d "$TKLDEV_DOCKER" ]] && [[ "skip_setup" != "true" ]]; then
+    warning "TKLDev-Docker repo not found ($TKLDEV_DOCKER); cloning"
+    mkdir -p $(dirname "$TKLDEV_DOCKER")
+    git clone https://github.com/turnkeylinux/tkldev-docker.git \
+        "$TKLDEV_DOCKER"
 elif [[ ! -f "$INIT_CONF" ]]; then
     check_debug "Inithooks preseed file ($INIT_CONF) not found"
 else
