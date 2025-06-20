@@ -122,18 +122,21 @@ case "$(which cargo || echo 'fail')" in
         ;;
     /usr/bin/cargo)
         warn "system installed rust detected; continuing but may cause issues\n" \
-             "   - if you encountner issues, please remove rust and rerun";;
+             "   - if you encounter issues, please remove rust and rerun"
+        ;;
     fail)
         info "Installing rust via rustup"
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > "$HOME"/.bashrc.d/rust
+        chmod +x "$HOME"/.bashrc.d/rust
+        source "$HOME/.bashrc.d/rust"
         # TODO see note re $RUST_V above
         rustup update "$RUST_V"
         rustup default "$RUST_V"
-        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > "$HOME"/.bashrc.d/rust
-        chmod +x "$HOME"/.bashrc.d/rust
-        source "$HOME/.bashrc.d/rust";;
+        ;;
     *)
-        fatal "Unexpected cargo path: '$1'";;
+        fatal "Unexpected cargo path: '$1'"
+        ;;
 esac
 
 cd "$BASE_DIR"/clicksnap
