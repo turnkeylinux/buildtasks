@@ -16,6 +16,7 @@ export APP_DOMAIN=DEFAULT
 export HUB_APIKEY=SKIP
 export SEC_ALERTS=SKIP
 export SEC_UPDATES=SKIP
+export AUTO_RUN=TRUE
 EOF
 
 chmod +x /usr/lib/inithooks/firstboot.d/??turnkey-init-fence*
