@@ -44,6 +44,8 @@ if [[ "$filename" == "debian"*".tar.gz" ]]; then
     BRANCH="$(sed -En 's|^.*_([0-9]+)\.[0-9]-[1-9].*|\1|p'<<<$filename).x"
 elif [[ "$filename" == "turnkey"*".iso" ]]; then
     BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<$filename ).x"
+elif [[ "$filename" == "turnkey"*".img.xz" ]]; then
+    BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<$filename ).x"
 else
     fatal "Unexpected filename: $filename"
 fi

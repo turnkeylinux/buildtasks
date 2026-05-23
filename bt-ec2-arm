@@ -1,0 +1,199 @@
+#!/bin/bash -e
+# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# 
+# This file is part of buildtasks.
+# 
+# Buildtasks is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+
+
+fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename $0)]: $@"; }
+
+usage() {
+cat<<EOF
+Syntax: $(basename $0) [ --publish ] appname
+Builds appliance appname (e.g., core) EC2 arm64 EBS-backed HVM AMI
+
+Arguments::
+
+    appname             - e.g., core
+
+Options::
+
+    --name=             - use as name basis (default: turnkey-version)
+    --copy              - if set, image will be copied to all other regions
+                          (ignored if non-stable version, unless --force set)
+    --publish           - if set, image will be made public and log published
+    --marketplace       - if set, image will be shared for marketplace
+                          (ignored if non-stable version, unless --force set)
+    --force             - --copy &/or --marketplace honored, even if non-stable
+                          (otherwise --copy & --marketplace ignored)
+    --secupdates        - install security updates before building image
+    --increment         - install all (apt) updates before building image and
+                          add increment to version number; e.g. 16.2.1
+    --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
+    --pvmregister       - register pvm-virtualized snapshot, too
+
+Environment::
+
+    BT_DEBUG            - turn on debugging
+EOF
+exit 1
+}
+
+ARGS="$*"
+unset ebs_opts force secupdates increment pvmshim appver
+while [ "$1" != "" ]; do
+    case $1 in
+        --help|-h)     usage;;
+        --name=*)      ebs_opts+="$1 ";;
+        --copy)        ebs_opts+="$1 ";;
+        --marketplace) ebs_opts+="$1 ";;
+        --publish)     ebs_opts+="$1 "; publish="yes";;
+        --force)       force="yes";;
+        --secupdates)  secupdates="yes";;
+        --increment)   increment="yes";;
+        --pvmshim)     pvmshim="yes";;
+        --pvmregister) ebs_opts+="$1 ";;
+        *)             if [ -n "$appname" ]; then usage; else appname=$1; fi ;;
+    esac
+    shift
+done
+
+
+[ -n "$appname" ] || usage
+[ -n "$secupdates" ] || warning "--secupdates was not specified"
+if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
+    warning "--increment implies --secupdates"
+    unset secupdates
+fi
+
+[ -n "$BT_DEBUG" ] && set -x
+
+export BT=$(dirname $(readlink -f $0))
+export BT_CONFIG=$BT/config
+. $BT_CONFIG/common.cfg
+. $BT_CONFIG/aws.cfg
+
+if [ "$publish" == "yes" ]; then
+    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
+    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+    [ -n "$BT_PUBLISH_PROFILES" ] || fatal "BT_PUBLISH_PROFILES not set"
+else
+    warning "--publish was not specified"
+fi
+
+if [[ ! -f /usr/bin/ec2metadata ]]; then
+    codename=$(lsb_release -sc)
+    case $codename in
+        buster)
+            pkgs="ec2metadata python-boto3";;
+        bullseye|bookworm|trixie)
+            pkgs="tkl-ec2metadata";;
+        *)
+            fatal "Expected codename: $codename";;
+    esac
+    apt-get update -qq
+    apt-get install -y $pkgs
+fi
+
+if [[ ! -e /root/ec2-setup.done ]]; then
+    $BT/bin/ec2-setup
+    touch /root/ec2-setup.done
+fi
+
+# Leverage tkldev-setup to ensure important repos are cloned and at latest
+# commit; also ensures RELEASE & ARCH are set.
+tkldev-setup $appname \
+        || warning "tkldev-setup failed. Attempting to continue anyway."
+
+cd $BT_PRODUCTS/$appname
+
+O=$BT_BUILDS/ec2
+mkdir -p $O
+
+export BT_VERSION=${appversion}-${codename}-${arch}
+name=turnkey-${appname}-${BT_VERSION}
+rootfs=$name.rootfs
+logfile=$name.log
+if [[ -n "$increment" ]]; then
+    new_version="${appversion}.1"
+    new_name=turnkey-${appname}-${new_version}-${codename}-${arch}
+    logfile=$new_name.log
+else
+    new_name=$name
+fi
+
+export LOGFILE_PATH=$O/$logfile
+echo > $LOGFILE_PATH
+
+rootfs=build/root.sandbox
+# TODO FIX
+# deck -D build/root.sandbox || true
+# make clean || true
+# make root.sandbox || true
+
+proxy=/etc/apt/apt.conf.d/00proxy
+info "Checking for proxy ports"
+grep -r '127.0.0.1:3128' /etc/apt/apt.conf.d/ || true
+grep -r '127.0.0.1:8124' /etc/apt/apt.conf.d/ || true
+if netstat -tlnp | grep -q polipo; then
+    cp $rootfs/$proxy $rootfs/_proxy_backup
+    sed -i "s|3128|8124|"  $rootfs/$proxy
+elif [[ -f "$rootfs/_proxy_backup" ]]; then
+    # assume that it's left over backup that didn't make it back
+    mv "$rootfs/_proxy_backup" "$rootfs/$proxy"
+fi
+
+function _cleanup() {
+    umount -l $rootfs/dev || true
+    umount -l $rootfs/sys || true
+    umount -l $rootfs/proc || true
+    mv $rootfs/_proxy_backup $rootfs/$proxy || true
+
+    if [[ -z "$BT_DEBUG" ]] && ! (mount | grep -q $(basename $rootfs)); then
+        rm -rf $rootfs
+    fi
+}
+
+trap _cleanup INT TERM EXIT
+
+mount --bind --make-rslave /proc $rootfs/proc
+mount --bind --make-rslave /sys $rootfs/sys
+mount --bind --make-rslave /dev $rootfs/dev
+
+$BT/bin/purge-pkgs $rootfs
+
+tklpatch-apply $rootfs $BT/patches/headless
+tklpatch-apply $rootfs $BT/patches/cloud
+tklpatch-apply $rootfs $BT/patches/ec2
+[[ "$secupdates" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/secupdates
+[[ "$pvmshim" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/ec2-pvmshim
+
+umount -l $rootfs/dev || true
+umount -l $rootfs/sys || true
+umount -l $rootfs/proc || true
+
+$BT/bin/rootfs-cleanup $rootfs
+$BT/bin/aptconf-tag $rootfs ec2
+$BT/bin/build-tag $rootfs ec2
+
+if [[ -f /usr/bin/python ]]; then
+    $BT/bin/ec2/legacy/ebs.py $ebs_opts $rootfs
+else
+    $BT/bin/ec2/ebs.py $ebs_opts $rootfs
+fi
+
+# $BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$new_name.ec2.buildenv
+
+if [ "$publish" == "yes" ]; then
+    export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/
+    $BT/bin/publish-files $LOGFILE_PATH
+
+    export PUBLISH_DEST=${BT_PUBLISH_META}/
+    $BT/bin/publish-files $O/$new_name.ec2.buildenv
+fi
