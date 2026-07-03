@@ -26,9 +26,12 @@ Arguments::
 Options::
 
     -n|--no-screens     - skip taking screenshots
-    -u|--use-existing   - use an existing iso, rather than rebuilding, will
-                          fail if iso does not exist
+    -u|--use-existing   - use existing appname/build/product.iso, rather than
+                          rebuilding, will fail if product.iso does not exist
+                          (implies --no-screens)
     -s|--skip-setup     - skip the inital setup step
+    -a|--arch ARCH      - set architecture to build - amd64 or arm64
+                          (default: host arch)
     --publish           - publish iso, release files and tklbam profile,
                           incompatible with -u|--use-existing and
                           -s|--skip-setup
@@ -43,7 +46,7 @@ Environment::
                         - time (in seconds) to wait between webdriver
                           connection attempts (for screenshots)
                           DEFAULT: $WEBDRIVER_CONNECT_TIMEOUT
-    BT_DEBUG            - turn on debugging
+    BT_DEBUG            - verbose output & do not remove appname/build dir
 
 EOF
     if [[ "$#" -ne 0 ]]; then
@@ -63,7 +66,7 @@ clone_or_pull() {
     if [ ! -e "$dir" ]; then
         info "Attempting to clone repo $repo to $dir."
         cd "$(dirname "$dir")"
-        git clone "https://github.com/$repo" "$dir"
+        git clone -o "$GIT_REMOTE_NAME" "$GIT_REMOTE_URL/$repo" "$dir"
         cd "$dir"
     else
         info "Repo $repo found, attempting to update"
@@ -100,14 +103,12 @@ git_unshallow() {
 get_codename() {
     local tkl_ver=$1
     case $tkl_ver in
-        16*)
-            TKL_CODENAME=buster;;
-        17*)
-            TKL_CODENAME=bullseye;;
         18*)
             TKL_CODENAME=bookworm;;
         19*)
             TKL_CODENAME=trixie;;
+        20*)
+            TKL_CODENAME=forky;;
         *)
             fatal "Unrecognised TKL version: $tkl_ver";;
     esac
@@ -129,54 +130,77 @@ check_debug() {
 export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-200}
 export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-5}
 ARGS="$*"
+arch=$(dpkg --print-architecture)
 unset no_screens use_existing appname skip_setup TKL_CODENAME
 while [[ "$1" != "" ]]; do
     case $1 in
-        --help|-h)          usage;;
-        --publish)          publish="yes";;
-        -n|--no-screens)    no_screens="true";;
-        -s|--skip-setup)    skip_setup="true";;
-        -u|--use-existing)  use_existing="true"
-                            shift
-                            iso="$1";;
-        *)                  if [[ -n "$appname" ]]; then
-                                usage "Accepts only one appliance name"
-                            else
-                                appname=$1
-                            fi;;
+        --help|-h)
+            usage
+            ;;
+        --publish)
+            publish="yes";;
+        -n|--no-screens)
+            no_screens="true";;
+        -s|--skip-setup)
+            skip_setup="true";;
+        -u|--use-existing)
+            no_screens="true"
+            info "Screenshots disabled (using existing product.iso)"
+            use_existing="true";;
+        -a|--arch)
+            shift
+            arch=$1
+            ;;
+        -*)
+            fatal "Unrecognized option: $1";;
+        *)
+            if [[ -n "$appname" ]]; then
+                usage "Accepts only one appliance name"
+            else
+                appname=$1
+            fi;;
     esac
     shift
 done
 
 [[ -n "$appname" ]] || usage "Must give one app name"
+ISO="$FAB_PATH/$appname/build/product.iso"
+if [[ -n "$use_existing" ]] && [[ ! -f "$ISO" ]]; then
+    fatal "file not found: $ISO"
+fi
 
 # don't try screens for tkldev & extend MAX_COUNT for gitlab & canvas
-if [[ -z "$no_screens" ]]; then
-    case $appname in
-        tkldev|core)
-            info "$appname build - disabling screenshots as no web UI"
-            no_screens="true";;
-        gitlab|canvas)
-            # GitLab & Canvas take ages to start...
-            export MAX_COUNT=70 # possibly overkill
-            ;;
-    esac
-fi
+case $appname in
+    tkldev|core)
+        info "$appname build - disabling screenshots as no web UI"
+        no_screens="true";;
+    gitlab|canvas)
+        # GitLab & Canvas take ages to start...
+        export MAX_COUNT=70;; # possibly overkill
+esac
 
 link=$(readlink -f "$0")
 BT=$(dirname "$link")
 export BT
 export BT_CONFIG="$BT/config"
-. "$BT_CONFIG/common.cfg"
-
-INIT_CONF=/turnkey/public/tkldev-docker/inithooks.conf
-if [[ ! -f "$INIT_CONF" ]]; then
-    check_debug "Inithooks preseed file ($INIT_CONF) not found"
-else
-    . "$INIT_CONF"
+BT_COMMON_CONF="$BT_CONFIG/common.cfg"
+if [[ ! -d "$BT_CONFIG" ]]; then
+    if [[ -z "$publish" ]]; then
+        warning "$BT_CONFIG dir does not exist; attempting to use default conf"
+        cp -R "$BT/config.example" "$BT_CONFIG"
+    else
+        fatal "$BT_CONFIG dir does not exist"
+    fi
+elif [[ ! -f "$BT_COMMON_CONF" ]]; then
+    fatal "$BT_COMMON_CONF file does not exist - see $BT/config.example"
 fi
-if [[ -z "$APP_DOMAIN" ]]; then
-    check_debug "APP_DOMAIN not set"
+# shellcheck source=config.example/common.cfg
+source "$BT_CONFIG/common.cfg"
+
+if [[ -z "$BT_PROFILES" ]]; then
+    check_debug "BT_PROFILES not set"
+elif [[ ! -d "$BT_PROFILES" ]]; then
+    check_debug "file not found: $BT_PROFILES"
 fi
 
 HOST_IP=$(hostname -I | awk '{print $1}')
@@ -186,11 +210,12 @@ if [[ -z "$HOST_IP" ]]; then
 fi
 
 if [[ "$publish" == "yes" ]]; then
-    unset msg
     [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
     [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
     [[ -n "$BT_PUBLISH_SCREENS" ]] || fatal "BT_PUBLISH_SCREENS not set"
     [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
+    [[ -n "$GITHUB_USER" ]] || warning "GITHUB_USER not set"
+    [[ -n "$GITHUB_USER_TOKEN" ]] || warning "GITHUB_USER_TOKEN not set"
     [[ -z "$use_existing" ]] || usage "conflicting options: --publish / -u|--use-existing"
     [[ -z "$skip_setup" ]] || usage "conflicting options: --publish / -s|--skip-setup"
     which aws >/dev/null || "$BT"/bin/aws-setup --awscli
@@ -204,6 +229,7 @@ COMMIT_ID=$(git rev-parse --short HEAD)
 if [[ -z "$skip_setup" ]]; then
     # unless -n|--no-screens set up clicksnap and check for clicksnap file
     if [[ -z "$no_screens" ]]; then
+        which podman >/dev/null || apt-get install -y podman
         if [[ ! -f /root/clicksnap-setup.done ]]; then
             info "Setting up clicksnap and dockerize"
             "$BT"/bin/clicksnap-setup "$appname"
@@ -220,7 +246,7 @@ if [[ -z "$skip_setup" ]]; then
                 touch /root/clicksnap-setup.done
             fi
         fi
-        if ! grep -q $appname <<<$(clicksnap list); then
+        if ! grep -q "$appname" <<<"$(clicksnap list)"; then
             fatal "Clicksnap code for $appname not found"
         fi
     fi
@@ -250,11 +276,9 @@ if [[ -z "$skip_setup" ]]; then
         fi
         cd -
         git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
-        # TODO KEY unused!?
-        KEY=$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc
         IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-        BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$(dpkg --print-architecture)"
-        BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME"
+        BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
+        BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
 
         if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
             info "Attempting to download $BOOTSTRAP_NAME"
@@ -293,6 +317,20 @@ if [[ -z "$skip_setup" ]]; then
         fi
     fi
 fi
+
+if [[ -z "$no_screens" ]]; then
+    init_conf=/turnkey/public/tkldev-docker/inithooks.conf
+    if [[ ! -f "$init_conf" ]]; then
+        check_debug "Inithooks preseed file ($init_conf) not found"
+    else
+        # shellcheck source=/turnkey/public/tkldev-docker/inithooks.conf
+        source "$init_conf"
+    fi
+    if [[ -z "$APP_DOMAIN" ]]; then
+        check_debug "APP_DOMAIN not set"
+    fi
+fi
+
 
 cd "$BT_PRODUCTS/$appname"
 if [[ -n "$use_existing" ]]; then
@@ -371,7 +409,7 @@ if [[ -z "$no_screens" ]]; then
         sleep 1
     done
     info "container running - waiting for connection"
-    for ping in {1..20}; do
+    for _ping in {1..20}; do
         if ! curl localhost:7900 >/dev/null 2>&1; then
            sleep 1
         fi
