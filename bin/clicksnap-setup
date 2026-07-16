@@ -103,7 +103,7 @@ done
 app="${app//-/_}"
 if [[ -z "$app" ]]; then
     warn "App name not given - continuing, but may fail later"
-elif [[ ! -f "$BASE_DIR/clicksnap/src/apps/$app" ]] \
+elif [[ ! -d "$BASE_DIR/clicksnap/src/apps/$app" ]] \
         && [[ -z "$no_screens" ]] ; then
     fatal "Clicksnap code for $app not found (checked in $BASE_DIR/clicksnap/src/apps/)"
 fi
