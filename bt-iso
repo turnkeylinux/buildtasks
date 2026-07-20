@@ -58,20 +58,24 @@ EOF
 
 clone_or_pull() {
     # If $dir doesn't exist, clone $repo. If it does, update from origin master
-    dir=$1
-    repo=$2
+    #
+    # Currently only used to update clicksnap - other repos use tkldev-setup
+    local dir=$1
+    local repo=$2
     if [[ -z "$dir" ]] || [[ -z "$repo" ]]; then
         fatal "One or more empty values passed to function: ${FUNCNAME[*]}."
-    fi
-    if [ ! -e "$dir" ]; then
+    elif [[ -e "$dir" ]] && [[ ! -d $dir ]]; then
+        fatal "'$dir' exists but is not a directory"
+    elif [[ ! -d $dir ]]; then
         info "Attempting to clone repo $repo to $dir."
-        cd "$(dirname "$dir")"
         git clone -o "$GIT_REMOTE_NAME" "$GIT_REMOTE_URL/$repo" "$dir"
-        cd "$dir"
     else
         info "Repo $repo found, attempting to update"
-        cd "$dir"
-        git pull origin master
+        remote=$( \
+            awk '/github.com[:/]turnkeylinux/ {print $1; exit}' \
+                <<<"$(git -C "$dir" remote --verbose)" \
+        )
+        git -C "$dir" pull "$remote" master
     fi
 }
 
