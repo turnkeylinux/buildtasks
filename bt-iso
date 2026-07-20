@@ -75,14 +75,6 @@ clone_or_pull() {
     fi
 }
 
-get_version() {
-    pkg=$1
-    sp="[[:space:]]"
-    pkg_info=$(dpkg -l \
-        | sed -En "s|^ii.*($pkg)$sp*([0-9a-z\.-:]*)$sp*amd64$sp*.*|\1 \2|p")
-    echo "$pkg_info" | cut -d' ' -f2
-}
-
 git_unshallow() {
     local dir=$1
     local branch=$2
