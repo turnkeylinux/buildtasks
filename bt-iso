@@ -338,7 +338,7 @@ if [[ -n "$use_existing" ]]; then
     ISO=build/product.iso
     [[ -f "$ISO" ]] || fatal "iso $PWD/$ISO not found"
 else
-    info "Preperation done. Building appliance $appname."
+    info "Preparation done. Building appliance $appname."
     cd "$BT_PRODUCTS/$appname"
     deck -D build/root.sandbox || true
     make clean || true
