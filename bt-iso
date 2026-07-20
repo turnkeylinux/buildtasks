@@ -56,6 +56,13 @@ EOF
     exit
 }
 
+tkl_remote() {
+    local dir=$1
+    local git_remote
+    git_remote="$(git -C "$dir" remote --verbose)"
+    awk '/github.com[:/]turnkeylinux.*fetch/ {print $1; exit}' <<<"$git_remote"
+}
+
 clone_or_pull() {
     # If $dir doesn't exist, clone $repo. If it does, update from origin master
     #
@@ -71,22 +78,14 @@ clone_or_pull() {
         git clone -o "$GIT_REMOTE_NAME" "$GIT_REMOTE_URL/$repo" "$dir"
     else
         info "Repo $repo found, attempting to update"
-        remote=$( \
-            awk '/github.com[:/]turnkeylinux/ {print $1; exit}' \
-                <<<"$(git -C "$dir" remote --verbose)" \
-        )
-        git -C "$dir" pull "$remote" master
+        git -C "$dir" pull "$(tkl_remote "$dir")" master
     fi
 }
 
 git_unshallow() {
     local dir=$1
     local branch=$2
-    # find remote name for turnkey repo
-    remote=$(\
-        sed -En '\|github\.com.turnkeylinux.*fetch\)$| s|([a-z]*)\s.*|\1|p' \
-        <<<"$(git remote -v)")
-    local "remote"
+    remote=$(tkl_remote "$dir")
     cd "$dir"
     if [[ "$(git symbolic-ref --short HEAD)" != "$branch" ]]; then
         git remote set-branches "$remote" '*'
