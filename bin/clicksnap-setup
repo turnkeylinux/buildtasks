@@ -8,13 +8,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warn() { echo -e "WARNING [$(basename $0)]: $@"; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+warn() { echo -e "WARNING [$(basename "$0")]: $*"; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0) [APP_NAME]
+Syntax: $(basename "$0") [APP_NAME]
 Setup/update system ready for bt-iso (clicksnap & deps)
 
 Option::
@@ -30,7 +30,7 @@ Environment::
 
 EOF
     if [[ -n "$1" ]]; then
-        echo "Error: $@" >&2
+        echo "Error: $*" >&2
         exit 1
     fi
     exit
@@ -38,40 +38,49 @@ EOF
 
 [ -n "$BT_DEBUG" ] && set -x
 
-export BT=$(dirname $(dirname $(readlink -f $0)))
+BT=$(dirname "$(dirname "$(readlink -f "$0")")")
+export BT
 export BT_CONFIG=$BT/config
 
 [[ -n "$BASE_DIR" ]] || BASE_DIR=/turnkey/public
-mkdir -p $BASE_DIR
-GH_URL=https://github.com/turnkeylinux
+mkdir -p "$BASE_DIR"
+GIT_REMOTE_URL="${GIT_REMOTE_URL:-https://github.com/turnkeylinux}"
+GIT_REMOTE_NAME="${GIT_REMOTE_NAME:-origin}"
 
 unset app
-while [ "$1" != "" ]; do
+while [[ "$1" != "" ]]; do
     case $1 in
-        --help|-h )    usage;;
-        *)             if [[ -z "$app" ]]; then
-                            app="$1"
-                       else
-                           usage "Unknown option/multiple app names given: '$1'"
-                       fi;;
+        --help|-h)
+            usage
+            ;;
+        *)
+
+            if [[ -z "$app" ]]; then
+                app="$1"
+            else
+                usage "Unknown option/multiple app names given: '$1'"
+            fi
+            ;;
     esac
     shift
 done
 
 install() {
-    info "Updating apt cache and installing deps:" $@
-    info "installing $@"
+    info "Updating apt cache and installing deps: $*"
+    info "installing $*"
     apt-get -qq update
-    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
+    DEBIAN_FRONTEND=noninteractive apt-get -y install "$@"
 }
 
 git_pull() {
     local dir=$1
     local app=$2
-    cd $dir
-    local remote=$(sed -En "s|(^[a-zA-Z0-9_-]*)[[:space:]].*|\1|p" \
-                    <<<$(git remote -v | grep -m1 "turnkeylinux/$app"))
-    git pull $remote master
+    cd "$dir"
+    git fetch "$GIT_REMOTE_NAME"
+    if [[ -n "$(git status --porcelain)" ]]; then
+        fatal "git repo $dir is dirty; please fix and retry"
+    fi
+    git pull "$GIT_REMOTE_NAME" master
 }
 
 # dl & check for screenshot code first so we can bail as early as possible
@@ -86,25 +95,26 @@ for dl in tkldev-docker clicksnap; do
         fi
     else
         info "Downloading $dl source"
-        git clone --depth=1 $GH_URL/$dl $BASE_DIR/$dl
+        git clone --depth=1 --origin "$GIT_REMOTE_NAME" \
+            "$GIT_REMOTE_URL/$dl" "$BASE_DIR/$dl"
     fi
 done
 
-app=$(sed "s|-|_|g" <<<$app)
+app="${app//-/_}"
 if [[ -z "$app" ]]; then
     warn "App name not given - continuing, but may fail later"
-elif ! ls $BASE_DIR/clicksnap/src/apps/ | grep -q -w "$app" \
+elif [[ ! -d "$BASE_DIR/clicksnap/src/apps/$app" ]] \
         && [[ -z "$no_screens" ]] ; then
     fatal "Clicksnap code for $app not found (checked in $BASE_DIR/clicksnap/src/apps/)"
 fi
 
 # sed, fab & deck should be installed, but just in case
 deps="podman sed fab deck"
-missing=''
+missing=()
 for dep in $deps; do
-    which $dep >/dev/null || missing="$missing $dep"
+    which "$dep" >/dev/null || missing+=("$dep")
 done
-[[ -z "$missing" ]] || install $missing
+[[ -z "${missing[*]}" ]] || install "${missing[@]}"
 
 case "$(which cargo || echo 'fail')" in
     "$HOME/.cargo/bin/cargo")
@@ -116,16 +126,17 @@ case "$(which cargo || echo 'fail')" in
     fail)
         info "Installing rust via rustup"
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > $HOME/.bashrc.d/rust
-        chmod +x $HOME/.bashrc.d/rust
-        source $HOME/.bashrc.d/rust;;
+        echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" > "$HOME/.bashrc.d/rust"
+        chmod +x "$HOME/.bashrc.d/rust"
+        # shellcheck source=/dev/null
+        source "$HOME/.bashrc.d/rust";;
     *)
         fatal "Unexpected cargo path: '$1'";;
 esac
 
-cd $BASE_DIR/clicksnap
+cd "$BASE_DIR/clicksnap"
 info "Building & installing clicksnap"
 cargo build
-ln -sf $PWD/target/debug/clicksnap /usr/local/bin/clicksnap
-ln -sf $BASE_DIR/tkldev-docker/dockerize.sh /usr/local/bin/dockerize
-ln -sf $BASE_DIR/tkldev-docker/wait-ready.sh /usr/local/bin/tkl-docker-wait-ready
+ln -sf "$PWD/target/debug/clicksnap" /usr/local/bin/clicksnap
+ln -sf "$BASE_DIR/tkldev-docker/dockerize.sh" /usr/local/bin/dockerize
+ln -sf "$BASE_DIR/tkldev-docker/wait-ready.sh" /usr/local/bin/tkl-docker-wait-ready

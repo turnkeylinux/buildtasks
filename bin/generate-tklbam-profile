@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/lib/tklbam-pypy2/bin/pypy
 # 
 # Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
 # 
@@ -34,16 +34,16 @@ import re
 import shutil
 
 from StringIO import StringIO
-import executil
 
 TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH', 
                                  '/usr/lib/tklbam')
 sys.path.insert(0, TKLBAM_LIB_PATH)
 
-try:
-    from temp import TempDir, TempFile
-    from backup import ProfilePaths
+try:  # custom TKL imports
+    from pylib import executil
+    from pylib.temp import TempDir, TempFile
     import dirindex
+    from backup import ProfilePaths
 except ImportError, e:
     print >> sys.stderr, \
             "Can't find TKLBAM modules in TKLBAM_LIB_PATH=%s\n" % TKLBAM_LIB_PATH
