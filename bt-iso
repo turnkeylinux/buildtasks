@@ -371,7 +371,7 @@ if [[ -z "$no_screens" ]]; then
                     --tmpfs /run/lock "$image_name")
     #app_ip=$(podman inspect $app_cont_id --format "{{.NetworkSettings.IPAddress}}")
 
-    export TKL_SCREENSHOT_PATH=$BT_PRODUCTS/$appname/build/screens
+    export TKL_SCREENSHOT_PATH="$BT_SCREENS/$appname"
     mkdir -p "$TKL_SCREENSHOT_PATH"
     SELENIUM_CONT=docker.io/selenium/standalone-chrome
     SELENIUM_TAG=4.18.1-20240224
