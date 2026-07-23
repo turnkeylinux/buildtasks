@@ -203,8 +203,10 @@ fi
 if [[ "$publish" == "yes" ]]; then
     [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
     [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
-    [[ -n "$BT_PUBLISH_SCREENS" ]] || fatal "BT_PUBLISH_SCREENS not set"
     [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
+    if [[ -z "$no_screens" ]] && [[ -z "$BT_PUBLISH_SCREENS" ]]; then
+        fatal "BT_PUBLISH_SCREENS not set"
+    fi
     [[ -n "$GITHUB_USER" ]] || warning "GITHUB_USER not set"
     [[ -n "$GITHUB_USER_TOKEN" ]] || warning "GITHUB_USER_TOKEN not set"
     [[ -z "$use_existing" ]] || usage "conflicting options: --publish / -u|--use-existing"
