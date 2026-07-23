@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2016-2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2016-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -60,7 +60,8 @@ _py_check() {
     local py_ex=$1
     local py_ver=$2
     local lib=$3
-    local py_path="$(which $py_ex || true)"
+    local py_path
+    py_path="$(which "$py_ex" || true)"
     if [[ "$py_ver" -eq 2 ]]; then
         echo "$lib (py2) $($py_ex -c "import $lib; print $lib.__version__" 2>/dev/null || echo "(none)")"
     elif [[ "$py_ver" -eq 3 ]]; then
@@ -68,6 +69,7 @@ _py_check() {
     else
         fatal "Python version (py_ver) must be 2 or 3 (got $py_ver)"
     fi
+    echo "python path: $py_path"
 }
 
 _common() {
