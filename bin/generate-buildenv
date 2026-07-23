@@ -8,13 +8,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename $0)]: $@"; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename "$0")]: $*"; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0) target target-args
+Syntax: $(basename "$0") target target-args
 Print build environment related to target build type
 
 Targets::
@@ -33,11 +33,12 @@ EOF
     exit 1
 }
 
-BT=$(dirname $(dirname $(readlink -f $0)))
+BT=$(dirname "$(dirname "$(readlink -f "$0")")")
 BT_CONFIG=$BT/config
-. $BT/config/common.cfg
+# shellcheck source=config.example/common.cfg
+source "$BT_CONFIG/common.cfg"
 
-[[ -z "$RELEASE" ]] || CODENAME=$(basename $RELEASE)
+[[ -z "$RELEASE" ]] || CODENAME=$(basename "$RELEASE")
 [[ -n "$CODENAME" ]] || CODENAME=$(lsb_release -s -c)
 [[ -n "$ARCH" ]] || ARCH=$(dpkg --print-architecture)
 [[ -n "$TKL_PUB" ]] || TKL_PUB=/turnkey/public
@@ -45,7 +46,7 @@ BT_CONFIG=$BT/config
 _git_state() {
     dir=$1
     if [[ -d "$dir" ]]; then
-        cd $dir
+        cd "$dir"
         commit=$(git rev-parse --short HEAD)
         branch=$(git rev-parse --abbrev-ref HEAD)
         status=$(git status --porcelain | tr '\n' ' ')
@@ -70,7 +71,7 @@ _py_check() {
 }
 
 _common() {
-    _git_state $BT
+    _git_state "$BT"
     echo "turnkey_version $(cat /etc/turnkey_version)"
     if which ec2metadata >/dev/null; then
         amd_id=$(timeout --signal=SIGINT 5 ec2metadata --ami-id 2>/dev/null \
@@ -85,7 +86,7 @@ _common() {
     fi
     for lib in awscli boto boto3; do
         if [[ -n "$py_ver" ]]; then
-            _py_check python $py_ver $lib
+            _py_check python "$py_ver" $lib
         fi
         if which python2 >/dev/null; then
             _py_check python2 2 $lib
@@ -99,35 +100,35 @@ _common() {
 _optimized() {
     # get sha from hash file (supports yet-to-be signed iso hash files)
     hashpath=$1
-    hash256=$(grep -A 1 -m 1 sha256sum $hashpath | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
-    echo "$(basename $hashpath) $hash256"
+    hash256=$(grep -A 1 -m 1 sha256sum "$hashpath" | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
+    echo "$(basename "$hashpath") $hash256"
 
     echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"
 }
 
 bt_bootstrap() {
-    _git_state $1
+    _git_state "$1"
 }
 
 bt_iso() {
-    appname=$1
+    appname="$1"
 
-    _git_state $FAB_PATH/common
-    _git_state $FAB_PATH/cdroots
-    _git_state $BT_PRODUCTS/core
-    _git_state $BT_PRODUCTS/$appname
-    _git_state $TKL_PUB/clicksnap
-    _git_state $TKL_PUB/tkldev-docker
-    _git_state $BT_PROFILES
+    _git_state "$FAB_PATH/common"
+    _git_state "$FAB_PATH/cdroots"
+    _git_state "$BT_PRODUCTS/core"
+    _git_state "$BT_PRODUCTS/$appname"
+    _git_state "$TKL_PUB/clicksnap"
+    _git_state "$TKL_PUB/tkldev-docker"
+    _git_state "$BT_PROFILES"
 
     bootstrap_hash=$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.hash
-    bootstrap_hash_md5=$(md5sum $bootstrap_hash | cut -d " " -f 1)
-    echo "$(basename $bootstrap_hash) $bootstrap_hash_md5"
+    bootstrap_hash_md5=$(md5sum "$bootstrap_hash" | cut -d " " -f 1)
+    echo "$(basename "$bootstrap_hash") $bootstrap_hash_md5"
 
     echo "fab $(fab --version)"
     echo "deck $(deck --version)"
     if which podman >/dev/null; then
-        echo "$(podman --version)"
+        podman --version
     else
         echo "podman (NOT FOUND)"
     fi
@@ -136,14 +137,14 @@ bt_iso() {
 bt_img() {
     appname=$1
 
-    _git_state $FAB_PATH/common
-    _git_state $BT_PRODUCTS/core
-    _git_state $BT_PRODUCTS/$appname
-    _git_state $BT_PROFILES
+    _git_state "$FAB_PATH/common"
+    _git_state "$BT_PRODUCTS/core"
+    _git_state "$BT_PRODUCTS/$appname"
+    _git_state "$BT_PROFILES"
 
-    bootstrap_hash=$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.hash
-    bootstrap_hash_md5=$(md5sum $bootstrap_hash | cut -d " " -f 1)
-    echo "$(basename $bootstrap_hash) $bootstrap_hash_md5"
+    bootstrap_hash="$FAB_PATH/bootstraps/bootstrap-$CODENAME-$ARCH.tar.gz.hash"
+    bootstrap_hash_md5=$(md5sum "$bootstrap_hash" | cut -d " " -f 1)
+    echo "$(basename "$bootstrap_hash") $bootstrap_hash_md5"
 
     echo "fab $(fab --version)"
     echo "deck $(deck --version)"
@@ -179,14 +180,14 @@ fi
 
 target=$1
 case $target in
-    bootstrap)  _common; bt_bootstrap $2;;
-    iso)        _common; bt_iso $2;;
-    img)        _common; bt_img $2;;
-    ec2)        _common; _optimized $2; bt_ec2;;
-    vm)         _common; _optimized $2; bt_vm;;
-    docker)     _common; _optimized $2; bt_docker;;
-    container)  _common; _optimized $2;;
-    openstack)  _common; _optimized $2;;
-    xen)        _common; _optimized $2;;
+    bootstrap)  _common; bt_bootstrap "$2";;
+    iso)        _common; bt_iso "$2";;
+    img)        _common; bt_img "$2";;
+    ec2)        _common; _optimized "$2"; bt_ec2;;
+    vm)         _common; _optimized "$2"; bt_vm;;
+    docker)     _common; _optimized "$2"; bt_docker;;
+    container)  _common; _optimized "$2";;
+    openstack)  _common; _optimized "$2";;
+    xen)        _common; _optimized "$2";;
     *)          fatal "unrecognized build target";;
 esac
