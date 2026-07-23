@@ -159,10 +159,6 @@ while [[ "$1" != "" ]]; do
 done
 
 [[ -n "$appname" ]] || usage "Must give one app name"
-ISO="$FAB_PATH/$appname/build/product.iso"
-if [[ -n "$use_existing" ]] && [[ ! -f "$ISO" ]]; then
-    fatal "file not found: $ISO"
-fi
 
 # don't try screens for tkldev & extend MAX_COUNT for gitlab & canvas
 case $appname in
