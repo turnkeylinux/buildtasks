@@ -9,13 +9,13 @@
 # option) any later version.
 
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename $0)]: $@"; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename "$0")]: $*"; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0) [ --publish ]
+Syntax: $(basename "$0") [ --publish ]
 Builds appliance bootstrap-CODENAME-ARCH.tar.gz
 
 Options::
@@ -53,11 +53,14 @@ done
 
 [[ -z "$BT_DEBUG" ]] || set -x
 [[ -n "$FAB_PATH" ]] || fatal "FAB_PATH not set"
-[[ -n "$FAB_ARCH" ]] || export FAB_ARCH=$(dpkg --print-architecture)
+[[ -n "$FAB_ARCH" ]] || FAB_ARCH=$(dpkg --print-architecture)
+export FAB_ARCH
 
-export BT=$(dirname $(readlink -f $0))
+BT=$(dirname "$(readlink -f "$0")")
+export BT
 export BT_CONFIG=$BT/config
-. $BT_CONFIG/common.cfg
+# shellcheck source=config.example/common.cfg
+source "$BT_CONFIG/common.cfg"
 
 O=$BT_BUILDS/bootstrap
 mkdir -p $O
@@ -68,19 +71,21 @@ if [[ -z "$RELEASE" ]]; then
     codename=$(lsb_release -sc)
     case ${distrib_ID,,} in # all lower case
         turnkey|debian)
-            distrib_ID=debian;;
+            distrib_ID=debian
+            ;;
         *)
-            usage
-            fatal "Distro '$distrib_ID' currently unsupported.";;
+            fatal "Distro '$distrib_ID' currently unsupported."
+            ;;
     esac
     export RELEASE=$distrib_ID/$codename
 fi
-export CODENAME=$(basename $RELEASE)
+CODENAME=$(basename "$RELEASE")
+export CODENAME
 
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
     [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
-    which aws >/dev/null || $BT/bin/aws-setup --awscli
+    which aws >/dev/null || "$BT/bin/aws-setup" --awscli
 else
     warning "--publish was not specified"
 fi
@@ -88,10 +93,10 @@ fi
 BOOTSTRAP_TARBALL="bootstrap-$CODENAME-$FAB_ARCH.tar.gz"
 
 if [[ "$force" == "yes" ]]; then
-    rm -f $O/$BOOTSTRAP_TARBALL{,.manifest,.hash,.buildenv}
+    rm -f "$O/$BOOTSTRAP_TARBALL"{,.manifest,.hash,.buildenv}
 else
     unset _files
-    for _file in $(ls $O/$BOOTSTRAP_TARBALL{,.manifest,.hash,.buildenv} 2>/dev/null); do
+    for _file in "$O/$BOOTSTRAP_TARBALL"{,.manifest,.hash,.buildenv}*; do
         if [[ -e "$_file" ]]; then
             _files="$_files $_file"
         fi
@@ -100,13 +105,13 @@ else
     done
 fi
 
-_PATH=$(dirname $FAB_PATH)
-if [ ! -e $_PATH/bootstrap ]; then
-    cd $_PATH
+_PATH=$(dirname "$FAB_PATH")
+if [[ ! -e $_PATH/bootstrap ]]; then
+    cd "$_PATH"
     git clone https://github.com/turnkeylinux/bootstrap.git
-    cd $_PATH/bootstrap
+    cd "$_PATH/bootstrap"
 else
-    cd $_PATH/bootstrap
+    cd "$_PATH/bootstrap"
     git pull
 fi
 
@@ -128,17 +133,17 @@ if [[ ! -e build/bootstrap.tar.gz ]]; then
     fatal "Build failed..."
 fi
 
-mv build/bootstrap.tar.gz $O/$BOOTSTRAP_TARBALL
-$BT/bin/generate-manifest build/bootstrap > $O/$BOOTSTRAP_TARBALL.manifest
-$BT/bin/generate-signature $O/$BOOTSTRAP_TARBALL
-$BT/bin/generate-buildenv bootstrap . > $O/$BOOTSTRAP_TARBALL.buildenv
+mv build/bootstrap.tar.gz "$O/$BOOTSTRAP_TARBALL"
+"$BT/bin/generate-manifest build/bootstrap" > "$O/$BOOTSTRAP_TARBALL.manifest"
+"$BT/bin/generate-signature" "$O/$BOOTSTRAP_TARBALL"
+"$BT/bin/generate-buildenv bootstrap" . > "$O/$BOOTSTRAP_TARBALL.buildenv"
 
-if [ "$publish" == "yes" ]; then
+if [[ "$publish" == "yes" ]]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/bootstrap/
-    $BT/bin/publish-files $O/$BOOTSTRAP_TARBALL
+    "$BT/bin/publish-files" "$O/$BOOTSTRAP_TARBALL"
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$BOOTSTRAP_TARBALL{.manifest,.hash,.buildenv}
+    "$BT/bin/publish-files" "$O/$BOOTSTRAP_TARBALL"{.manifest,.hash,.buildenv}
 fi
 
 if [[ -z "$BT_DEBUG" ]] && [[ "$clean" != "no" ]]; then
