@@ -134,7 +134,7 @@ if [[ ! -e "build/bootstrap-$FAB_ARCH.tar.gz" ]]; then
 fi
 
 mv "build/bootstrap-$FAB_ARCH.tar.gz" "$O/$BOOTSTRAP_TARBALL"
-"$BT/bin/generate-manifest build/bootstrap-$FAB_ARCH" \
+"$BT/bin/generate-manifest" "build/bootstrap-$FAB_ARCH" \
     > "$O/$BOOTSTRAP_TARBALL.manifest"
 "$BT/bin/generate-signature" "$O/$BOOTSTRAP_TARBALL"
 "$BT/bin/generate-buildenv bootstrap" . > "$O/$BOOTSTRAP_TARBALL.buildenv"
