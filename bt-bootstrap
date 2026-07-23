@@ -137,7 +137,7 @@ mv "build/bootstrap-$FAB_ARCH.tar.gz" "$O/$BOOTSTRAP_TARBALL"
 "$BT/bin/generate-manifest" "build/bootstrap-$FAB_ARCH" \
     > "$O/$BOOTSTRAP_TARBALL.manifest"
 "$BT/bin/generate-signature" "$O/$BOOTSTRAP_TARBALL"
-"$BT/bin/generate-buildenv bootstrap" . > "$O/$BOOTSTRAP_TARBALL.buildenv"
+"$BT/bin/generate-buildenv" bootstrap "$PWD" > "$O/$BOOTSTRAP_TARBALL.buildenv"
 
 if [[ "$publish" == "yes" ]]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/bootstrap/
