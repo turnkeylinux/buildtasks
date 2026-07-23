@@ -280,6 +280,7 @@ if [[ -z "$skip_setup" ]]; then
         BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
 
         if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
+            info "Local bootstrap not found: '$BOOTSTRAP_PATH'"
             info "Attempting to download $BOOTSTRAP_NAME"
             mkdir -p "$(dirname "$BOOTSTRAP_PATH")"
             cd "$(dirname "$BOOTSTRAP_PATH")"
