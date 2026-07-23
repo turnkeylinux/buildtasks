@@ -118,23 +118,24 @@ fi
 make clean || true
 
 if [[ "$install" == "yes" ]]; then
-    make install || true
-    make bootstrap.tar.gz || true
+    make install
+    make
 else
-    make bootstrap.tar.gz || true
+    make
 fi
 
 ls -l build
 
-if [[ ! -e build/bootstrap.tar.gz ]]; then
+if [[ ! -e "build/bootstrap-$FAB_ARCH.tar.gz" ]]; then
     if [[ -z "$BT_DEBUG" ]]; then
         make clean >/dev/null 2>&1 || true
     fi
     fatal "Build failed..."
 fi
 
-mv build/bootstrap.tar.gz "$O/$BOOTSTRAP_TARBALL"
-"$BT/bin/generate-manifest build/bootstrap" > "$O/$BOOTSTRAP_TARBALL.manifest"
+mv "build/bootstrap-$FAB_ARCH.tar.gz" "$O/$BOOTSTRAP_TARBALL"
+"$BT/bin/generate-manifest build/bootstrap-$FAB_ARCH" \
+    > "$O/$BOOTSTRAP_TARBALL.manifest"
 "$BT/bin/generate-signature" "$O/$BOOTSTRAP_TARBALL"
 "$BT/bin/generate-buildenv bootstrap" . > "$O/$BOOTSTRAP_TARBALL.buildenv"
 
