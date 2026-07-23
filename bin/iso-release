@@ -9,13 +9,13 @@
 # option) any later version.
 
 
-info() { echo "INFO [$(basename $0)]: $@"; }
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename $0)]: $@"; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$(basename "$0")]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0) outdir
+Syntax: $(basename "$0") outdir
 Generate release files for publishing
 
 Options::
@@ -52,24 +52,25 @@ done
 [[ -e build/root.sandbox ]] || fatal "build/root.sandbox not found"
 [[ -n "$no_screens" ]] || [[ -e build/screens ]] || fatal "build/screens not found"
 
-export BT=$(dirname $(dirname $(readlink -f $0)))
+BT=$(dirname "$(dirname "$(readlink -f "$0")")")
+export BT
 export BT_CONFIG=$BT/config
-. $BT/config/common.cfg
+source "$BT/config/common.cfg"
 
 rootfs=build/root.sandbox
-name=$(cat $rootfs/etc/turnkey_version)
-appname=$(echo $name |sed 's/turnkey-\(.*\)-[0-9].*/\1/')
+name=$(turnkey-version $rootfs)
+appname="$(turnkey-version --name $rootfs)"
 [[ -n "$name" ]] || fatal "could not identify name"
 
 if [[ "$force" == "yes" ]]; then
-    rm -f $O/$name.iso
-    rm -f $O/$name.iso.hash
-    rm -f $O/$name.iso.buildenv
-    rm -f $O/$name.manifest
-    rm -f $O/$name.changelog
-    rm -f $O/$name.log
-    rm -rf $O/$name.tklbam
-    rm -rf $O/$name.screens
+    rm -f "$O/$name.iso"
+    rm -f "$O/$name.iso.hash"
+    rm -f "$O/$name.iso.buildenv"
+    rm -f "$O/$name.manifest"
+    rm -f "$O/$name.changelog"
+    rm -f "$O/$name.log"
+    rm -rf "$O/$name.tklbam"
+    rm -rf "$O/$name.screens"
 fi
 
 [[ ! -e $O/$name.iso ]] || fatal "$O/$name.iso already exists"
@@ -80,29 +81,28 @@ fi
 [[ ! -e $O/$name.tklbam ]] || fatal "$O/$name.tklbam already exists"
 [[ ! -e $O/$name.screens ]] || fatal "$O/$name.screens already exists"
 
-[[ -e build/log ]] && cp build/log $O/$name.log
-cp changelog $O/$name.changelog
-cp build/product.iso $O/$name.iso
-$BT/bin/generate-signature $O/$name.iso
-$BT/bin/generate-manifest $rootfs > $O/$name.manifest
-$BT/bin/generate-buildenv iso $appname > $O/$name.iso.buildenv
+[[ -e build/log ]] && cp build/log "$O/$name.log"
+cp changelog "$O/$name.changelog"
+cp build/product.iso "$O/$name.iso"
+"$BT/bin/generate-signature" "$O/$name.iso"
+"$BT/bin/generate-manifest" $rootfs > "$O/$name.manifest"
+"$BT/bin/generate-buildenv" iso "$appname" > "$O/$name.iso.buildenv"
 if [[ -e $BT_PROFILES/$appname ]]; then
-    mkdir -p $O/$name.tklbam
+    mkdir -p "$O/$name.tklbam"
     export PROFILES_CONF=$BT_PROFILES
-    $BT/bin/generate-tklbam-profile $O/$name.iso $O/$name.tklbam
+    "$BT/bin/generate-tklbam-profile" "$O/$name.iso $O/$name.tklbam"
 fi
 if [[ -z "$no_screens" ]]; then
-    mkdir -p $O/$name.screens
-    prefix=$(echo "$name" | \
-        sed -En "s|turnkey-([a-z0-9-]+-[0-9]+\.[0-9]+[brc0-9]*)-.*|\1|p")
+    mkdir -p "$O/$name.screens"
+    prefix=$(turnkey-version --name --tklversion)
+    prefix="${prefix/ /-}"
     for screen in build/screens/*.png; do
-        screen_file=$(basename $screen)
-        if [[ "$screen_file" == 'screenshot-'* ]]; then
-            new_name=$(echo $screen_file \
-                        | sed -En "s|screenshot-(.*\.png)|\1|p")
-            cp $screen $O/$name.screens/$prefix-$new_name
+        screen_file=$(basename "$screen")
+        if [[ "$screen_file" == "screenshot-"* ]]; then
+            new_name=$(sed -En "s|screenshot-(.*\.png)|\1|p" <<<"$screen_file")
+            cp "$screen" "$O/$name.screens/$prefix-$new_name"
         else
-            cp $screen $O/$name.screens/$prefix-$screen_file
+            cp "$screen" "$O/$name.screens/$prefix-$screen_file"
         fi
     done
 fi
