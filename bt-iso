@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -99,11 +99,11 @@ get_codename() {
     local tkl_ver=$1
     case $tkl_ver in
         18*)
-            TKL_CODENAME=bookworm;;
+            echo bookworm;;
         19*)
-            TKL_CODENAME=trixie;;
+            echo trixie;;
         20*)
-            TKL_CODENAME=forky;;
+            echo forky;;
         *)
             fatal "Unrecognised TKL version: $tkl_ver";;
     esac
@@ -127,12 +127,27 @@ build_bootstrap() {
     local arg=
     info "Attempting to build bootstrap."
     BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
+    BOOTSTRAP_TAR="$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz"
     clone_or_pull "$BOOTSTRAP" "https://github.com/turnkeylinux/bootstrap.git"
-    [[ "$publish" != "yes" ]] || arg="--publish"
-    "$BT"/bt-bootstrap $arg --no-clean --force \
-        || fatal "Building bootstrap failed... :("
-    rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
-        "$FAB_PATH/bootstraps/$TKL_CODENAME/"
+    unset built
+    if [[ "$publish" == "yes" ]]; then
+        "$BT"/bt-bootstrap --publish --no-clean --force
+        built=yes
+    else
+        info "checking for existing assets"
+        if ! "$BT"/bt-bootstrap --use-existing; then
+            info "existing assets missing - building"
+            "$BT"/bt-bootstrap --no-clean --force
+            built=yes
+        fi
+    fi
+    info "preparing bootstrap for app building"
+    if [[ "$built" == "yes" ]]; then
+        rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
+            "$BOOTSTRAP_PATH/"
+    else
+        tar -zxf "$BOOTSTRAP_TAR" -C "$BOOTSTRAP_PATH"
+    fi
     # create symlinks so bin/generate-buildenv completes successfully
     ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz" \
         "$(dirname "$BOOTSTRAP_PATH")/$BOOTSTRAP_NAME.tar.gz"
@@ -234,6 +249,7 @@ else
     warning "--publish was not specified"
 fi
 
+info "Setting up."
 cd "$BT"
 BASE_DIR=/turnkey/public
 COMMIT_ID=$(git rev-parse --short HEAD)
