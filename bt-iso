@@ -246,13 +246,15 @@ if [[ -z "$skip_setup" ]]; then
 
     # Leverage tkldev-setup to ensure important repos are cloned and at latest
     # commit; also ensures RELEASE & ARCH are set.
-    if ! tkldev-setup "$appname"; then
-        msg="tkldev-setup failed"
-        if [[ "$publish" == "yes" ]]; then
-            fatal "$msg with '--publish' - exiting."
-        else
-            warning "$msg - attempting to continue anyway."
-        fi
+    args=("--transition")
+    if [[ "$publish" == "yes" ]]; then
+        args+=("--strict")
+        fail() { fatal "$* with '--publish' - exiting."; }
+    else
+        fail() { warning "$* - attempting to continue anyway."; }
+    fi
+    if ! tkldev-setup "${args[@]}" "$appname"; then
+        fail "tkldev-setup failed"
     fi
 
     # if TKL version doesn't match host, check out the relevant branches and
