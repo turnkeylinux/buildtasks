@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2020 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2020-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -16,12 +16,15 @@ info() { echo "INFO [$(basename "$0")]: $*"; }
 usage() {
     cat<<EOF
 Syntax: $(basename "$0") [ --publish ]
-Builds appliance bootstrap-CODENAME-ARCH.tar.gz
+Builds appliance bootstrap-CODENAME-ARCH.tar.gz and
+    bootstrap-CODENAME-ARCH.tar.gz.hash
 
 Options::
 
-    --force             - delete existing bootstrap tarball & release files in
-                          outdir if they exist.
+    --force             - delete existing assets in output dir; otherwise will
+                          fail, conflicts with '--use-existing'.
+    --use-existing      - allow existing files, fail if all files do not exist,
+                          conflicts with '--force'.
     --publish           - publish bootstrap tarball and release files.
     --no-clean          - DO NOT run 'make clean' on completion.
     --install           - Also install the new bootstrap locally
@@ -39,19 +42,26 @@ EOF
     exit 1
 }
 
+unset force use_existing publish clean install
 while [ "$1" != "" ]; do
     case $1 in
-        --help|-h)  usage;;
-        --force)    force="yes";;
-        --publish)  publish="yes";;
-        --no-clean) clean="no";;
-        --install)  install="yes";;
-        *)          fatal "Unknown argument '$1'.";;
+        --help|-h)      usage;;
+        --force)        force="yes" ;;
+        --use-existing) use_existing="yes";;
+        --publish)      publish="yes";;
+        --no-clean)     clean="no";;
+        --install)      install="yes";;
+        *)              fatal "Unknown argument '$1'.";;
     esac
     shift
 done
 
 [[ -z "$BT_DEBUG" ]] || set -x
+if [[ -n $force ]] && [[ -n $use_existing ]]; then
+    fatal "'--force' conflicts with '--use-existing'"
+elif [[ -n $publish ]] && [[ -n $use_existing ]]; then
+    fatal "'--publish' conflicts with '--use-existing'"
+fi
 [[ -n "$FAB_PATH" ]] || fatal "FAB_PATH not set"
 
 BT=$(dirname "$(readlink -f "$0")")
@@ -85,9 +95,9 @@ if [[ -z "$FAB_ARCH" ]]; then
 fi
 export FAB_ARCH
 
-if [ "$publish" == "yes" ]; then
-    [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
-    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
+if [[ "$publish" == "yes" ]]; then
+    [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
+    [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
     which aws >/dev/null || "$BT/bin/aws-setup" --awscli
 else
     warning "--publish was not specified"
@@ -95,17 +105,26 @@ fi
 
 BOOTSTRAP_TARBALL="bootstrap-$CODENAME-$FAB_ARCH.tar.gz"
 
+build_assets=("$O/$BOOTSTRAP_TARBALL"{,.manifest,.hash,.buildenv})
 if [[ "$force" == "yes" ]]; then
-    rm -f "$O/$BOOTSTRAP_TARBALL"{,.manifest,.hash,.buildenv}
+    rm -f "${build_assets[@]}"
 else
-    unset _files
-    for _file in "$O/$BOOTSTRAP_TARBALL"{,.manifest,.hash,.buildenv}*; do
-        if [[ -e "$_file" ]]; then
-            _files="$_files $_file"
+    existing=()
+    for file in "${build_assets[@]}"; do
+        if [[ -f "$file" ]]; then
+            existing+=("$file")
         fi
-        [[ -z "$_files" ]] || \
-            fatal "Files: $_files exist - please try again with --force."
     done
+    if [[ "$use_existing" == "yes" ]]; then
+        if [[ "${#existing[@]}" != "${#build_assets[@]}" ]]; then
+            fatal "'--use-existing' but some assets are missing."
+        fi
+        # should probably validate hash file here...
+        info "'--use-existing' and all build assets exist - nothing to do"
+        exit 0
+    elif [[ "${#existing[@]}" -gt 0 ]]; then
+        fatal "files exist (${existing[*]}) - try again with --force."
+    fi
 fi
 
 _PATH=$(dirname "$FAB_PATH")
