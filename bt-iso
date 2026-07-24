@@ -276,7 +276,7 @@ if [[ -z "$skip_setup" ]]; then
     fi
 
     # if TKL version doesn't match host, check out the relevant branches and
-    # attempt to download the right bootstrap
+    # ensure the relevant bootstrap exists
     TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
     TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
         "$BT_PRODUCTS/$appname/changelog")
@@ -295,7 +295,7 @@ if [[ -z "$skip_setup" ]]; then
         cd -
         git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
     fi
-    # if required bootstrap does not exist, attempt download
+    # if required bootstrap does not exist, attempt download/build
     BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
     BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
     if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
