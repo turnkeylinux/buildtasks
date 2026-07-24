@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2023 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -8,14 +8,14 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-info() { echo "INFO [$(basename "$0")]: $*"; }
-fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename "$0")]: $*"; }
+APP=$(basename "$0")
+info() { echo "INFO [$APP]: $*"; }
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename "$0") outdir
+Syntax: $APP outdir
 Generate release files for publishing
 
 Options::
@@ -90,7 +90,7 @@ cp build/product.iso "$O/$name.iso"
 if [[ -e $BT_PROFILES/$appname ]]; then
     mkdir -p "$O/$name.tklbam"
     export PROFILES_CONF=$BT_PROFILES
-    "$BT/bin/generate-tklbam-profile" "$O/$name.iso $O/$name.tklbam"
+    "$BT/bin/generate-tklbam-profile" "$O/$name.iso" "$O/$name.tklbam"
 fi
 if [[ -z "$no_screens" ]]; then
     mkdir -p "$O/$name.screens"
