@@ -53,8 +53,6 @@ done
 
 [[ -z "$BT_DEBUG" ]] || set -x
 [[ -n "$FAB_PATH" ]] || fatal "FAB_PATH not set"
-[[ -n "$FAB_ARCH" ]] || FAB_ARCH=$(dpkg --print-architecture)
-export FAB_ARCH
 
 BT=$(dirname "$(readlink -f "$0")")
 export BT
@@ -81,6 +79,11 @@ if [[ -z "$RELEASE" ]]; then
 fi
 CODENAME=$(basename "$RELEASE")
 export CODENAME
+if [[ -z "$FAB_ARCH" ]]; then
+    info "FAB_ARCH not set, determining from system."
+    FAB_ARCH=$(dpkg --print-architecture)
+fi
+export FAB_ARCH
 
 if [ "$publish" == "yes" ]; then
     [ -n "$BT_PUBLISH_IMGS" ] || fatal "BT_PUBLISH_IMGS not set"
