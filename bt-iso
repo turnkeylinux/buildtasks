@@ -122,6 +122,24 @@ check_debug() {
     fi
 }
 
+build_bootstrap() {
+    local publish=$1
+    local arg=
+    info "Attempting to build bootstrap."
+    BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
+    clone_or_pull "$BOOTSTRAP" "https://github.com/turnkeylinux/bootstrap.git"
+    [[ "$publish" != "yes" ]] || arg="--publish"
+    "$BT"/bt-bootstrap $arg --no-clean --force \
+        || fatal "Building bootstrap failed... :("
+    rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
+        "$FAB_PATH/bootstraps/$TKL_CODENAME/"
+    # create symlinks so bin/generate-buildenv completes successfully
+    ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz" \
+        "$(dirname "$BOOTSTRAP_PATH")/$BOOTSTRAP_NAME.tar.gz"
+    ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash" \
+        "$(dirname "$BOOTSTRAP_PATH")"/"$BOOTSTRAP_NAME.tar.gz.hash"
+}
+
 export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-200}
 export WEBDRIVER_CONNECT_TIMEOUT=${WEBDRIVER_CONNECT_TIMEOUT:-5}
 ARGS="$*"
@@ -258,15 +276,14 @@ if [[ -z "$skip_setup" ]]; then
     fi
 
     # if TKL version doesn't match host, check out the relevant branches and
-    # attempt to download the right bootstrap; otherwise build it
+    # attempt to download the right bootstrap
     TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
     TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
         "$BT_PRODUCTS/$appname/changelog")
     if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
-        warning "Host TKL version ($TKL_HOST_VER) does not match guest version" \
-                " ($TKL_BUILD_VER)"
-        unset TKL_CODENAME
-        get_codename "$TKL_BUILD_VER"
+        warning "Host TKL version ($TKL_HOST_VER) does not match guest" \
+                " version ($TKL_BUILD_VER)"
+        TKL_CODENAME=$(get_codename "$TKL_BUILD_VER")
         export RELEASE=debian/$TKL_CODENAME
         git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
         # if buildtasks has changed, restart bt-iso
@@ -277,45 +294,32 @@ if [[ -z "$skip_setup" ]]; then
         fi
         cd -
         git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
-        IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-        BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
-        BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
-
-        if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
-            info "Local bootstrap not found: '$BOOTSTRAP_PATH'"
-            info "Attempting to download $BOOTSTRAP_NAME"
-            mkdir -p "$(dirname "$BOOTSTRAP_PATH")"
-            cd "$(dirname "$BOOTSTRAP_PATH")"
-            exit_code=0
-            wget -nc $IMAGES/bootstrap/"$BOOTSTRAP_NAME.tar.gz" || exit_code=$?
-            wget -nc $IMAGES/bootstrap/"$BOOTSTRAP_NAME.tar.gz.hash" || exit_code=$?
-            if [[ "$exit_code" -eq 0 ]]; then
-                info "verifying $BOOTSTRAP_NAME"
-                TMP_KEYRING="$(mktemp -d)/tmp.gpg"
-                GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
-                $GPG --import "$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc"
-                $GPG --verify "$BOOTSTRAP_NAME.tar.gz.hash"
-
-                info "unpacking $BOOTSTRAP_NAME"
-                mkdir "$BOOTSTRAP_PATH"
-                tar -zxf "$BOOTSTRAP_NAME.tar.gz" -C "$BOOTSTRAP_PATH"
-                cd -
-            else
-                warning "Downloading bootstrap failed."
-                info "Attempting to build bootstrap."
-                unset PUBLISH
-                BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
-                [[ "$publish" != "yes" ]] || PUBLISH="--publish"
-                "$BT"/bt-bootstrap $PUBLISH --no-clean --force \
-                    || fatal "Building bootstrap failed... :("
-                rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
-                    "$FAB_PATH"/bootstraps/$TKL_CODENAME/
-                # create symlinks so bin/generate-buildenv completes successfully
-                ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz" \
-                    "$(dirname "$BOOTSTRAP_PATH")/$BOOTSTRAP_NAME.tar.gz"
-                ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash" \
-                    "$(dirname "$BOOTSTRAP_PATH")"/"$BOOTSTRAP_NAME.tar.gz.hash"
-            fi
+    fi
+    # if required bootstrap does not exist, attempt download
+    BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
+    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
+    if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
+        BASE_URL="http://mirror.turnkeylinux.org/turnkeylinux/images/bootstrap"
+        info "Local bootstrap not found: '$BOOTSTRAP_PATH'"
+        info "Attempting to download $BOOTSTRAP_NAME"
+        mkdir -p "$(dirname "$BOOTSTRAP_PATH")"
+        cd "$(dirname "$BOOTSTRAP_PATH")"
+        exit_code=0
+        wget -nc "$BASE_URL/$BOOTSTRAP_NAME.tar.gz" || exit_code=$?
+        wget -nc "$BASE_URL/$BOOTSTRAP_NAME.tar.gz.hash" || exit_code=$?
+        if [[ "$exit_code" -eq 0 ]]; then
+            info "verifying $BOOTSTRAP_NAME"
+            TMP_KEYRING="$(mktemp -d)/tmp.gpg"
+            GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
+            $GPG --import "$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc"
+            $GPG --verify "$BOOTSTRAP_NAME.tar.gz.hash"\
+            info "unpacking $BOOTSTRAP_NAME"
+            mkdir "$BOOTSTRAP_PATH"
+            tar -zxf "$BOOTSTRAP_NAME.tar.gz" -C "$BOOTSTRAP_PATH"
+            cd -
+        else
+            warning "Downloading bootstrap failed."
+            build_bootstrap "$publish"
         fi
     fi
 fi
