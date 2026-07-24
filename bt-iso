@@ -10,13 +10,14 @@
 
 [[ -z "$BT_DEBUG" ]] || set -x
 
-fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename "$0")]: $*"; }
-info() { echo "INFO [$(basename "$0")]: $*"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename "$0") [--publish | -u] [-n] [-s] appname
+Syntax: $APP [--publish | -u] [-n] [-s] appname
 Builds appliance appname (e.g., core) ISO
 
 Arguments::
@@ -128,7 +129,8 @@ build_bootstrap() {
     info "Attempting to build bootstrap."
     BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
     BOOTSTRAP_TAR="$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz"
-    clone_or_pull "$BOOTSTRAP" "https://github.com/turnkeylinux/bootstrap.git"
+    clone_or_pull "$BOOTSTRAP_SRC" \
+        "https://github.com/turnkeylinux/bootstrap.git"
     unset built
     if [[ "$publish" == "yes" ]]; then
         "$BT"/bt-bootstrap --publish --no-clean --force
@@ -146,6 +148,7 @@ build_bootstrap() {
         rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
             "$BOOTSTRAP_PATH/"
     else
+        mkdir -p "$BOOTSTRAP_PATH"
         tar -zxf "$BOOTSTRAP_TAR" -C "$BOOTSTRAP_PATH"
     fi
     # create symlinks so bin/generate-buildenv completes successfully
@@ -296,10 +299,10 @@ if [[ -z "$skip_setup" ]]; then
     TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
     TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
         "$BT_PRODUCTS/$appname/changelog")
+    TKL_CODENAME=$(get_codename "$TKL_BUILD_VER")
     if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
         warning "Host TKL version ($TKL_HOST_VER) does not match guest" \
                 " version ($TKL_BUILD_VER)"
-        TKL_CODENAME=$(get_codename "$TKL_BUILD_VER")
         export RELEASE=debian/$TKL_CODENAME
         git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
         # if buildtasks has changed, restart bt-iso
