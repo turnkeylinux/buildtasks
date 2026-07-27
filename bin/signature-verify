@@ -44,7 +44,7 @@ exit 1
 
 [[ -z "$BT_DEBUG" ]] || set -x
 
-BT=$(dirname $(readlink -f $0))
+BT="$(dirname "$(dirname "$(readlink -f "$0")")")"
 BT_CONFIG="$BT/config/common.cfg"
 if [[ -f "$BT_CONFIG" ]]; then
     source "$BT_CONFIG"
