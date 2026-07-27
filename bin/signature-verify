@@ -16,7 +16,9 @@ info() { echo "INFO [$APP]: $*"; }
 usage() {
 cat<<EOF
 Syntax: $APP file hashfile [-f|--force-gpg]
-Verify GPG signature of hashfile and checksum of file (from hashfile)
+
+Verify GPG signature of hashfile and checksum of file (from hashfile). If the
+specified file is not signed, then by default the check will be skipped.
 
 Arguments::
 
@@ -25,20 +27,15 @@ Arguments::
 
 Options::
 
-    -f|--force-gpg  - Force GPG signiture check of hash file. Exit with
-                      non-zero exit code if not signed by BT_GPGKEY.
-                      If the file is not signed, default is to only display a
-                      warning and continue. If the file is signed a GPG check
-                      will always occur.
+    -f|--force-gpg  - Never skip GPG signature verification of hashfile. Will
+                      fail if hashfile is not signed (default is to skip check
+                      if file not signed).
     -h|--help       - Display this usage info and exit.
 
 Environment::
 
     BT_GPGKEY       - GPG key id used to sign the hash file. Required if
                       BT_GPGFILE not set.
-    BT_GPGFILE      - GPG file to use; may be local file or remote https url.
-                      Required if BT_GPGKEY not set. Will override BT_GPGKEY
-                      if both set.
     BT_DEBUG        - Make output verbose.
 
 EOF
@@ -54,25 +51,6 @@ if [[ -f "$BT_CONFIG" ]]; then
 else
     warning "config file not found at $BT_CONFIG; attempting to continue"
 fi
-
-if [[ -n "$BT_GPGFILE" ]]; then
-    info "BT_GPGFILE set ($BT_GPGFILE)"
-    if [[ "$BT_GPGFILE" == "http"* ]]; then
-        if [[ "$BT_GPGFILE" == "https"* ]]; then
-            fatal "BT_GPGFILE url must be https ($BT_GPGFILE)"
-        fi
-
-    else
-        
-elif [[ -n "" ]]; then
-
-        if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-else
-    fatal "either BT_GPGFILE or BT_GPGKEY must be set"
-fi
-
-    
-
 
 unset filepath hashpath force_gpg
 while [ "$1" != "" ]; do
@@ -105,29 +83,35 @@ if ! grep -q "BEGIN PGP SIGNED MESSAGE" "$hashpath"; then
         fatal "'--force-gpg' was used but the hash file is not signed"
     fi
 else
-    # set force_gpg so signed hash files are always verified
+    info "hashfile is signed so GPG sig verifcation will occur"
     force_gpg="yes"
+fi
 
-if ! gpg --list-keys $BT_GPGKEY 2>&1 >/dev/null; then
-    info "Downloading GPG key: $BT_GPGKEY."
-    if ! gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $BT_GPGKEY; then
-        warning "importing from keyserver.ubuntu.com failed; trying alternate."
-        if wget -O /tmp/$BT_GPGKEY.asc \
-            https://www.turnkeylinux.org/$BT_GPGKEY.asc
-            || fatal "failed to download GPG key $BT_GPGKEY."
-        gpg --import /tmp/$BT_GPGKEY.asc || fatal "alternate import failed."
-        rm -f /tmp/$BT_GPGKEY.asc*
+if ! gpg --list-keys "$BT_GPGKEY" >/dev/null 2>&1 >/dev/null; then
+    info "Attempting to download GPG key: $BT_GPGKEY."
+    if ! gpg --keyserver hkps://keyserver.ubuntu.com \
+            --recv-keys "$BT_GPGKEY"; then
+        warning "importing from keyserver.ubuntu.com failed;" \
+            " trying to download from TurnKey website."
+        if ! wget -O "/tmp/$BT_GPGKEY.asc" \
+                "https://www.turnkeylinux.org/$BT_GPGKEY.asc"; then
+            fatal "failed to download GPG key $BT_GPGKEY."
+        elif ! gpg --import "/tmp/$BT_GPGKEY.asc"; then
+            fatal "alternate keyfile import failed."
+        fi
+        rm -f "/tmp/$BT_GPGKEY.asc"*
     fi
 fi
 
 info "Verifying GPG signature"
-if ! output=$(gpg --verify $hashpath 2>&1); then
+if ! output=$(gpg --verify "$hashpath" 2>&1); then
     if [[ "${output%%$'\n'*}" == "gpg: no valid OpenPGP data found." ]]; then
         msg="$hashpath is not signed by GPG"
         if [[ "$force_gpg" == "yes" ]]; then
             fatal "$msg - exiting because '--force-gpg' set."
         else
-            warning "$msg - this is expected if building locally and/or the hash file is unsigned."
+            warning "$msg - this is expected if building locally and/or the" \
+                " hash file is unsigned."
         fi
     else
         echo "$output"
@@ -139,9 +123,10 @@ else
 fi
 
 info "Verifying checksum."
-sum1=$(sha512sum $filepath | cut -d " " -f 1)
-sum2=$(grep -A 1 sha512sum $hashpath | head -n 2 | tail -n 1 | sed "s/^ *//; s/ .*//")
-if [ ! "$sum1" == "$sum2" ]; then
+sum1=$(sha512sum "$filepath" | cut -d " " -f 1)
+sum2=$(grep -A 1 sha512sum "$hashpath" | head -n 2 \
+    | tail -n 1 | sed "s/^ *//; s/ .*//")
+if [[ ! "$sum1" == "$sum2" ]]; then
     fatal "$filepath checksum verification failed."
 fi
 
