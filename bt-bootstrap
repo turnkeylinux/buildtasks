@@ -8,6 +8,7 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
+set -o pipefail
 
 fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
 warning() { echo "WARNING [$(basename "$0")]: $*"; }
@@ -40,6 +41,32 @@ Environment::
     FAB_PATH            - Base Fab path (set by default on TKLDev)
 EOF
     exit 1
+}
+
+check_mtime_spread() {
+    # check_mtime_spread <tolerance_seconds> <file>...
+    # returns 0 if all mtimes fall within tolerance of each other
+    local tol=$1; shift
+    stat -c '%.3Y' -- "$@" | sort -n | awk -v tol="$tol" '
+        NR == 1 { min = $1 }
+        { max = $1 }
+        END {
+            spread = max - min
+            printf "mtime spread: %.3fs (tolerance %.3fs)\n", spread, tol
+            return (spread > tol) ? 1 : 0
+        }'
+}
+
+validate_buildtime() {
+    local files=("$@")
+    info "Validating that build assets were created at the same time"
+    if check_mtime_spread 5 "${files[@]}"; then
+        info "files built together"
+        return 0
+    else
+        warn "files not from the same build run"
+        return 1
+    fi
 }
 
 unset force use_existing publish clean install

@@ -144,18 +144,21 @@ build_bootstrap() {
         fi
     fi
     info "preparing bootstrap for app building"
-    if [[ "$built" == "yes" ]]; then
-        rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
-            "$BOOTSTRAP_PATH/"
-    else
-        mkdir -p "$BOOTSTRAP_PATH"
-        tar -zxf "$BOOTSTRAP_TAR" -C "$BOOTSTRAP_PATH"
+    if [[ ! -f "$BOOTSTRAP_PATH/bin/bash" ]]; then
+        if [[ "$built" == "yes" ]]; then
+            rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
+                "$BOOTSTRAP_PATH/"
+        else
+            mkdir -p "$BOOTSTRAP_PATH"
+            tar -zxf "$BOOTSTRAP_TAR" -C "$BOOTSTRAP_PATH"
+        fi
     fi
-    # create symlinks so bin/generate-buildenv completes successfully
-    ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz" \
-        "$(dirname "$BOOTSTRAP_PATH")/$BOOTSTRAP_NAME.tar.gz"
-    ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash" \
-        "$(dirname "$BOOTSTRAP_PATH")"/"$BOOTSTRAP_NAME.tar.gz.hash"
+    # symlink to tar and hash file if needed so generate-buildenv doesn't fail
+    fab_dir="$(dirname "$BOOTSTRAP_PATH")"
+    for _bootstrap in "$BOOTSTRAP_TAR" "$BOOTSTRAP_TAR.hash"; do
+        [[ ! -f "$fab_dir/$(basename "$_bootstrap")" ]] || continue
+        ln -s "$_bootstrap" "$fab_dir/$(basename "$_bootstrap")"
+    done
 }
 
 export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-200}
