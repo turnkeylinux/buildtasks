@@ -146,7 +146,7 @@ build_bootstrap() {
     info "preparing bootstrap for app building"
     if [[ ! -f "$BOOTSTRAP_PATH/bin/bash" ]]; then
         if [[ "$built" == "yes" ]]; then
-            rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
+            rsync --delete -Hac "$BOOTSTRAP_SRC/build/bootstrap-$arch"/ \
                 "$BOOTSTRAP_PATH/"
         else
             mkdir -p "$BOOTSTRAP_PATH"
@@ -208,6 +208,15 @@ case $appname in
         # GitLab & Canvas take ages to start...
         export MAX_COUNT=70;; # possibly overkill
 esac
+
+# check for container ports early
+if [[ -z "$no_screens" ]]; then
+    for port in 80 7900; do
+        if ss -tlnp | grep -q ":$port "; then
+            fatal "port $port already in use - stop whatever is using it"
+        fi
+    done
+fi
 
 link=$(readlink -f "$0")
 BT=$(dirname "$link")
@@ -391,7 +400,6 @@ if [[ -z "$no_screens" ]]; then
         # TODO make dockerize output more quiet when --quiet used - workaround via tail
         image_name=$(dockerize --quiet --rootfs build/root.sandbox --deck | tail -1)
     fi
-    
     info "Creating new product docker container from image and starting"
     app_cont_id=$(podman run -dt -p 80:80 -p 443:443 -p 12321:12321 \
                     -p 12322:12322 --tmpfs /tmp --tmpfs /run \
