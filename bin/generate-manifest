@@ -9,8 +9,8 @@
 # option) any later version.
 
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
 
 usage() {
 cat<<EOF
@@ -20,15 +20,26 @@ Prints rootfs package manifest to stdout
 Arguments::
 
     rootfs      - root filesystem to query for package manifest
+
+Env::
+
+    BT_DEBUG    - verbose debug output
 EOF
 exit 1
 }
 
-if [[ "$#" != "1" ]]; then
+
+
+if [[ "$#" != "1" ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
     usage
+elif [[ ! -d "$1" ]]; then
+    fatal "rootfs path '$1' not found"
+elif [[ ! -x "$1/bin/bash" ]]; then
+    fatal "rootfs path '$1/bin/bash' not found - is $1 a rootfs?"
 fi
 
 rootfs=$1
 
-awk '/^Package:/ {p=$2}; /^Status:/ {s=$2 " " $3 " " $4}; /^Version:/ {v=$2; if(s=="install ok installed") { print p " " v }}' $rootfs/var/lib/dpkg/status | sort
-
+awk '/^Package:/ {p=$2}; /^Status:/ {s=$2 " " $3 " " $4}; /^Version:/ {v=$2; if(s=="install ok installed") { print p " " v }}' \
+    "$rootfs/var/lib/dpkg/status" \
+    | sort

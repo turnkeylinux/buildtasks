@@ -9,13 +9,15 @@
 # option) any later version.
 
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$(basename "$0")]: $*"; }
 
 usage() {
 cat<<EOF
 Syntax: $0 filepath
-Generate hash for filepath (e.g., path/to/iso)
+
+Generate hash for filepath (e.g., path/to/iso). Hash file will be created in
+the same dir as the file being hashed.
 
 Arguments::
 
@@ -25,7 +27,9 @@ Environment::
 
     RELEASE         - RELEASE to build for in the format DISTRO/CODENAME.
                       If not set, defaults to host system.
-                      Example: debian/buster
+                      Example: debian/trixie
+    BT_DEBUG        - verbose debugging output
+
 EOF
 exit 1
 }
@@ -34,25 +38,47 @@ if [[ "$#" != "1" ]]; then
     usage
 fi
 
+[[ -z "$BT_DEBUG" ]] || set -x
+
+get_tkl_ver_no() {
+    case $1 in
+        bookworm)
+            echo "18.x"
+            ;;
+        trixie)
+            echo "19.x"
+            ;;
+        forky)
+            echo "20.x"
+            ;;
+        *)
+            fatal "Unable top match codename '$1' to a TurnKey version"
+            ;;
+    esac
+}
+
 filepath=$1
-filename=$(basename $1)
+filename=$(basename "$1")
+if [[ ! -f "$filepath" ]]; then
+    fatal "$filepath is not a file"
+fi
 
 # if release not set, assume same as host
 RELEASE=${RELEASE:-debian/$(lsb_release -sc)}
-CODENAME=$(basename $RELEASE)
-if [[ "$filename" == "debian"*".tar.gz" ]]; then
-    BRANCH="$(sed -En 's|^.*_([0-9]+)\.[0-9]-[1-9].*|\1|p'<<<$filename).x"
+CODENAME=$(basename "$RELEASE")
+if [[ "$(basename "$filename")" == bootstrap-$CODENAME*.tar.gz ]]; then
+    BRANCH="$(get_tkl_ver_no "$CODENAME")"
 elif [[ "$filename" == "turnkey"*".iso" ]]; then
-    BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<$filename ).x"
+    BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<"$filename").x"
 else
     fatal "Unexpected filename: $filename"
 fi
 
 info "generating sha256sum hash"
-SHA256SUM="$(sha256sum $filepath | cut -d " " -f 1)  $filename"
+SHA256SUM="$(sha256sum "$filepath" | cut -d " " -f 1)  $filename"
 
 info "generating sha512sum hash"
-SHA512SUM="$(sha512sum $filepath | cut -d " " -f 1)  $filename"
+SHA512SUM="$(sha512sum "$filepath" | cut -d " " -f 1)  $filename"
 
 TKL_KEY=tkl-$CODENAME-images.asc
 KEY_EMAIL=release-$CODENAME-images@turnkeylinux.org
@@ -68,12 +94,15 @@ fi
 TMP_KEYRING=/tmp/temp.gpg
 GPG_COMMAND="gpg --no-default-keyring --keyring $TMP_KEYRING"
 $GET_KEY_COM | $GPG_COMMAND --import
-GPG_LISTKEYS=$($GPG_COMMAND --list-keys --with-fingerprint $KEY_EMAIL | sed "s|^|      |g")
-UID_INFO=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | grep $KEY_EMAIL | sed "s|^.*::\(.*\):$|\1|")
-FINGERPRINT=$($GPG_COMMAND --with-colons --fingerprint $KEY_EMAIL | awk -F: '$1 == "fpr" {print $10;}' | head -1)
+GPG_LISTKEYS=$($GPG_COMMAND --list-keys --with-fingerprint "$KEY_EMAIL" \
+    | sed "s|^|      |g")
+UID_INFO=$($GPG_COMMAND --with-colons --fingerprint "$KEY_EMAIL" \
+    | grep "$KEY_EMAIL" | sed "s|^.*::\(.*\):$|\1|")
+FINGERPRINT=$($GPG_COMMAND --with-colons --fingerprint "$KEY_EMAIL" \
+    | awk -F: '$1 == "fpr" {print $10;}' | head -1)
 
 info "writing hash file"
-cat > $filepath.hash <<EOF
+cat > "$filepath.hash" <<EOF
 To ensure the image has not been corrupted in transmit or tampered with,
 perform the following two steps to cryptographically verify image integrity:
 
@@ -103,7 +132,8 @@ $GPG_LISTKEYS
     $ sha512sum -c $filename.hash
       $filename: OK
 
-    Final note, when checking SHAs automatically, please ignore warning noting that some lines are improperly formatted.
+    Final note, when checking SHAs automatically, please ignore warning noting
+    that some lines are improperly formatted.
 
 EOF
 rm -f $TMP_KEYRING*

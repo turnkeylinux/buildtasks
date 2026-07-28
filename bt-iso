@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -10,13 +10,14 @@
 
 [[ -z "$BT_DEBUG" ]] || set -x
 
-fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename "$0")]: $*"; }
-info() { echo "INFO [$(basename "$0")]: $*"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename "$0") [--publish | -u] [-n] [-s] appname
+Syntax: $APP [--publish | -u] [-n] [-s] appname
 Builds appliance appname (e.g., core) ISO
 
 Arguments::
@@ -99,11 +100,11 @@ get_codename() {
     local tkl_ver=$1
     case $tkl_ver in
         18*)
-            TKL_CODENAME=bookworm;;
+            echo bookworm;;
         19*)
-            TKL_CODENAME=trixie;;
+            echo trixie;;
         20*)
-            TKL_CODENAME=forky;;
+            echo forky;;
         *)
             fatal "Unrecognised TKL version: $tkl_ver";;
     esac
@@ -120,6 +121,44 @@ check_debug() {
     else
         warning "$msg - build may fail"
     fi
+}
+
+build_bootstrap() {
+    local publish=$1
+    local arg=
+    info "Attempting to build bootstrap."
+    BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
+    BOOTSTRAP_TAR="$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz"
+    clone_or_pull "$BOOTSTRAP_SRC" \
+        "https://github.com/turnkeylinux/bootstrap.git"
+    unset built
+    if [[ "$publish" == "yes" ]]; then
+        "$BT"/bt-bootstrap --publish --no-clean --force
+        built=yes
+    else
+        info "checking for existing assets"
+        if ! "$BT"/bt-bootstrap --use-existing; then
+            info "existing assets missing - building"
+            "$BT"/bt-bootstrap --no-clean --force
+            built=yes
+        fi
+    fi
+    info "preparing bootstrap for app building"
+    if [[ ! -f "$BOOTSTRAP_PATH/bin/bash" ]]; then
+        if [[ "$built" == "yes" ]]; then
+            rsync --delete -Hac "$BOOTSTRAP_SRC/build/bootstrap-$arch"/ \
+                "$BOOTSTRAP_PATH/"
+        else
+            mkdir -p "$BOOTSTRAP_PATH"
+            tar -zxf "$BOOTSTRAP_TAR" -C "$BOOTSTRAP_PATH"
+        fi
+    fi
+    # symlink to tar and hash file if needed so generate-buildenv doesn't fail
+    fab_dir="$(dirname "$BOOTSTRAP_PATH")"
+    for _bootstrap in "$BOOTSTRAP_TAR" "$BOOTSTRAP_TAR.hash"; do
+        [[ ! -f "$fab_dir/$(basename "$_bootstrap")" ]] || continue
+        ln -s "$_bootstrap" "$fab_dir/$(basename "$_bootstrap")"
+    done
 }
 
 export WEBDRIVER_CONNECT_ATTEMPTS=${WEBDRIVER_CONNECT_ATTEMPTS:-200}
@@ -159,10 +198,6 @@ while [[ "$1" != "" ]]; do
 done
 
 [[ -n "$appname" ]] || usage "Must give one app name"
-ISO="$FAB_PATH/$appname/build/product.iso"
-if [[ -n "$use_existing" ]] && [[ ! -f "$ISO" ]]; then
-    fatal "file not found: $ISO"
-fi
 
 # don't try screens for tkldev & extend MAX_COUNT for gitlab & canvas
 case $appname in
@@ -173,6 +208,15 @@ case $appname in
         # GitLab & Canvas take ages to start...
         export MAX_COUNT=70;; # possibly overkill
 esac
+
+# check for container ports early
+if [[ -z "$no_screens" ]]; then
+    for port in 80 7900; do
+        if ss -tlnp | grep -q ":$port "; then
+            fatal "port $port already in use - stop whatever is using it"
+        fi
+    done
+fi
 
 link=$(readlink -f "$0")
 BT=$(dirname "$link")
@@ -207,8 +251,10 @@ fi
 if [[ "$publish" == "yes" ]]; then
     [[ -n "$BT_PUBLISH_IMGS" ]] || fatal "BT_PUBLISH_IMGS not set"
     [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
-    [[ -n "$BT_PUBLISH_SCREENS" ]] || fatal "BT_PUBLISH_SCREENS not set"
     [[ -n "$BT_PUBLISH_PROFILES" ]] || fatal "BT_PUBLISH_PROFILES not set"
+    if [[ -z "$no_screens" ]] && [[ -z "$BT_PUBLISH_SCREENS" ]]; then
+        fatal "BT_PUBLISH_SCREENS not set"
+    fi
     [[ -n "$GITHUB_USER" ]] || warning "GITHUB_USER not set"
     [[ -n "$GITHUB_USER_TOKEN" ]] || warning "GITHUB_USER_TOKEN not set"
     [[ -z "$use_existing" ]] || usage "conflicting options: --publish / -u|--use-existing"
@@ -218,6 +264,7 @@ else
     warning "--publish was not specified"
 fi
 
+info "Setting up."
 cd "$BT"
 BASE_DIR=/turnkey/public
 COMMIT_ID=$(git rev-parse --short HEAD)
@@ -248,25 +295,26 @@ if [[ -z "$skip_setup" ]]; then
 
     # Leverage tkldev-setup to ensure important repos are cloned and at latest
     # commit; also ensures RELEASE & ARCH are set.
-    if ! tkldev-setup "$appname"; then
-        msg="tkldev-setup failed"
-        if [[ "$publish" == "yes" ]]; then
-            fatal "$msg with '--publish' - exiting."
-        else
-            warning "$msg - attempting to continue anyway."
-        fi
+    args=("--transition")
+    if [[ "$publish" == "yes" ]]; then
+        args+=("--strict")
+        fail() { fatal "$* with '--publish' - exiting."; }
+    else
+        fail() { warning "$* - attempting to continue anyway."; }
+    fi
+    if ! tkldev-setup "${args[@]}" "$appname"; then
+        fail "tkldev-setup failed"
     fi
 
     # if TKL version doesn't match host, check out the relevant branches and
-    # attempt to download the right bootstrap; otherwise build it
+    # ensure the relevant bootstrap exists
     TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
     TKL_BUILD_VER=$(sed -nE "1s|turnkey-[a-z0-9-]*-([0-9]+).*|\1|p" \
         "$BT_PRODUCTS/$appname/changelog")
+    TKL_CODENAME=$(get_codename "$TKL_BUILD_VER")
     if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
-        warning "Host TKL version ($TKL_HOST_VER) does not match guest version" \
-                " ($TKL_BUILD_VER)"
-        unset TKL_CODENAME
-        get_codename "$TKL_BUILD_VER"
+        warning "Host TKL version ($TKL_HOST_VER) does not match guest" \
+                " version ($TKL_BUILD_VER)"
         export RELEASE=debian/$TKL_CODENAME
         git_unshallow "/turnkey/buildtasks" "$TKL_BUILD_VER.x"
         # if buildtasks has changed, restart bt-iso
@@ -277,44 +325,32 @@ if [[ -z "$skip_setup" ]]; then
         fi
         cd -
         git_unshallow "$FAB_PATH/common" "$TKL_BUILD_VER.x"
-        IMAGES="http://mirror.turnkeylinux.org/turnkeylinux/images"
-        BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
-        BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
-
-        if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
-            info "Attempting to download $BOOTSTRAP_NAME"
-            mkdir -p "$(dirname "$BOOTSTRAP_PATH")"
-            cd "$(dirname "$BOOTSTRAP_PATH")"
-            exit_code=0
-            wget -nc $IMAGES/bootstrap/"$BOOTSTRAP_NAME.tar.gz" || exit_code=$?
-            wget -nc $IMAGES/bootstrap/"$BOOTSTRAP_NAME.tar.gz.hash" || exit_code=$?
-            if [[ "$exit_code" -eq 0 ]]; then
-                info "verifying $BOOTSTRAP_NAME"
-                TMP_KEYRING="$(mktemp -d)/tmp.gpg"
-                GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
-                $GPG --import "$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc"
-                $GPG --verify "$BOOTSTRAP_NAME.tar.gz.hash"
-
-                info "unpacking $BOOTSTRAP_NAME"
-                mkdir "$BOOTSTRAP_PATH"
-                tar -zxf "$BOOTSTRAP_NAME.tar.gz" -C "$BOOTSTRAP_PATH"
-                cd -
-            else
-                warning "Downloading bootstrap failed."
-                info "Attempting to build bootstrap."
-                unset PUBLISH
-                BOOTSTRAP_SRC=$(dirname "$FAB_PATH")/bootstrap
-                [[ "$publish" != "yes" ]] || PUBLISH="--publish"
-                "$BT"/bt-bootstrap $PUBLISH --no-clean --force \
-                    || fatal "Building bootstrap failed... :("
-                rsync --delete -Hac "$BOOTSTRAP_SRC"/build/bootstrap/ \
-                    "$FAB_PATH"/bootstraps/$TKL_CODENAME/
-                # create symlinks so bin/generate-buildenv completes successfully
-                ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz" \
-                    "$(dirname "$BOOTSTRAP_PATH")/$BOOTSTRAP_NAME.tar.gz"
-                ln -s "$BT_BUILDS/bootstrap/$BOOTSTRAP_NAME.tar.gz.hash" \
-                    "$(dirname "$BOOTSTRAP_PATH")"/"$BOOTSTRAP_NAME.tar.gz.hash"
-            fi
+    fi
+    # if required bootstrap does not exist, attempt download/build
+    BOOTSTRAP_NAME="bootstrap-$TKL_CODENAME-$arch"
+    BOOTSTRAP_PATH="$FAB_PATH/bootstraps/$TKL_CODENAME-$arch"
+    if [[ ! -d "$BOOTSTRAP_PATH" ]]; then
+        BASE_URL="http://mirror.turnkeylinux.org/turnkeylinux/images/bootstrap"
+        info "Local bootstrap not found: '$BOOTSTRAP_PATH'"
+        info "Attempting to download $BOOTSTRAP_NAME"
+        mkdir -p "$(dirname "$BOOTSTRAP_PATH")"
+        cd "$(dirname "$BOOTSTRAP_PATH")"
+        exit_code=0
+        wget -nc "$BASE_URL/$BOOTSTRAP_NAME.tar.gz" || exit_code=$?
+        wget -nc "$BASE_URL/$BOOTSTRAP_NAME.tar.gz.hash" || exit_code=$?
+        if [[ "$exit_code" -eq 0 ]]; then
+            info "verifying $BOOTSTRAP_NAME"
+            TMP_KEYRING="$(mktemp -d)/tmp.gpg"
+            GPG="gpg --no-default-keyring --keyring $TMP_KEYRING"
+            $GPG --import "$FAB_PATH/common/keys/tkl-$TKL_CODENAME-images.asc"
+            $GPG --verify "$BOOTSTRAP_NAME.tar.gz.hash"\
+            info "unpacking $BOOTSTRAP_NAME"
+            mkdir "$BOOTSTRAP_PATH"
+            tar -zxf "$BOOTSTRAP_NAME.tar.gz" -C "$BOOTSTRAP_PATH"
+            cd -
+        else
+            warning "Downloading bootstrap failed."
+            build_bootstrap "$publish"
         fi
     fi
 fi
@@ -364,15 +400,15 @@ if [[ -z "$no_screens" ]]; then
         # TODO make dockerize output more quiet when --quiet used - workaround via tail
         image_name=$(dockerize --quiet --rootfs build/root.sandbox --deck | tail -1)
     fi
-    
     info "Creating new product docker container from image and starting"
     app_cont_id=$(podman run -dt -p 80:80 -p 443:443 -p 12321:12321 \
                     -p 12322:12322 --tmpfs /tmp --tmpfs /run \
                     --tmpfs /run/lock "$image_name")
     #app_ip=$(podman inspect $app_cont_id --format "{{.NetworkSettings.IPAddress}}")
 
-    export TKL_SCREENSHOT_PATH=$BT_PRODUCTS/$appname/build/screens
+    export TKL_SCREENSHOT_PATH="build/screens"
     mkdir -p "$TKL_SCREENSHOT_PATH"
+    rm -rf "${TKL_SCREENSHOT_PATH:?}"/*
     SELENIUM_CONT=docker.io/selenium/standalone-chrome
     SELENIUM_TAG=4.18.1-20240224
 
