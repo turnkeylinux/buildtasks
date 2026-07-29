@@ -94,7 +94,7 @@ if [[ -e $BT_PROFILES/$appname ]]; then
 fi
 if [[ -z "$no_screens" ]]; then
     mkdir -p "$O/$name.screens"
-    prefix=$(turnkey-version --name --tklversion)
+    prefix=$(turnkey-version --name --tklversion "$rootfs")
     prefix="${prefix/ /-}"
     for screen in build/screens/*.png; do
         screen_file=$(basename "$screen")
