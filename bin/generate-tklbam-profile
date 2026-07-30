@@ -158,9 +158,13 @@ class Profile:
             d = parse_control(control)
             if d['Status'] == 'install ok installed':
                 # filter out live packages (removed on install)
-                if not d['Package'] in ['di-live', 'live-boot',
-                                        'live-boot-initramfs-tools',
-                                        'live-tools']:
+                if not d['Package'] in [
+                    'di-live',
+                    'tkl-installer',
+                    'live-boot',
+                    'live-boot-initramfs-tools',
+                    'live-tools',
+                ]:
                     packages.append(d['Package'])
 
         packages.sort()
