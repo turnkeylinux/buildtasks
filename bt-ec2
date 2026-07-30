@@ -111,7 +111,7 @@ get_version() {
 COMMIT_ID=$(git rev-parse --short HEAD)
 # if TKL version doesn't match host, check out the relevant branch
 TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
-TKL_BUILD_VER=$(turnkey-version -s "$appver" | cut -d. -f1)
+TKL_BUILD_VER=$(turnkey-version -s "$appver" -t | cut -d. -f1)
 if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
     warning "Host TKL version ($TKL_HOST_VER) does not match guest version"\
         "($TKL_BUILD_VER)"
