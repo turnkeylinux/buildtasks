@@ -40,7 +40,7 @@ install() {
 }
 
 distro=$(lsb_release -sc)
-pkgs=(python3-boto3 awscli)
+pkgs=(tklpatch python3-boto3 awscli)
 case $distro in
     bullseye|bookworm)
         pkgs+=(python3-boto);;
