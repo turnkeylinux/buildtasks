@@ -39,7 +39,16 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y install "$@"
 }
 
-pkgs=(python3-boto python3-boto3 awscli)
+distro=$(lsb_release -sc)
+pkgs=(python3-boto3 awscli)
+case $distro in
+    bullseye|bookworm)
+        pkgs+=(python3-boto);;
+    trixie|forky)
+        pkgs+=(python3-botocore);;
+    *)
+        fatal "Unexpected distro: $distro";;
+esac
 while [ "$1" != "" ]; do
     case $1 in
         --awscli)       pkgs=(awscli);;
