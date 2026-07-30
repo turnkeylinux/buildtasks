@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2026 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -34,13 +34,13 @@ import sys
 import time
 import getopt
 
-import utils
+from . import utils
 
-from ebs_bundle import bundle
-from ebs_register import register
-from ebs_publish import share_public
-from ebs_share import share_marketplace
-from ec2_copy import copy_image
+from .ebs_bundle import bundle
+from .ebs_register import register
+from .ebs_publish import share_public
+from .ebs_share import share_marketplace
+from .ec2_copy import copy_image
 
 log = utils.get_logger('ebs')
 

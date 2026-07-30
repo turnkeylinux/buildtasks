@@ -1,5 +1,5 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -9,29 +9,15 @@
 # option) any later version.
 
 
-import re
 import os
 import sys
 import logging
 import subprocess
 
-import conf
+from . import conf
 
-# depends on tkl-ec2metadata
 import ec2metadata
-
-# depends on python3-boto & python3-boto3
-from boto.ec2 import connect_to_region
 import boto3
-
-
-def connect(region=None):
-    region = region if region else get_region()
-    return connect_to_region(
-        region,
-        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-        security_token=os.environ.get('AWS_SESSION_TOKEN', None))
 
 
 def connect_boto3(region=None):

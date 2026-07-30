@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -28,10 +28,7 @@ Options:
 import sys
 import getopt
 
-import utils
-
-from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
-import boto3
+from . import utils
 
 log = utils.get_logger('ebs-register')
 
@@ -52,41 +49,41 @@ def usage(e=None):
 
 
 def register(snapshot_id, region, arch, size=None,
-             name=None, desc=None, pvm=False):
-    conn = utils.connect(region)
+             name=None, desc=None):
+    client3 = utils.connect_boto3(region)
 
     if None in (name, size):
         log.debug(f'getting snapshot - {snapshot_id}')
-        snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
-        size = size if size else snapshot.volume_size
-        name = name if name else snapshot.description
+
+        snap_response = client3.describe_snapshots(SnapshotIds=[snapshot_id])
+        snapshot = snap_response["Snapshots"][0]
+        size = size if size else snapshot["VolumeSize"]
+        name = name if name else snapshot.get(
+            "Description",
+            f"Snapshot {snapshot_id}",
+        )
 
     virt = 'hvm'
-    kernel_id = None
     device_base = '/dev/xvd'
     ec2_arch = "x86_64" if arch == "amd64" else arch
 
-    if pvm:
-        kernel_id = utils.get_kernel(region, arch)
-        virt = 'paravirtual'
-        device_base = '/dev/sd'
-        name += '-pvm'
+    log.debug("creating block_device_mappings")
 
-    log.debug('creating block_device_map')
-    block_device_map = BlockDeviceMapping()
-
-    rootfs = BlockDeviceType()
-    rootfs.delete_on_termination = True
-    rootfs.size = size
-    rootfs.snapshot_id = snapshot_id
     rootfs_device_name = device_base + 'a'
-    block_device_map[rootfs_device_name] = rootfs
-
-    ephemeral = BlockDeviceType()
-    ephemeral.ephemeral_name = 'ephemeral0'
-    ephemeral_device_name = device_base + 'b'
-    block_device_map[ephemeral_device_name] = ephemeral
-
+    block_device_mappings = [
+        {
+            "DeviceName": rootfs_device_name,
+            "Ebs": {
+                "SnapshotId": snapshot_id,
+                "VolumeSize": size,
+                "DeleteOnTermination": True
+            },
+        },
+        {
+            "DeviceName": device_base + "b",
+            "VirtualName": "ephemeral0"
+        },
+    ]
     log.debug(f'registering image - {name}')
     client3 = utils.connect_boto3(region)
 
@@ -94,22 +91,10 @@ def register(snapshot_id, region, arch, size=None,
         Name=name,
         Architecture=ec2_arch,
         RootDeviceName=rootfs_device_name,
-        BlockDeviceMappings=[
-            {
-                'DeviceName': '/dev/xvda',
-                'Ebs': {
-                    'DeleteOnTermination': True,
-                    'VolumeSize': size,
-                    'SnapshotId': snapshot_id,
-                },
-            },
-            {
-                'DeviceName': '/dev/xvdb',
-                'VirtualName': 'ephemeral0',
-            }
-        ],
+        BlockDeviceMappings=block_device_mappings,
         VirtualizationType=virt,
-        EnaSupport=True)
+        EnaSupport=True,
+    )
 
     ami_id = response['ImageId']
 
@@ -119,7 +104,7 @@ def register(snapshot_id, region, arch, size=None,
 
 def main():
     try:
-        l_opts = ["help", "pvm", "region=", "size=", "name=", "arch=", "desc="]
+        l_opts = ["help", "region=", "size=", "name=", "arch=", "desc="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError as e:
         usage(e)
@@ -128,7 +113,6 @@ def main():
         'size': None,
         'name': None,
         'desc': None,
-        'pvm': False
     }
     arch = None
     region = None
@@ -150,9 +134,6 @@ def main():
 
         if opt == "--desc":
             kwargs['desc'] = val
-
-        if opt == "--pvm":
-            kwargs['pvm'] = True
 
     if len(args) != 1:
         usage("incorrect number of arguments")

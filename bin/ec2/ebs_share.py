@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -24,7 +24,7 @@ Options:
 import sys
 import getopt
 
-import utils
+from . import utils
 
 log = utils.get_logger('ebs-share')
 
@@ -40,10 +40,11 @@ def usage(e=None):
 
 
 def share_marketplace(snapshot_id, region):
-    conn = utils.connect(region)
+    client3 = utils.connect_boto3(region)
 
     log.debug(f'getting snapshot - {snapshot_id}')
-    snapshot = conn.get_all_snapshots(snapshot_ids=[snapshot_id])[0]
+    snap_response = client3.describe_snapshots(SnapshotIds=[snapshot_id])
+    snapshot = snap_response["Snapshots"][0]
 
     log.debug('sharing with marketplace')
     snapshot.share(user_ids=['096457495696'])

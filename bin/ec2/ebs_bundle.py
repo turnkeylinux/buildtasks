@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -31,7 +31,7 @@ import subprocess
 
 import utils
 
-from boto.exception import EC2ResponseError
+from botocore.exceptions import ClientError
 
 log = utils.get_logger('ebs-bundle')
 
@@ -109,7 +109,7 @@ class Volume:
                 try:
                     self.vol.delete()
                     break
-                except EC2ResponseError as e:
+                except ClientError as e:
                     error_code = e.errors[0][0]
                     log.debug(f'delete failed {self.vol.id} ({error_code})')
                     if error_code not in ("Client.VolumeInUse", "VolumeInUse"):

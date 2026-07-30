@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -24,7 +24,7 @@ Options:
 import sys
 import getopt
 
-import utils
+from . import utils
 
 log = utils.get_logger('ebs-publish')
 
@@ -40,14 +40,15 @@ def usage(e=None):
 
 
 def share_public(ami_id, region):
-    conn = utils.connect(region)
+    client3 = utils.connect_boto3(region)
 
     log.debug(f'setting image to public - {ami_id}')
-    conn.modify_image_attribute(
-        ami_id,
-        attribute='launchPermission',
-        operation='add',
-        groups=['all'])
+    client3.modify_image_attribute(
+        ImageId=ami_id,
+        Attribute='launchPermission',
+        OperationType='add',
+        UserGroups=['all'],
+    )
 
     log.info(f'set image to public - {ami_id}')
 
