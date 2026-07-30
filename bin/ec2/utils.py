@@ -47,11 +47,7 @@ def get_region():
 
 
 def get_all_regions():
-    return list(conf.KERNELS.keys())
-
-
-def get_kernel(region, arch):
-    return conf.KERNELS[region][arch]
+    return list(conf.KERNELS)
 
 
 def get_arch():

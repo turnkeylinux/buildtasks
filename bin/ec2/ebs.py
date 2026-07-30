@@ -62,7 +62,7 @@ def usage(e=None):
 
 def main():
     try:
-        l_opts = ["help", "copy", "publish", "marketplace", "pvmregister", "name="]
+        l_opts = ["help", "copy", "publish", "marketplace", "name="]
         opts, args = getopt.gnu_getopt(sys.argv[1:], "h", l_opts)
     except getopt.GetoptError as e:
         usage(e)
@@ -71,7 +71,6 @@ def main():
     copy = False
     publish = False
     marketplace = False
-    pvmregister = False
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
@@ -87,9 +86,6 @@ def main():
 
         if opt == "--marketplace":
             marketplace = True
-
-        if opt == "--pvmregister":
-            pvmregister = True
 
     if len(args) != 1:
         usage("incorrect number of arguments")
@@ -114,12 +110,6 @@ def main():
 
     log.info(ami_name)
     log.important(' '.join([ami_id, arch, region]))
-
-    if pvmregister:
-        ami_id, ami_name = register(snapshot_id, region, arch, pvm=True)
-
-        log.info(ami_name + ' (PVM)')
-        log.important(' '.join([ami_id, arch, region, '(PVM)']))
 
     if publish:
         share_public(ami_id, region)
