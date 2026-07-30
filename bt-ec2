@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2021 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -8,14 +8,14 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename $0)]: $@"; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename $0) [ --options ] appname-version
+Syntax: $APP [ --options ] appname-version
 Converts appliance appname-version to EC2 EBS-backed HVM AMI
 
 Arguments::
@@ -45,77 +45,81 @@ EOF
     exit 1
 }
 
-ARGS="$*"
+ARGS=("$@")
 unset ebs_opts force secupdates increment pvmshim appver
 while [ "$1" != "" ]; do
     case $1 in
         --help|-h)     usage;;
-        --name=*)      ebs_opts+="$1 ";;
-        --copy)        ebs_opts+="$1 ";;
-        --marketplace) ebs_opts+="$1 ";;
-        --publish)     ebs_opts+="$1 "; publish="yes";;
-        --force)       force="yes";;
-        --secupdates)  secupdates="yes";;
-        --increment)   increment="yes";;
-        --pvmshim)     pvmshim="yes";;
-        --pvmregister) ebs_opts+="$1 ";;
-        *)             if [ -n "$appver" ]; then usage; else appver=$1; fi ;;
+        --name=*)       ebs_opts+="$1 ";;
+        --copy)         ebs_opts+="$1 ";;
+        --marketplace)  ebs_opts+="$1 ";;
+        --publish)      ebs_opts+="$1 "; publish="yes";;
+        --force)        force="yes";;
+        --secupdates)   secupdates="yes";;
+        --increment)    increment="yes";;
+        --pvmshim)      pvmshim="yes";;
+        --pvmregister)  ebs_opts+="$1 ";;
+        *)              if [[ -n "$appver" ]]; then
+                            usage
+                        else
+                            appver=$1
+                        fi ;;
     esac
     shift
 done
 
-[ -n "$appver" ] || usage
-[ -n "$secupdates" ] || warning "--secupdates was not specified"
+[[ -n "$appver" ]] || usage
+[[ -n "$secupdates" ]] || warning "--secupdates was not specified"
 if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
     warning "--increment implies --secupdates"
     unset secupdates
 fi
 
-[ -z "$BT_DEBUG" ] || set -x
+[[ -z "$BT_DEBUG" ]] || set -x
 
-export BT=$(dirname $(readlink -f $0))
+BT=$(dirname "$(readlink -f "$0")")
+export BT
 export BT_CONFIG=$BT/config
-. $BT_CONFIG/common.cfg
-. $BT_CONFIG/aws.cfg
+# shellcheck source=config.example/common.cfg
+source "$BT_CONFIG/common.cfg"
+# shellcheck source=config.example/aws.cfg
+source "$BT_CONFIG/aws.cfg"
 
-if [ "$publish" == "yes" ]; then
-    [ -n "$BT_PUBLISH_META" ] || fatal "BT_PUBLISH_META not set"
-    [ -n "$BT_PUBLISH_LOGS" ] || fatal "BT_PUBLISH_LOGS not set"
+if [[ "$publish" == "yes" ]]; then
+    [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
+    [[ -n "$BT_PUBLISH_LOGS" ]] || fatal "BT_PUBLISH_LOGS not set"
 else
     warning "--publish was not specified"
 fi
 
 git_unshallow() {
     local branch=$1
-    # assume TKL remote is 'origin'
-    local remote=origin
     if [[ "$(git symbolic-ref --short HEAD)" != "$branch" ]]; then
         git remote set-branches origin '*'
         git fetch origin --unshallow 2>/dev/null || git fetch origin
-        git checkout $branch
+        git checkout "$branch"
     fi
 }
 
 get_version() {
-    pkg=$1
-    dpkg -l \
-        | sed -En "s|^ii[[:space:]]+$pkg[[:space:]]+([0-9a-g\+\.~-]+)[[:space:]]+.*|\1|p"
+    local pkg=$1
+    dpkg -l "$pkg" | awk '/[[:space:]]fab[[:space:]]/ {print $3}'
 }
 
 
-[[ "$PWD" == "$BT" ]] || cd $BT
+[[ "$PWD" == "$BT" ]] || cd "$BT"
 COMMIT_ID=$(git rev-parse --short HEAD)
 # if TKL version doesn't match host, check out the relevant branch
 TKL_HOST_VER=$(turnkey-version -t | cut -d. -f1)
-TKL_BUILD_VER=$(sed -nE "s|[a-z0-9-]*-([0-9]+).*|\1|p" <<<$appver)
+TKL_BUILD_VER=$(turnkey-version -s "$appver" | cut -d. -f1)
 if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
     warning "Host TKL version ($TKL_HOST_VER) does not match guest version"\
-            "($TKL_BUILD_VER)"
+        "($TKL_BUILD_VER)"
     git_unshallow "$TKL_BUILD_VER.x"
     # if buildtasks has changed, restart bt-iso
     if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
-        info "Restarting $(basename $0)"
-        exec ./$(basename $0) $ARGS
+        info "Restarting $APP"
+        exec ./"$APP" "${ARGS[@]}"
         exit
     fi
 fi
@@ -124,18 +128,17 @@ if [[ ! -f /usr/bin/ec2metadata ]]; then
     codename=$(lsb_release -sc)
     case $codename in
         buster)
-            pkgs="ec2metadata python-boto3";;
-        bullseye|bookworm|trixie)
-            pkgs="tkl-ec2metadata";;
+            pkgs=(ec2metadata python-boto3);;
+        bullseye|bookworm|trixie|forky)
+            pkgs=(tkl-ec2metadata);;
         *)
             fatal "Expected codename: $codename";;
     esac
     apt-get update -qq
-    apt-get install -y $pkgs
+    apt-get install -y "${pkgs[@]}"
 fi
 
-parsed_appname_version=$($BT/bin/parse-appname-version $appver)
-read appname appversion codename arch <<< "$parsed_appname_version"
+read -r appname appversion codename arch <<< "$(turnkey-version -s "$appver" -a)"
 
 # if non stable version, ensure that --marketplace and --copy switches are
 # ignored, unless --force is set
@@ -155,7 +158,7 @@ os_arch=$(dpkg --print-architecture)
 [[ "$arch" == "$os_arch" ]] || fatal "os_arch mismatch: $arch != $os_arch"
 
 if [[ ! -e /root/ec2-setup.done ]]; then
-    $BT/bin/ec2-setup
+    "$BT/bin/ec2-setup"
     touch /root/ec2-setup.done
 fi
 
@@ -177,75 +180,80 @@ else
 fi
 
 export LOGFILE_PATH=$O/$logfile
-echo > $LOGFILE_PATH
+echo > "$LOGFILE_PATH"
 
-$BT/bin/iso-download $BT_ISOS $BT_VERSION $appname
-$BT/bin/iso-verify $BT_ISOS $BT_VERSION $appname
+"$BT/bin/iso-download" "$BT_ISOS" "$BT_VERSION" "$appname"
+"$BT/bin/iso-verify" "$BT_ISOS" "$BT_VERSION" "$appname"
 
 cd $O
-tklpatch-extract-iso $BT_ISOS/$isofile
+tklpatch-extract-iso "$BT_ISOS/$isofile"
 
 proxy=/etc/apt/apt.conf.d/00proxy
 info "Checking for proxy ports"
 polipo=$(grep -rl '127.0.0.1:8124' /etc/apt/apt.conf.d/) || [[ $? -eq 1 ]]
 squid=$(grep -rl '127.0.0.1:3128' /etc/apt/apt.conf.d/) || [[ $? -eq 1 ]]
 if [[ "$polipo" == "$proxy" ]] && netstat -tlnp | grep -q polipo; then
-    cp $rootfs/$proxy $rootfs/_proxy_backup
-    sed -i "s|3128|8124|"  $rootfs/$proxy
+    cp "$rootfs/$proxy" "$rootfs/_proxy_backup"
+    sed -i "s|3128|8124|"  "$rootfs/$proxy"
 elif [[ "$squid" == "$proxy" ]] && [[ -f "$rootfs/_proxy_backup" ]]; then
     # assume that it's left over backup that didn't make it back
     mv "$rootfs/_proxy_backup" "$rootfs/$proxy"
 fi
 
 function _cleanup() {
-    umount -l $rootfs/dev || true
-    umount -l $rootfs/sys || true
-    umount -l $rootfs/proc || true
+    umount -l "$rootfs/dev" || true
+    umount -l "$rootfs/sys" || true
+    umount -l "$rootfs/proc" || true
     if [[ -f "$rootfs/_proxy_backup" ]]; then
         info "Restoring $rootfs/_proxy_backup to $rootfs/$proxy"
-        mv $rootfs/_proxy_backup $rootfs/$proxy
+        mv "$rootfs/_proxy_backup" "$rootfs/$proxy"
     fi
 
-    if [[ -z "$BT_DEBUG" ]] && ! (mount | grep -q $(basename $rootfs)); then
-        rm -rf $rootfs
-        rm -rf $cdroot
+    if [[ -z "$BT_DEBUG" ]] && ! (mount | grep -q "$(basename "$rootfs")"); then
+        rm -rf "$rootfs"
+        rm -rf "$cdroot"
     fi
 }
 
 trap _cleanup INT TERM EXIT
 
-mount --bind --make-rslave /proc $rootfs/proc
-mount --bind --make-rslave /sys $rootfs/sys
-mount --bind --make-rslave /dev $rootfs/dev
+mount --bind --make-rslave /proc "$rootfs/proc"
+mount --bind --make-rslave /sys "$rootfs/sys"
+mount --bind --make-rslave /dev "$rootfs/dev"
 
-$BT/bin/purge-pkgs $rootfs
+"$BT/bin/purge-pkgs" "$rootfs"
 if [[ "$appversion" == *"rc"* ]] || [[ "$increment" == "yes" ]]; then
-    $BT/bin/upgrade-pkgs $rootfs
+    "$BT/bin/upgrade-pkgs" "$rootfs"
 fi
-tklpatch-apply $rootfs $BT/patches/headless
-tklpatch-apply $rootfs $BT/patches/cloud
-tklpatch-apply $rootfs $BT/patches/ec2
-[[ "$secupdates" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/secupdates
-[[ "$pvmshim" == "yes" ]] && tklpatch-apply $rootfs $BT/patches/ec2-pvmshim
+tklpatch-apply "$rootfs" "$BT/patches/headless"
+tklpatch-apply "$rootfs" "$BT/patches/cloud"
+tklpatch-apply "$rootfs" "$BT/patches/ec2"
+if [[ "$secupdates" == "yes" ]]; then
+    tklpatch-apply "$rootfs" "$BT/patches/secupdates"
+fi
+if [[ "$pvmshim" == "yes" ]]; then
+    tklpatch-apply "$rootfs" "$BT/patches/ec2-pvmshim"
+fi
 
-umount -l $rootfs/dev || true
-umount -l $rootfs/sys || true
-umount -l $rootfs/proc || true
+umount -l "$rootfs/dev" || true
+umount -l "$rootfs/sys" || true
+umount -l "$rootfs/proc" || true
 
-$BT/bin/rootfs-cleanup $rootfs
-$BT/bin/aptconf-tag $rootfs ec2
-$BT/bin/build-tag $rootfs ec2
+"$BT/bin/rootfs-cleanup" "$rootfs"
+"$BT/bin/aptconf-tag" "$rootfs" ec2
+"$BT/bin/build-tag" "$rootfs" ec2
 if [[ -f /usr/bin/python ]]; then
-    $BT/bin/ec2/legacy/ebs.py $ebs_opts $rootfs
+    "$BT/bin/ec2/legacy/ebs.py" "$ebs_opts" "$rootfs"
 else
-    $BT/bin/ec2/ebs.py $ebs_opts $rootfs
+    "$BT/bin/ec2/ebs.py" "$ebs_opts" "$rootfs"
 fi
-$BT/bin/generate-buildenv ec2 $BT_ISOS/$isofile.hash > $O/$new_name.ec2.buildenv
+"$BT/bin/generate-buildenv" ec2 "$BT_ISOS/$isofile.hash" \
+    > "$O/$new_name.ec2.buildenv"
 
-if [ "$publish" == "yes" ]; then
+if [[ "$publish" == "yes" ]]; then
     export PUBLISH_DEST=${BT_PUBLISH_LOGS}/ec2/
-    $BT/bin/publish-files $LOGFILE_PATH
+    "$BT/bin/publish-files" "$LOGFILE_PATH"
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
-    $BT/bin/publish-files $O/$new_name.ec2.buildenv
+    "$BT/bin/publish-files" "$O/$new_name.ec2.buildenv"
 fi
