@@ -29,20 +29,20 @@ Environment:
     AWS_SESSION_TOKEN       AWS Session Token
 
 """
+
+import getopt
 import os
 import sys
 import time
-import getopt
 
 from . import utils
-
 from .ebs_bundle import bundle
 from .ebs_register import register
 from .ebs_publish import share_public
 from .ebs_share import share_marketplace
 from .ec2_copy import copy_image
 
-log = utils.get_logger('ebs')
+log = utils.get_logger("ebs")
 
 
 def fatal(e):
@@ -72,7 +72,7 @@ def main():
     publish = False
     marketplace = False
     for opt, val in opts:
-        if opt in ('-h', '--help'):
+        if opt in ("-h", "--help"):
             usage()
 
         if opt == "--name":
@@ -96,12 +96,12 @@ def main():
 
     if not name:
         turnkey_version = utils.get_turnkey_version(rootfs)
-        name = '_'.join([turnkey_version, str(int(time.time()))])
+        name = "_".join([turnkey_version, str(int(time.time()))])
 
     arch = utils.get_arch()
     region = utils.get_region()
     snapshot_id, snapshot_name = bundle(rootfs, name)
-    log.important(' '.join([snapshot_id, arch, region]))
+    log.important(" ".join([snapshot_id, arch, region]))
 
     if marketplace:
         share_marketplace(snapshot_id, region)
@@ -109,7 +109,7 @@ def main():
     ami_id, ami_name = register(snapshot_id, region, arch)
 
     log.info(ami_name)
-    log.important(' '.join([ami_id, arch, region]))
+    log.important(" ".join([ami_id, arch, region]))
 
     if publish:
         share_public(ami_id, region)
@@ -120,7 +120,7 @@ def main():
         images = copy_image(ami_id, ami_name, region, regions)
 
         for image in images:
-            log.important(' '.join([image.id, arch, image.region]))
+            log.important(" ".join([image.id, arch, image.region]))
 
 
 if __name__ == "__main__":

@@ -9,24 +9,24 @@
 # option) any later version.
 
 
-import os
-import sys
 import logging
+import os
 import subprocess
+import sys
+
+import boto3
+import ec2metadata
 
 from . import conf
-
-import ec2metadata
-import boto3
 
 
 def connect_boto3(region=None):
     region = region if region else get_region()
     return boto3.client(
-        'ec2',
+        "ec2",
         region_name=region,
-        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"))
 
 
 def get_turnkey_version(rootfs):
@@ -35,15 +35,15 @@ def get_turnkey_version(rootfs):
 
 
 def get_instanceid():
-    return ec2metadata.get('instance-id')
+    return ec2metadata.get("instance-id")
 
 
 def get_zone():
-    return ec2metadata.get('availability-zone')
+    return ec2metadata.get("availability-zone")
 
 
 def get_region():
-    return ec2metadata.get('availability-zone')[0:-1]
+    return ec2metadata.get("availability-zone")[0:-1]
 
 
 def get_all_regions():
@@ -51,7 +51,7 @@ def get_all_regions():
 
 
 def get_arch():
-    return subprocess.run(['dpkg', '--print-architecture'],
+    return subprocess.run(["dpkg", "--print-architecture"],
                           capture_output=True, text=True).stdout.rstrip()
 
 
@@ -59,19 +59,19 @@ def get_logger(name, level=None):
     logger = logging.getLogger(name)
 
     if not logger.handlers:
-        logging.addLevelName(45, 'IMPORTANT')
-        setattr(logger, 'important',
+        logging.addLevelName(45, "IMPORTANT")
+        setattr(logger, "important",
                 lambda *args, **kwargs: logger.log(45, *args, **kwargs))
 
-        format = logging.Formatter('%(levelname)s [%(name)s]: %(message)s')
+        format = logging.Formatter("%(levelname)s [%(name)s]: %(message)s")
 
         stdout = logging.StreamHandler(sys.stdout)
         stdout.setFormatter(format)
         logger.addHandler(stdout)
 
-        logfile = os.environ.get('LOGFILE_PATH', None)
+        logfile = os.environ.get("LOGFILE_PATH", None)
         if logfile:
-            filehandler = logging.FileHandler(logfile, mode='a')
+            filehandler = logging.FileHandler(logfile, mode="a")
             filehandler.setFormatter(format)
             logger.addHandler(filehandler)
 
@@ -97,4 +97,4 @@ def mkdir(path):
 
 def rsync(rootfs, dest):
     subprocess.run(
-            ['rsync', '-a', '-t', '-r', '-S', '-I', '-H', f'{rootfs}/', dest])
+            ["rsync", "-a", "-t", "-r", "-S", "-I", "-H", f"{rootfs}/", dest])

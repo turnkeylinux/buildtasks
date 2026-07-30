@@ -23,17 +23,18 @@ Options:
     --filesystem=   File system of snapshot (default: ext4)
 
 """
+
+import getopt
 import os
+import subprocess
 import sys
 import time
-import getopt
-import subprocess
-
-import utils
 
 from botocore.exceptions import ClientError
 
-log = utils.get_logger('ebs-bundle')
+from . import utils
+
+log = utils.get_logger("ebs-bundle")
 
 
 def fatal(e):
@@ -69,12 +70,12 @@ class Snapshot:
         time.sleep(3)
 
     def create(self, volume_id, name):
-        log.debug('creating snapshot - %s %s', volume_id, name)
+        log.debug("creating snapshot - %s %s", volume_id, name)
 
         self.snap = self.conn.create_snapshot(volume_id, name)
         self._wait("completed")
 
-        log.debug('created snapshot - %s', self.snap.id)
+        log.debug("created snapshot - %s", self.snap.id)
 
 
 class Volume:
@@ -93,30 +94,30 @@ class Volume:
 
     def create(self, size, zone=None):
         zone = zone if zone else utils.get_zone()
-        log.debug('creating volume - %d %s', size, zone)
+        log.debug("creating volume - %d %s", size, zone)
 
         self.vol = self.conn.create_volume(size, zone)
         self._wait("available")
-        log.debug('created volume - %s', self.vol.id)
+        log.debug("created volume - %s", self.vol.id)
 
     def delete(self, max_attempts=10):
         if self.vol:
             attempt = 0
             while True:
                 attempt += 1
-                log.debug(f'deleting volume {self.vol.id} (attempt {attempt})')
+                log.debug(f"deleting volume {self.vol.id} (attempt {attempt})")
                 self._wait("available")
                 try:
                     self.vol.delete()
                     break
                 except ClientError as e:
                     error_code = e.errors[0][0]
-                    log.debug(f'delete failed {self.vol.id} ({error_code})')
+                    log.debug(f"delete failed {self.vol.id} ({error_code})")
                     if error_code not in ("Client.VolumeInUse", "VolumeInUse"):
                         raise
 
                     if max_attempts == attempt:
-                        log.debug(f'all delete attempts failed: {self.vol.id}')
+                        log.debug(f"all delete attempts failed: {self.vol.id}")
                         raise
 
             self.vol = None
@@ -124,23 +125,23 @@ class Volume:
     def attach(self, instance_id, device):
         self.device = device
         if self.vol:
-            log.debug(f'attaching volume - {self.device.real_path} ('
-                      f'{self.device.amazon_path})')
+            log.debug(f"attaching volume - {self.device.real_path} ("
+                      f"{self.device.amazon_path})")
 
             self.vol.attach(instance_id, self.device.amazon_path)
             while not self.device.exists():
                 time.sleep(1)
 
-            log.debug('attached volume')
+            log.debug("attached volume")
 
     def detach(self):
         if self.device:
             if self.device.is_mounted():
-                log.debug('umounting device before detaching volume')
+                log.debug("umounting device before detaching volume")
                 self.device.umount()
 
             if self.vol:
-                log.debug('detaching volume')
+                log.debug("detaching volume")
 
                 self._wait("available")
                 self.vol.detach()
@@ -157,13 +158,13 @@ class Device:
         if not self.real_path:
             raise EbsBundleError("no free devices available...")
 
-        self.amazon_path = '/dev/sd' + self.real_path[-1]
+        self.amazon_path = "/dev/sd" + self.real_path[-1]
         self.root_path = None
 
     @staticmethod
     def _get_freedevice():
-        for s in 'fghijk':
-            real_device = '/dev/xvd' + s
+        for s in "fghijk":
+            real_device = "/dev/xvd" + s
             if not os.path.exists(real_device):
                 return real_device
 
@@ -176,72 +177,72 @@ class Device:
         return os.path.exists(self.real_path)
 
     def mount(self, mount_path):
-        log.debug(f'mounting - {self.real_path} {mount_path}')
+        log.debug(f"mounting - {self.real_path} {mount_path}")
         utils.mkdir(mount_path)
-        subprocess.run(['mount', self.real_path, mount_path], check=True)
+        subprocess.run(["mount", self.real_path, mount_path], check=True)
 
     def umount(self):
-        log.debug(f'umounting - {self.real_path}')
-        subprocess.run(['umount', '-f', self.real_path], check=True)
+        log.debug(f"umounting - {self.real_path}")
+        subprocess.run(["umount", "-f", self.real_path], check=True)
 
     def mkfs(self, fs):
-        log.debug(f'mkfs - {self.real_path}')
-        subprocess.run(['mkfs.' + fs, '-F', '-j', self.real_path], check=True)
+        log.debug(f"mkfs - {self.real_path}")
+        subprocess.run(["mkfs." + fs, "-F", "-j", self.real_path], check=True)
 
     def mkpart(self):
-        subprocess.run(['parted', self.real_path, '--script',
+        subprocess.run(["parted", self.real_path, "--script",
                         "unit mib mklabel gpt mkpart primary 1 3 name 1 grub"
                         " set 1 bios_grub on mkpart primary ext4 3 -1 name 2"
                         " rootfs quit"], check=True)
-        subprocess.run(['partprobe', self.real_path], check=True)
+        subprocess.run(["partprobe", self.real_path], check=True)
         time.sleep(5)
         self.root_path = self.real_path
-        self.real_path = self.real_path + '2'
+        self.real_path = self.real_path + "2"
 
     def __del__(self):
         if self.is_mounted():
             self.umount()
 
 
-def bundle(rootfs, snapshot_name, size=10, filesystem='ext4'):
-    log.info(f'target snapshot - {snapshot_name} ')
+def bundle(rootfs, snapshot_name, size=10, filesystem="ext4"):
+    log.info(f"target snapshot - {snapshot_name} ")
 
-    log.info('creating volume, attaching, formatting and mounting')
+    log.info("creating volume, attaching, formatting and mounting")
     volume = Volume()
     volume.create(size)
 
     device = Device()
     volume.attach(utils.get_instanceid(), device)
 
-    log.info('creating partitions')
+    log.info("creating partitions")
     device.mkpart()
     device.mkfs(filesystem)
-    mount_path = rootfs + '.mount'
+    mount_path = rootfs + ".mount"
     device.mount(mount_path)
 
-    log.info('syncing rootfs to partition')
+    log.info("syncing rootfs to partition")
     utils.rsync(rootfs, mount_path)
 
-    log.info('installing GRUB on volume')
-    submounts = ['/sys', '/proc', '/dev']
+    log.info("installing GRUB on volume")
+    submounts = ["/sys", "/proc", "/dev"]
     for s in submounts:
-        subprocess.run(['mount', '--bind', '--make-rslave', s, mount_path + s],
+        subprocess.run(["mount", "--bind", "--make-rslave", s, mount_path + s],
                        check=True)
-    subprocess.run(['chroot', mount_path, 'grub-install', device.root_path],
+    subprocess.run(["chroot", mount_path, "grub-install", device.root_path],
                    check=True)
-    subprocess.run(['chroot', mount_path, 'update-grub'], check=True)
-    subprocess.run(['chroot', mount_path, 'update-initramfs', '-u'],
+    subprocess.run(["chroot", mount_path, "update-grub"], check=True)
+    subprocess.run(["chroot", mount_path, "update-initramfs", "-u"],
                    check=True)
 
     submounts.reverse()
     for s in submounts:
-        subprocess.run(['umount', '-l', mount_path + s], check=True)
+        subprocess.run(["umount", "-l", mount_path + s], check=True)
 
     device.umount()
     volume.detach()
     os.removedirs(mount_path)
 
-    log.info('creating snapshot from volume')
+    log.info("creating snapshot from volume")
     snapshot = Snapshot()
     snapshot.create(volume.vol.id, snapshot_name)
 
@@ -261,9 +262,9 @@ def main():
 
     name = None
     size = 10
-    filesystem = 'ext4'
+    filesystem = "ext4"
     for opt, val in opts:
-        if opt in ('-h', '--help'):
+        if opt in ("-h", "--help"):
             usage()
 
         if opt == "--name":
@@ -284,9 +285,9 @@ def main():
 
     if not name:
         turnkey_version = utils.get_turnkey_version(rootfs)
-        name = '_'.join([turnkey_version, str(int(time.time()))])
+        name = "_".join([turnkey_version, str(int(time.time()))])
 
-    kwargs = {'size': size, 'filesystem': filesystem}
+    kwargs = {"size": size, "filesystem": filesystem}
     snapshot_id, snapshot_name = bundle(rootfs, name, **kwargs)
 
     print(snapshot_id, snapshot_name)

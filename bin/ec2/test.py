@@ -5,18 +5,26 @@
 import importlib
 import sys
 
-modules = ['conf', 'ebs', 'ebs_bundle', 'ebs_publish', 'ebs_register',
-           'ebs_share', 'ec2_copy', 'utils']
+modules = [
+    "conf",
+    "ebs",
+    "ebs_bundle",
+    "ebs_publish",
+    "ebs_register",
+    "ebs_share",
+    "ec2_copy",
+    "utils",
+]
 
 for module in modules:
-    print(f'testing import of {module}')
+    print(f"testing import of {module}")
     temp_module = importlib.import_module(module)
     callables = []
     for item in dir(temp_module):
-        if not item.startswith('__'):
+        if not item.startswith("__"):
             callables.append(item)
-    print(f'callables: {callables}')
+    print(f"callables: {callables}")
     # now deport module
-    print('removing...')
+    print("removing...")
     del sys.modules[module]
     del temp_module

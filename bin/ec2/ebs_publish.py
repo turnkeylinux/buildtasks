@@ -21,12 +21,13 @@ Options:
     --region=       Region (default: current region)
 
 """
-import sys
+
 import getopt
+import sys
 
 from . import utils
 
-log = utils.get_logger('ebs-publish')
+log = utils.get_logger("ebs-publish")
 
 
 def usage(e=None):
@@ -42,15 +43,15 @@ def usage(e=None):
 def share_public(ami_id, region):
     client3 = utils.connect_boto3(region)
 
-    log.debug(f'setting image to public - {ami_id}')
+    log.debug(f"setting image to public - {ami_id}")
     client3.modify_image_attribute(
         ImageId=ami_id,
-        Attribute='launchPermission',
-        OperationType='add',
-        UserGroups=['all'],
+        Attribute="launchPermission",
+        OperationType="add",
+        UserGroups=["all"],
     )
 
-    log.info(f'set image to public - {ami_id}')
+    log.info(f"set image to public - {ami_id}")
 
 
 def main():
@@ -61,7 +62,7 @@ def main():
 
     region = None
     for opt, val in opts:
-        if opt in ('-h', '--help'):
+        if opt in ("-h", "--help"):
             usage()
 
         if opt == "--region":

@@ -25,12 +25,13 @@ Options:
     --desc=         Image description (default: none)
 
 """
-import sys
+
 import getopt
+import sys
 
 from . import utils
 
-log = utils.get_logger('ebs-register')
+log = utils.get_logger("ebs-register")
 
 
 def fatal(e):
@@ -48,12 +49,11 @@ def usage(e=None):
     sys.exit(1)
 
 
-def register(snapshot_id, region, arch, size=None,
-             name=None, desc=None):
+def register(snapshot_id, region, arch, size=None, name=None, desc=None):
     client3 = utils.connect_boto3(region)
 
     if None in (name, size):
-        log.debug(f'getting snapshot - {snapshot_id}')
+        log.debug(f"getting snapshot - {snapshot_id}")
 
         snap_response = client3.describe_snapshots(SnapshotIds=[snapshot_id])
         snapshot = snap_response["Snapshots"][0]
@@ -63,13 +63,13 @@ def register(snapshot_id, region, arch, size=None,
             f"Snapshot {snapshot_id}",
         )
 
-    virt = 'hvm'
-    device_base = '/dev/xvd'
+    virt = "hvm"
+    device_base = "/dev/xvd"
     ec2_arch = "x86_64" if arch == "amd64" else arch
 
     log.debug("creating block_device_mappings")
 
-    rootfs_device_name = device_base + 'a'
+    rootfs_device_name = device_base + "a"
     block_device_mappings = [
         {
             "DeviceName": rootfs_device_name,
@@ -84,7 +84,7 @@ def register(snapshot_id, region, arch, size=None,
             "VirtualName": "ephemeral0"
         },
     ]
-    log.debug(f'registering image - {name}')
+    log.debug(f"registering image - {name}")
     client3 = utils.connect_boto3(region)
 
     response = client3.register_image(
@@ -96,9 +96,9 @@ def register(snapshot_id, region, arch, size=None,
         EnaSupport=True,
     )
 
-    ami_id = response['ImageId']
+    ami_id = response["ImageId"]
 
-    log.info(f'registered image - {ami_id} {name} {region}')
+    log.info(f"registered image - {ami_id} {name} {region}")
     return ami_id, name
 
 
@@ -110,14 +110,14 @@ def main():
         usage(e)
 
     kwargs = {
-        'size': None,
-        'name': None,
-        'desc': None,
+        "size": None,
+        "name": None,
+        "desc": None,
     }
     arch = None
     region = None
     for opt, val in opts:
-        if opt in ('-h', '--help'):
+        if opt in ("-h", "--help"):
             usage()
 
         if opt == "--arch":
@@ -127,13 +127,13 @@ def main():
             region = val
 
         if opt == "--size":
-            kwargs['size'] = int(val)
+            kwargs["size"] = int(val)
 
         if opt == "--name":
-            kwargs['name'] = val
+            kwargs["name"] = val
 
         if opt == "--desc":
-            kwargs['desc'] = val
+            kwargs["desc"] = val
 
     if len(args) != 1:
         usage("incorrect number of arguments")
