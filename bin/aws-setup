@@ -34,13 +34,13 @@ exit 1
 [[ -n "$BT_DEBUG" ]] && set -x
 
 install() {
-    info "installing $*"
+    info "Installing/updating packages as needed: $*"
     apt-get -qq update
     DEBIAN_FRONTEND=noninteractive apt-get -y install "$@"
 }
 
 distro=$(lsb_release -sc)
-pkgs=(tklpatch python3-boto3 awscli)
+pkgs=(tklpatch tkl-ec2metadata python3-boto3 awscli)
 case $distro in
     bullseye|bookworm)
         pkgs+=(python3-boto);;

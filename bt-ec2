@@ -137,19 +137,7 @@ if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
     fi
 fi
 
-if [[ ! -f /usr/bin/ec2metadata ]]; then
-    codename=$(lsb_release -sc)
-    case $codename in
-        buster)
-            pkgs=(ec2metadata python-boto3);;
-        bullseye|bookworm|trixie|forky)
-            pkgs=(tkl-ec2metadata);;
-        *)
-            fatal "Expected codename: $codename";;
-    esac
-    apt-get update -qq
-    apt-get install -y "${pkgs[@]}"
-fi
+"$BT/bin/aws-setup"
 
 read -r appname appversion codename arch <<< "$(turnkey-version -s "$appver" -a)"
 
