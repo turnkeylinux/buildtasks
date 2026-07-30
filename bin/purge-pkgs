@@ -47,13 +47,17 @@ path_to_rootfs=$1
 shift
 
 pkgs=()
-while [ "$1" != "" ]; do
+while [[ $# -gt 0 ]]; do
     case $1 in
         --no-default|-n)
             PKGS=();;
         --help|-h)
             usage;;
         -*)
+            if [[ "$path_to_rootfs" == "-h" ]] \
+                    || [[ "$path_to_rootfs" == "--help" ]]; then
+                usage
+            fi
             fatal "Unknown switch '$1'.";;
         *)
             pkgs+=("$1");;
