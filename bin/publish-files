@@ -1,6 +1,6 @@
 #!/bin/bash -e
 # depends: awscli
-# Copyright (c) 2011-2023 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -9,13 +9,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $0 file...fileN
+Syntax: $APP file...fileN
 Publish files (ignoring file paths) to PUBLISH_DEST
 
 Arguments::
@@ -37,19 +37,22 @@ fi
 [[ -n "$BT_CONFIG" ]] || fatal "BT_CONFIG not set"
 [[ -n "$PUBLISH_DEST" ]] || fatal "PUBLISH_DEST not set"
 
-. $BT_CONFIG/aws.cfg
+# shellcheck source=config.example/aws.cfg
+source "$BT_CONFIG/aws.cfg"
 
-tmpdir=$(mktemp -d --tmpdir=$(dirname $1))
-chmod 755 $tmpdir
-for f in $*; do ln $f $tmpdir; done
+tmpdir=$(mktemp -d --tmpdir="$(dirname "$1")")
+chmod 755 "$tmpdir"
+for f in "$@"; do ln "$f" "$tmpdir"; done
 
 set +e
-cd $tmpdir
+cd "$tmpdir"
 while true; do
-    aws s3 sync ./ $PUBLISH_DEST && break
+    if aws s3 sync ./ "$PUBLISH_DEST"; then
+        break
+    fi
     echo "autoresume aws s3 sync: sleeping for 5 seconds"
     sleep 5
 done
 
 cd -
-rm -rf $tmpdir
+rm -rf "$tmpdir"

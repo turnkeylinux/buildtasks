@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -8,13 +8,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
-cat<<EOF
-Syntax: $0 isodir version appname
+    cat<<EOF
+Syntax: $APP isodir version appname
 Verify ISO by getting .hash and verifying (skipped if .hash exists)
 
 Arguments::
@@ -35,8 +35,9 @@ if [[ "$#" != "3" ]]; then
     usage
 fi
 
-export BT=$(dirname $(dirname $(readlink -f $0)))
-[ -n "$BT_GPGKEY" ] || fatal "BT_GPGKEY not set"
+BT=$(dirname "$(dirname "$(readlink -f "$0")")")
+export BT
+[[ -n "$BT_GPGKEY" ]] || fatal "BT_GPGKEY not set"
 
 isodir=$1
 version=$2
@@ -46,20 +47,21 @@ isofile=turnkey-$appname-$version.iso
 hashfile=turnkey-$appname-$version.iso.hash
 hashpath=$isodir/$hashfile
 
-. $BT_CONFIG/aws.cfg &>/dev/null || true
+# shellcheck source=config.example/aws.cfg
+source "$BT_CONFIG/aws.cfg" &>/dev/null || true
 
-if [ ! -e $hashpath ]; then
+if [[ ! -e "$hashpath" ]]; then
     mirror_src=http://releases.turnkeylinux.org/turnkey-$appname/$version/$hashfile
     bucket_src=s3://turnkeylinux-builds/metadata/$hashfile
-    wget --read-timeout=60 --tries=10 $mirror_src -O $hashpath \
-        || aws s3 cp $bucket_src $hashpath \
+    wget --read-timeout=60 --tries=10 "$mirror_src" -O "$hashpath" \
+        || aws s3 cp "$bucket_src" "$hashpath" \
         || fatal "$hashfile download failed"
 else
     info "$hashfile already exists, skipping download..."
 fi
 
-if ! $BT/bin/signature-verify $isodir/$isofile $hashpath; then
-    mv $isodir/$isofile $isodir/$isofile.corrupt
-    rm $hashpath
+if ! "$BT/bin/signature-verify" "$isodir/$isofile" "$hashpath"; then
+    mv "$isodir/$isofile" "$isodir/$isofile.corrupt"
+    rm "$hashpath"
     fatal "$hashfile verification failed"
 fi

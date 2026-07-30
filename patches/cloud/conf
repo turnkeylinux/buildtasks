@@ -5,7 +5,7 @@ install() {
     DEBIAN_FRONTEND=noninteractive apt-get -y \
         -o DPkg::Options::=--force-confdef \
         -o DPkg::Options::=--force-confold \
-        install $@
+        install "$@"
 }
 
 # install cloud required packages
@@ -14,11 +14,6 @@ install tkl-ec2metadata
 # copy mntbind inithook in everyboot
 INITHOOKS=/usr/lib/inithooks
 cp $INITHOOKS/firstboot.d/27ec2-mntbind-ephemeral $INITHOOKS/everyboot.d/
-
-# disable systemd confconsole.service (as of v16.0 it's no longer a stand
-# alone service, hence why I've also added ' || true').
-systemctl disable confconsole \
-    || echo "[$(basename $0)] disabling confconsole service failed - expected when building v17.0+"
 
 # disable networking options in confconsole
 sed -i "/networking false/ s|^#||" /etc/confconsole/confconsole.conf
@@ -41,7 +36,7 @@ else
     if [[ $disks -eq 0 ]]; then
         echo "FATAL: could not find bootdisk"
     else
-        echo "FATAL: got multiple possibile bootdisks:" $bootdisk
+        echo "FATAL: got multiple possibile bootdisks:" "$bootdisk"
     fi
     exit 1
 fi

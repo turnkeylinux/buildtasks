@@ -1,13 +1,10 @@
 #!/bin/bash -ex
 # Original author: Alon Swartz <alon@turnkeylinux.org> (c) 2012-2013
-# Since modified by: TurnKey Linux (c)2014-2023
+# Since modified by: TurnKey Linux (c)2014-2026
 
 # remove kernel
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in
-    "i386")
-        OLD_META_KERNEL="linux-image-686";
-        ;;
     "amd64")
         OLD_META_KERNEL="linux-image-amd64";
         ;;

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - http://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
