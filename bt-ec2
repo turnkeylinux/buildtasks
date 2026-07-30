@@ -34,7 +34,10 @@ Options::
                           (otherwise --copy & --marketplace ignored)
     --secupdates        - install security updates before building image
     --increment         - install all (apt) updates before building image and
-                          add increment to version number; e.g. 16.2.1
+                          add increment to version number; e.g. 18.2.1
+                          (implies --secupdates)
+    --testing           - allow use of current buildtasks branch (conflicts
+                          with --publish &/or --marketplace &/or --copy)
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
     --pvmregister       - register pvm-virtualized snapshot, too
 
@@ -46,8 +49,8 @@ EOF
 }
 
 ARGS=("$@")
-unset ebs_opts force secupdates increment pvmshim appver
-while [ "$1" != "" ]; do
+unset ebs_opts force secupdates all_updates increment testing pvmshim appver
+while [[ $# -ne 0 ]]; do
     case $1 in
         --help|-h)     usage;;
         --name=*)       ebs_opts+="$1 ";;
@@ -57,6 +60,7 @@ while [ "$1" != "" ]; do
         --force)        force="yes";;
         --secupdates)   secupdates="yes";;
         --increment)    increment="yes";;
+        --testing)      testing="yes";;
         --pvmshim)      pvmshim="yes";;
         --pvmregister)  ebs_opts+="$1 ";;
         *)              if [[ -n "$appver" ]]; then
@@ -73,6 +77,11 @@ done
 if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
     warning "--increment implies --secupdates"
     unset secupdates
+fi
+if [[ -n "$testing" ]]; then
+    warning "--testing used"
+    warning "if set --publish, --marketplace &/or --copy will be ignored"
+    unset publish marketplace copy
 fi
 
 [[ -z "$BT_DEBUG" ]] || set -x
@@ -115,7 +124,11 @@ TKL_BUILD_VER=$(turnkey-version -s "$appver" -t | cut -d. -f1)
 if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
     warning "Host TKL version ($TKL_HOST_VER) does not match guest version"\
         "($TKL_BUILD_VER)"
-    git_unshallow "$TKL_BUILD_VER.x"
+    if [[ -n "$testing" ]]; then
+        warning "buildtasks will be used as is (including uncommited files)"
+    else
+        git_unshallow "$TKL_BUILD_VER.x"
+    fi
     # if buildtasks has changed, restart bt-iso
     if [[ "$(git rev-parse --short HEAD)" != "$COMMIT_ID" ]]; then
         info "Restarting $APP"
