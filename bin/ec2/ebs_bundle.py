@@ -32,7 +32,7 @@ import time
 
 from botocore.exceptions import ClientError
 
-from . import utils
+import utils
 
 log = utils.get_logger("ebs-bundle")
 

@@ -25,7 +25,7 @@ Options:
 import getopt
 import sys
 
-from . import utils
+import utils
 
 log = utils.get_logger("ebs-publish")
 

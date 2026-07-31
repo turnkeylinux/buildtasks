@@ -17,7 +17,7 @@ import sys
 import boto3
 import ec2metadata
 
-from . import conf
+import conf
 
 
 def connect_boto3(region=None):
