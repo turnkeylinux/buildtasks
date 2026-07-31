@@ -43,6 +43,10 @@ EOF
     exit 1
 }
 
+# catch --help first
+if [[ " $* " == *"--help"* ]] || [[ " $* " == *"-h"* ]]; then
+    usage
+fi
 path_to_rootfs=$1
 shift
 
@@ -51,13 +55,7 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --no-default|-n)
             PKGS=();;
-        --help|-h)
-            usage;;
         -*)
-            if [[ "$path_to_rootfs" == "-h" ]] \
-                    || [[ "$path_to_rootfs" == "--help" ]]; then
-                usage
-            fi
             fatal "Unknown switch '$1'.";;
         *)
             pkgs+=("$1");;
@@ -71,4 +69,6 @@ pkgs=("${pkgs[@]}" "${PKGS[@]}")
 [[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
 
 info "Purging packages: ${pkgs[*]}"
-fab-chroot "$path_to_rootfs" "apt-get purge -y --autoremove ${pkgs[*]}"
+fab-chroot "$path_to_rootfs" \
+    "echo \"${pkgs[*]}\" | xargs -n 1 apt-get purge -y"
+fab-chroot "$path_to_rootfs" "apt-get autoremove -y; apt-get clean"
