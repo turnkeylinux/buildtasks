@@ -40,3 +40,4 @@ fab-chroot "$path_to_rootfs" "apt-get update -qq"
 info "Upgrading all packages."
 fab-chroot "$path_to_rootfs" \
     "apt-get dist-upgrade -y --no-remove || apt-get upgrade -y"
+fab-chroot "$path_to_rootfs" "apt-get autoremove -y; apt-get clean"
