@@ -75,6 +75,8 @@ def get_logger(name, level=None):
             filehandler.setFormatter(format)
             logger.addHandler(filehandler)
 
+        if os.environ.get("BT_DEBUG"):
+            level = logging.DEBUG
         level = level if level else conf.LOG_LEVEL
         logger.setLevel(getattr(logging, level))
 
