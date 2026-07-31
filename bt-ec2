@@ -49,20 +49,21 @@ EOF
 }
 
 ARGS=("$@")
-unset ebs_opts force secupdates all_updates increment testing pvmshim appver
+unset force secupdates all_updates increment testing pvmshim appver
+ebs_opts=()
 while [[ $# -ne 0 ]]; do
     case $1 in
         --help|-h)     usage;;
-        --name=*)       ebs_opts+="$1 ";;
-        --copy)         ebs_opts+="$1 ";;
-        --marketplace)  ebs_opts+="$1 ";;
-        --publish)      ebs_opts+="$1 "; publish="yes";;
+        --name=*)       ebs_opts+=("$1");;
+        --copy)         ebs_opts+=("$1");;
+        --marketplace)  ebs_opts+=("$1");;
+        --publish)      ebs_opts+=("$1"); publish="yes";;
         --force)        force="yes";;
         --secupdates)   secupdates="yes";;
         --increment)    increment="yes";;
         --testing)      testing="yes";;
         --pvmshim)      pvmshim="yes";;
-        --pvmregister)  ebs_opts+="$1 ";;
+        --pvmregister)  ebs_opts+=("$1");;
         *)              if [[ -n "$appver" ]]; then
                             usage
                         else
@@ -147,8 +148,8 @@ if [[ ! "$appversion" =~ ^([0-9.]+)$ ]]; then
     msg="non-stable version detected"
     if [[ "$force" != "yes" ]]; then
         msg="$msg - ignoring"
-        ebs_opts="${ebs_opts//--marketplace }"
-        ebs_opts="${ebs_opts//--copy }"
+        ebs_opts+=(--marketplace)
+        ebs_opts+=(--copy)
     else
         msg="$msg & --force set - honoring"
     fi
@@ -223,6 +224,7 @@ mount --bind --make-rslave /sys "$rootfs/sys"
 mount --bind --make-rslave /dev "$rootfs/dev"
 
 "$BT/bin/purge-pkgs" "$rootfs"
+
 if [[ "$appversion" == *"rc"* ]] || [[ "$increment" == "yes" ]]; then
     "$BT/bin/upgrade-pkgs" "$rootfs"
 fi
@@ -244,9 +246,9 @@ umount -l "$rootfs/proc" || true
 "$BT/bin/aptconf-tag" "$rootfs" ec2
 "$BT/bin/build-tag" "$rootfs" ec2
 if [[ -f /usr/bin/python ]]; then
-    "$BT/bin/ec2/legacy/ebs.py" "$ebs_opts" "$rootfs"
+    "$BT/bin/ec2/legacy/ebs.py" "${ebs_opts[@]}" "$rootfs"
 else
-    "$BT/bin/ec2/ebs.py" "$ebs_opts" "$rootfs"
+    "$BT/bin/ec2/ebs.py" "${ebs_opts[@]}" "$rootfs"
 fi
 "$BT/bin/generate-buildenv" ec2 "$BT_ISOS/$isofile.hash" \
     > "$O/$new_name.ec2.buildenv"
