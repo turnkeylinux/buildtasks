@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -8,13 +8,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
 cat<<EOF
-Syntax: $0 outdir version appname
+Syntax: $APP outdir version appname
 Download ISO if it doesn't already exist in outdir
 
 Arguments::
@@ -36,19 +36,20 @@ appname=$3
 
 isofile=turnkey-$appname-$version.iso
 
-if [ -e $outdir/$isofile ]; then
+if [[ -e "$outdir/$isofile" ]]; then
     info "$isofile already exists, skipping download..."
     exit 0
 fi
 
-. $BT_CONFIG/aws.cfg &>/dev/null || true
+# shellcheck source=config.example/aws.cfg
+source "$BT_CONFIG/aws.cfg" &>/dev/null || true
 
-mkdir -p $outdir
+mkdir -p "$outdir"
 mirror_images="http://mirror.turnkeylinux.org/turnkeylinux/images"
 bucket_images="s3://turnkeylinux-builds/images"
-if ! wget --read-timeout=60 --tries=10 $mirror_images/iso/$isofile \
-        -O $outdir/$isofile; then
-    if ! aws s3 cp $bucket_images/iso/$isofile $outdir/$isofile; then
+if ! wget --read-timeout=60 --tries=10 "$mirror_images/iso/$isofile" \
+        -O "$outdir/$isofile"; then
+    if ! aws s3 cp "$bucket_images/iso/$isofile $outdir/$isofile"; then
         fatal "$isofile download failed"
     fi
 fi

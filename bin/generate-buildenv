@@ -8,13 +8,14 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-fatal() { echo "FATAL [$(basename "$0")]: $*" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename "$0")]: $*"; }
-info() { echo "INFO [$(basename "$0")]: $*"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
     cat<<EOF
-Syntax: $(basename "$0") target target-args
+Syntax: $APP target target-args
 Print build environment related to target build type
 
 Targets::
@@ -63,9 +64,11 @@ _py_check() {
     local py_path
     py_path="$(which "$py_ex" || true)"
     if [[ "$py_ver" -eq 2 ]]; then
-        echo "$lib (py2) $($py_ex -c "import $lib; print $lib.__version__" 2>/dev/null || echo "(none)")"
+        echo "$lib (py2) $($py_ex -c "import $lib; print $lib.__version__" \
+            2>/dev/null || echo "(none)")"
     elif [[ "$py_ver" -eq 3 ]]; then
-        echo "$lib (py3) $($py_ex -c "import $lib; print($lib.__version__)" 2>/dev/null || echo "(none)")"
+        echo "$lib (py3) $($py_ex -c "import $lib; print($lib.__version__)" \
+            2>/dev/null || echo "(none)")"
     else
         fatal "Python version (py_ver) must be 2 or 3 (got $py_ver)"
     fi
@@ -84,7 +87,8 @@ _common() {
     fi
     local py_ver=''
     if which python >/dev/null; then
-        py_ver=$(python --version 2>&1 | sed -En "s|.*[[:space:]]([2-3])\..*|\1|p")
+        py_ver=$(python --version 2>&1 \
+            | sed -En "s|.*[[:space:]]([2-3])\..*|\1|p")
     fi
     for lib in awscli boto boto3; do
         if [[ -n "$py_ver" ]]; then
@@ -102,7 +106,8 @@ _common() {
 _optimized() {
     # get sha from hash file (supports yet-to-be signed iso hash files)
     hashpath=$1
-    hash256=$(grep -A 1 -m 1 sha256sum "$hashpath" | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
+    hash256=$(grep -A 1 -m 1 sha256sum "$hashpath" \
+        | tail -n 1 | sed "s/^ *//" | cut -d" " -f1)
     echo "$(basename "$hashpath") $hash256"
 
     echo "tklpatch $(dpkg -s tklpatch | grep Version | cut -d ' ' -f 2)"

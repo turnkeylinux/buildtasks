@@ -1,5 +1,5 @@
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -9,38 +9,24 @@
 # option) any later version.
 
 
-import re
-import os
-import sys
 import logging
+import os
 import subprocess
+import sys
 
-import conf
-
-# depends on tkl-ec2metadata
+import boto3
 import ec2metadata
 
-# depends on python3-boto & python3-boto3
-from boto.ec2 import connect_to_region
-import boto3
-
-
-def connect(region=None):
-    region = region if region else get_region()
-    return connect_to_region(
-        region,
-        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-        security_token=os.environ.get('AWS_SESSION_TOKEN', None))
+import conf
 
 
 def connect_boto3(region=None):
     region = region if region else get_region()
     return boto3.client(
-        'ec2',
+        "ec2",
         region_name=region,
-        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"))
 
 
 def get_turnkey_version(rootfs):
@@ -49,27 +35,23 @@ def get_turnkey_version(rootfs):
 
 
 def get_instanceid():
-    return ec2metadata.get('instance-id')
+    return ec2metadata.get("instance-id")
 
 
 def get_zone():
-    return ec2metadata.get('availability-zone')
+    return ec2metadata.get("availability-zone")
 
 
 def get_region():
-    return ec2metadata.get('availability-zone')[0:-1]
+    return ec2metadata.get("availability-zone")[0:-1]
 
 
 def get_all_regions():
-    return list(conf.KERNELS.keys())
-
-
-def get_kernel(region, arch):
-    return conf.KERNELS[region][arch]
+    return list(conf.KERNELS)
 
 
 def get_arch():
-    return subprocess.run(['dpkg', '--print-architecture'],
+    return subprocess.run(["dpkg", "--print-architecture"],
                           capture_output=True, text=True).stdout.rstrip()
 
 
@@ -77,22 +59,24 @@ def get_logger(name, level=None):
     logger = logging.getLogger(name)
 
     if not logger.handlers:
-        logging.addLevelName(45, 'IMPORTANT')
-        setattr(logger, 'important',
+        logging.addLevelName(45, "IMPORTANT")
+        setattr(logger, "important",
                 lambda *args, **kwargs: logger.log(45, *args, **kwargs))
 
-        format = logging.Formatter('%(levelname)s [%(name)s]: %(message)s')
+        format = logging.Formatter("%(levelname)s [%(name)s]: %(message)s")
 
         stdout = logging.StreamHandler(sys.stdout)
         stdout.setFormatter(format)
         logger.addHandler(stdout)
 
-        logfile = os.environ.get('LOGFILE_PATH', None)
+        logfile = os.environ.get("LOGFILE_PATH", None)
         if logfile:
-            filehandler = logging.FileHandler(logfile, mode='a')
+            filehandler = logging.FileHandler(logfile, mode="a")
             filehandler.setFormatter(format)
             logger.addHandler(filehandler)
 
+        if os.environ.get("BT_DEBUG"):
+            level = logging.DEBUG
         level = level if level else conf.LOG_LEVEL
         logger.setLevel(getattr(logging, level))
 
@@ -115,4 +99,4 @@ def mkdir(path):
 
 def rsync(rootfs, dest):
     subprocess.run(
-            ['rsync', '-a', '-t', '-r', '-S', '-I', '-H', f'{rootfs}/', dest])
+            ["rsync", "-a", "-t", "-r", "-S", "-I", "-H", f"{rootfs}/", dest])

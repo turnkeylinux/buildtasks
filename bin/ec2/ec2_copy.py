@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Author: Alon Swartz <alon@turnkeylinux.org>
-# Copyright (c) 2011-2022 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -20,12 +20,13 @@ Arguments:
     region...regionN    Destination region(s) to copy to (also accepts: all)
 
 """
-import sys
+
 import getopt
+import sys
 
 import utils
 
-log = utils.get_logger('ebs-copy')
+log = utils.get_logger("ebs-copy")
 
 
 def fatal(e):
@@ -57,14 +58,14 @@ class Image:
 def copy_image(ami_id, ami_name, ami_region, regions=[]):
     images = []
     for region in regions:
-        log.debug(f'copying {ami_id} ({ami_region}) to {region}')
+        log.debug(f"copying {ami_id} ({ami_region}) to {region}")
 
         conn = utils.connect(region)
         ret = conn.copy_image(ami_region, ami_id, ami_name)
         image = Image(ret.image_id, region)
         images.append(image)
 
-        log.info(f'pending {ami_id} ({ami_region}) to {image.id} ({region})')
+        log.info(f"pending {ami_id} ({ami_region}) to {image.id} ({region})")
 
     return images
 
@@ -75,9 +76,8 @@ def main():
     except getopt.GetoptError as e:
         usage(e)
 
-    publish = False
     for opt, val in opts:
-        if opt in ('-h', '--help'):
+        if opt in ("-h", "--help"):
             usage()
 
     if len(args) < 4:
@@ -86,7 +86,7 @@ def main():
     ami_id, ami_name, ami_region = args[:3]
     regions = args[3:]
 
-    if 'all' in regions:
+    if "all" in regions:
         regions = utils.get_all_regions()
         regions.remove(ami_region)
 

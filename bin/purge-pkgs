@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2020-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -8,14 +8,15 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
-PKGS="di-live live-boot live-tools live-boot-initramfs-tools"
+PKGS=(di-live tkl-installer live-boot live-tools live-boot-initramfs-tools)
 
 usage() {
-cat<<EOF
-Syntax: $(basename $0) path_to_rootfs [--no-default] [package-1 package-2
+    cat<<EOF
+Syntax: $APP path_to_rootfs [--no-default] [package-1 package-2
                                                         ... package-N]
 Purge Debian packages from specified rootfs.
 
@@ -33,37 +34,41 @@ Options::
     --no-default|-n - Do NOT purge the default packages. Only packages
                       specified as args.
                       Default packages:
-                        "$PKGS"
+                        "${PKGS[*]}"
 
 Environment::
 
     BT_DEBUG        - turn on debugging
 EOF
-exit 1
+    exit 1
 }
 
+# catch --help first
+if [[ " $* " == *"--help"* ]] || [[ " $* " == *"-h"* ]]; then
+    usage
+fi
 path_to_rootfs=$1
 shift
 
-while [ "$1" != "" ]; do
+pkgs=()
+while [[ $# -gt 0 ]]; do
     case $1 in
         --no-default|-n)
-            PKGS=""
-            shift;;
-        --help|-h)
-            usage;;
+            PKGS=();;
         -*)
             fatal "Unknown switch '$1'.";;
         *)
-            pkgs="$pkgs $1"
-            shift;;
+            pkgs+=("$1");;
     esac
+    shift
 done
 
 [[ -n "$BT_DEBUG" ]] && set -x
 
-pkgs=$(echo "$pkgs $PKGS" | tr -s ' ')
+pkgs=("${pkgs[@]}" "${PKGS[@]}")
 [[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
 
-info "Purging packages: $pkgs"
-fab-chroot $path_to_rootfs "apt-get purge -y --autoremove $pkgs"
+info "Purging packages: ${pkgs[*]}"
+fab-chroot "$path_to_rootfs" \
+    "echo \"${pkgs[*]}\" | xargs -n 1 apt-get purge -y"
+fab-chroot "$path_to_rootfs" "apt-get autoremove -y; apt-get clean"

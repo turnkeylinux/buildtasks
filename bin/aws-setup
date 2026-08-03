@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2021 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2021-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -8,14 +8,14 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-warning() { echo "WARNING [$(basename $0)]: $@"; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+warning() { echo "WARNING [$APP]: $*"; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0)
+Syntax: $APP
 Setup/update system ready for bt-x --publish and/or bt-ec2
 
 Options::
@@ -34,19 +34,28 @@ exit 1
 [[ -n "$BT_DEBUG" ]] && set -x
 
 install() {
-    info "installing $@"
+    info "Installing/updating packages as needed: $*"
     apt-get -qq update
-    DEBIAN_FRONTEND=noninteractive apt-get -y install $@
+    DEBIAN_FRONTEND=noninteractive apt-get -y install "$@"
 }
 
-pkgs="python3-boto python3-boto3 awscli"
+distro=$(lsb_release -sc)
+pkgs=(tklpatch tkl-ec2metadata python3-boto3 awscli)
+case $distro in
+    bullseye|bookworm)
+        pkgs+=(python3-boto);;
+    trixie|forky)
+        pkgs+=(python3-botocore);;
+    *)
+        fatal "Unexpected distro: $distro";;
+esac
 while [ "$1" != "" ]; do
     case $1 in
-        --awscli)       pkgs="awscli";;
+        --awscli)       pkgs=(awscli);;
         --help|-h)      usage;;
         *)              usage;;
     esac
     shift
 done
 
-install $pkgs
+install "${pkgs[@]}"

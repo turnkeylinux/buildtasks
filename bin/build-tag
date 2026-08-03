@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2018 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2018-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -8,12 +8,11 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
 
 usage() {
-cat<<EOF
+    cat<<EOF
 Syntax: $0 rootfs tag
 Tag the build within the filesystem with build info. This info is then used by
 the inithooks package to force usage of an lternate inithook unit file (e.g.
@@ -28,17 +27,19 @@ Arguments::
     tag         - the build tag, currently supports:
                   proxmox|xen|openstack|docker|ec2|vm
 EOF
-exit 1
+    exit 1
 }
 
-if [[ "$#" != "2" ]]; then
+if [[ "$#" -ne "2" ]]; then
     usage
 fi
 
 rootfs=$1
 tag=$2
 
-[[ ! -d "$rootfs" ]] && fatal "$rootfs does not exist or is not a directory"
+if [[ ! -d "$rootfs" ]]; then
+    fatal "$rootfs does not exist or is not a directory"
+fi
 
 case $tag in
     proxmox)
@@ -65,8 +66,6 @@ esac
 
 TKL_INFO=$rootfs/var/lib/turnkey-info
 
-rm -rf $TKL_INFO/inithooks.service
-mkdir -p $TKL_INFO/inithooks.service
-touch $TKL_INFO/inithooks.service/$unit
-
-exit 0
+rm -rf "$TKL_INFO/inithooks.service"
+mkdir -p "$TKL_INFO/inithooks.service"
+touch "$TKL_INFO/inithooks.service/$unit"

@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2011-2015 TurnKey GNU/Linux - http://www.turnkeylinux.org
+# Copyright (c) 2011-2026 TurnKey GNU/Linux - http://www.turnkeylinux.org
 # 
 # This file is part of buildtasks.
 # 
@@ -8,15 +8,15 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
 CLEANUP='/boot/*.bak /var/log/dpkg.log /var/log/apt/* /var/lib/apt/lists/* /var/cache/apt/archives/*.deb /var/cache/apt/*.bin'
 
 usage() {
 cat<<EOF
-Syntax: $(basename $0) rootfs-dir
+Syntax: $APP rootfs-dir
 Cleans up logs, caches and leftover files in rootfs
 EOF
 exit 1
@@ -26,8 +26,7 @@ if [[ "$#" != "1" ]]; then
 fi
 
 rootfs=$1
-[ -d $rootfs ] || fatal "no such directory: $rootfs"
+[[ -d "$rootfs" ]] || fatal "no such directory: $rootfs"
 
-tklpatch-chroot $rootfs "rm -rf $CLEANUP"
-fuser -k $rootfs || true
-
+tklpatch-chroot "$rootfs" "rm -rf $CLEANUP"
+fuser -k "$rootfs" || true

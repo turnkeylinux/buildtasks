@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Copyright (c) 2020 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2020-2026 TurnKey GNU/Linux - https://www.turnkeylinux.org
 #
 # This file is part of buildtasks.
 #
@@ -8,12 +8,13 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 
-fatal() { echo "FATAL [$(basename $0)]: $@" 1>&2; exit 1; }
-info() { echo "INFO [$(basename $0)]: $@"; }
+APP=$(basename "$0")
+fatal() { echo "FATAL [$APP]: $*" 1>&2; exit 1; }
+info() { echo "INFO [$APP]: $*"; }
 
 usage() {
-cat<<EOF
-Syntax: $(basename $0) path_to_rootfs
+    cat<<EOF
+Syntax: $APP path_to_rootfs
 Upgrade all Debian packages in specified rootfs.
 
 Arguments::
@@ -24,7 +25,7 @@ Environment::
 
     BT_DEBUG        - turn on debugging
 EOF
-exit 1
+    exit 1
 }
 
 path_to_rootfs=$1
@@ -35,6 +36,8 @@ shift
 [[ -d "$path_to_rootfs" ]] || fatal "Path not found: $path_to_rootfs"
 
 info "Updating package lists."
-fab-chroot $path_to_rootfs "apt-get update -qq"
+fab-chroot "$path_to_rootfs" "apt-get update -qq"
 info "Upgrading all packages."
-fab-chroot $path_to_rootfs "apt-get dist-upgrade -y --no-remove || apt-get upgrade -y"
+fab-chroot "$path_to_rootfs" \
+    "apt-get dist-upgrade -y --no-remove || apt-get upgrade -y"
+fab-chroot "$path_to_rootfs" "apt-get autoremove -y; apt-get clean"
