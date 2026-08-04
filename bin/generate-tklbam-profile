@@ -33,15 +33,15 @@ import getopt
 import re
 
 import shutil
+import subprocess
 
 from StringIO import StringIO
 
-TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH', 
+TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH',
                                  '/usr/lib/tklbam')
 sys.path.insert(0, TKLBAM_LIB_PATH)
 
 try:  # custom TKL imports
-    from pylib import executil
     from pylib.temp import TempDir, TempFile
     import dirindex
     from backup import ProfilePaths
@@ -73,18 +73,18 @@ class MountISO:
         cdroot = TempDir()
         rootfs = TempDir()
 
-        executil.system("mount -o loop", iso, cdroot)
+        subprocess.check_call(["mount", "-o", "loop", iso, cdroot])
         self.cdroot = cdroot
 
-        executil.system("mount -o loop", join(cdroot, "live/10root.squashfs"), rootfs)
+        subprocess.check_call(["mount", "-o", "loop", join(cdroot, "live/10root.squashfs"), rootfs])
         self.rootfs = rootfs
 
     def __del__(self):
         if self.rootfs:
-            executil.system("umount", self.rootfs)
+            subprocess.check_call(["umount", self.rootfs])
 
         if self.cdroot:
-            executil.system("umount", self.cdroot)
+            subprocess.check_call(["umount", self.cdroot])
 
 class Profile:
 
@@ -207,7 +207,7 @@ class Profile:
 
     def write(self, output_dir):
         path_archive = join(output_dir, "%s.tar.gz" % self.version)
-        executil.system("tar -C %s -zcf %s ." % (self.paths.path, path_archive))
+        subprocess.check_call(["tar", "-C", self.paths.path, "-zcf", path_archive, "."])
 
 def main():
 
