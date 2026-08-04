@@ -25,7 +25,7 @@ Enviroment variables:
 
 """
 import os
-from os.path import *
+from os.path import join, isdir, exists, realpath
 
 import sys
 import getopt
@@ -90,7 +90,7 @@ class Profile:
 
     @staticmethod
     def _get_turnkey_version(rootfs):
-        with open(os.path.join(rootfs, 'etc/turnkey_version'), 'r') as fob:
+        with open(join(rootfs, 'etc/turnkey_version'), 'r') as fob:
             version = fob.read()
         return version.strip()
 
