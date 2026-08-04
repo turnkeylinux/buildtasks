@@ -1,6 +1,7 @@
 #!/usr/lib/tklbam-pypy2/bin/pypy
 # 
 # Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2011-2026 TurnKey GNU/Linux <admin@turnkeylinux.org>
 # 
 # This file is part of TKLBAM (TurnKey GNU/Linux BAckup and Migration).
 # 
@@ -182,14 +183,17 @@ class Profile:
             shutil.copytree(path_hooks, join(paths.path, "hooks.d"))
 
         dc = self._get_dirindex_conf(path_profiles_conf, codename)
-        file(paths.dirindex_conf, "w").write(dc)
+        with open(paths.dirindex_conf, "w") as fob:
+            fob.write(dc)
 
         di = self._get_dirindex(paths.dirindex_conf, rootfs)
-        file(paths.dirindex, "w").write(di)
+        with open(paths.dirindex, "w") as fob:
+            fob.write(di)
 
         packages = self._get_packages(rootfs)
-        file(paths.packages, "w").writelines([ package + "\n"
-                                               for package in packages ])
+        with open(paths.packages, "w") as fob:
+            fob.writelines([ package + "\n"
+                             for package in packages ])
 
 
         self.version = version
