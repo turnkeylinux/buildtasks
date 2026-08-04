@@ -90,7 +90,8 @@ class Profile:
 
     @staticmethod
     def _get_turnkey_version(rootfs):
-        version = file(os.path.join(rootfs, 'etc/turnkey_version'), 'r').read()
+        with open(os.path.join(rootfs, 'etc/turnkey_version'), 'r') as fob:
+            version = fob.read()
         return version.strip()
 
     @staticmethod
@@ -109,7 +110,8 @@ class Profile:
             return join(path_profiles_conf, codename)
 
         sio = StringIO()
-        sio.write(file(path_conf("core")).read())
+        with open(path_conf("core")) as fob:
+            sio.write(fob.read())
 
         if codename != "core":
             if not exists(path_conf(codename)):
@@ -118,33 +120,37 @@ class Profile:
             print >> sio
             print >> sio, "# %s" % codename
 
-            sio.write(file(path_conf(codename)).read())
+            with open(path_conf(codename)) as fob:
+                sio.write(fob.read())
 
         return sio.getvalue()
 
     @staticmethod
     def _get_dirindex(path_dirindex_conf, path_rootfs):
-        paths = dirindex.read_paths(file(path_dirindex_conf))
-        paths = [ re.sub(r'^(-?)', '\\1' + path_rootfs, path) 
+        with open(path_dirindex_conf) as fob:
+            paths = dirindex.read_paths(fob)
+        paths = [ re.sub(r'^(-?)', '\\1' + path_rootfs, path)
                   for path in paths ]
 
         tmp = TempFile()
         dirindex.create(tmp.path, paths)
 
-        filtered = [ re.sub(r'^' + path_rootfs, '', line) 
-                            for line in file(tmp.path).readlines() ]
+        with open(tmp.path) as fob:
+            filtered = [ re.sub(r'^' + path_rootfs, '', line)
+                         for line in fob.readlines() ]
         return "".join(filtered)
 
     @staticmethod
     def _get_packages(path_rootfs):
         def parse_status(path):
             control = ""
-            for line in file(path).readlines():
-                if not line.strip():
-                    yield control
-                    control = ""
-                else:
-                    control += line
+            with open(path) as fob:
+                for line in fob.readlines():
+                    if not line.strip():
+                        yield control
+                        control = ""
+                    else:
+                        control += line
 
             if control.strip():
                 yield control
