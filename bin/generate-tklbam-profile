@@ -1,6 +1,7 @@
 #!/usr/lib/tklbam-pypy2/bin/pypy
 # 
 # Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2011-2026 TurnKey GNU/Linux <admin@turnkeylinux.org>
 # 
 # This file is part of TKLBAM (TurnKey GNU/Linux BAckup and Migration).
 # 
@@ -24,7 +25,7 @@ Enviroment variables:
 
 """
 import os
-from os.path import *
+from os.path import join, isdir, exists, realpath
 
 import sys
 import getopt
@@ -32,15 +33,15 @@ import getopt
 import re
 
 import shutil
+import subprocess
 
 from StringIO import StringIO
 
-TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH', 
+TKLBAM_LIB_PATH = os.environ.get('TKLBAM_LIB_PATH',
                                  '/usr/lib/tklbam')
 sys.path.insert(0, TKLBAM_LIB_PATH)
 
 try:  # custom TKL imports
-    from pylib import executil
     from pylib.temp import TempDir, TempFile
     import dirindex
     from backup import ProfilePaths
@@ -72,24 +73,25 @@ class MountISO:
         cdroot = TempDir()
         rootfs = TempDir()
 
-        executil.system("mount -o loop", iso, cdroot)
+        subprocess.check_call(["mount", "-o", "loop", iso, cdroot])
         self.cdroot = cdroot
 
-        executil.system("mount -o loop", join(cdroot, "live/10root.squashfs"), rootfs)
+        subprocess.check_call(["mount", "-o", "loop", join(cdroot, "live/10root.squashfs"), rootfs])
         self.rootfs = rootfs
 
     def __del__(self):
         if self.rootfs:
-            executil.system("umount", self.rootfs)
+            subprocess.check_call(["umount", self.rootfs])
 
         if self.cdroot:
-            executil.system("umount", self.cdroot)
+            subprocess.check_call(["umount", self.cdroot])
 
 class Profile:
 
     @staticmethod
     def _get_turnkey_version(rootfs):
-        version = file(os.path.join(rootfs, 'etc/turnkey_version'), 'r').read()
+        with open(join(rootfs, 'etc/turnkey_version'), 'r') as fob:
+            version = fob.read()
         return version.strip()
 
     @staticmethod
@@ -108,7 +110,8 @@ class Profile:
             return join(path_profiles_conf, codename)
 
         sio = StringIO()
-        sio.write(file(path_conf("core")).read())
+        with open(path_conf("core")) as fob:
+            sio.write(fob.read())
 
         if codename != "core":
             if not exists(path_conf(codename)):
@@ -117,33 +120,37 @@ class Profile:
             print >> sio
             print >> sio, "# %s" % codename
 
-            sio.write(file(path_conf(codename)).read())
+            with open(path_conf(codename)) as fob:
+                sio.write(fob.read())
 
         return sio.getvalue()
 
     @staticmethod
     def _get_dirindex(path_dirindex_conf, path_rootfs):
-        paths = dirindex.read_paths(file(path_dirindex_conf))
-        paths = [ re.sub(r'^(-?)', '\\1' + path_rootfs, path) 
+        with open(path_dirindex_conf) as fob:
+            paths = dirindex.read_paths(fob)
+        paths = [ re.sub(r'^(-?)', '\\1' + path_rootfs, path)
                   for path in paths ]
 
         tmp = TempFile()
         dirindex.create(tmp.path, paths)
 
-        filtered = [ re.sub(r'^' + path_rootfs, '', line) 
-                            for line in file(tmp.path).readlines() ]
+        with open(tmp.path) as fob:
+            filtered = [ re.sub(r'^' + path_rootfs, '', line)
+                         for line in fob.readlines() ]
         return "".join(filtered)
 
     @staticmethod
     def _get_packages(path_rootfs):
         def parse_status(path):
             control = ""
-            for line in file(path).readlines():
-                if not line.strip():
-                    yield control
-                    control = ""
-                else:
-                    control += line
+            with open(path) as fob:
+                for line in fob.readlines():
+                    if not line.strip():
+                        yield control
+                        control = ""
+                    else:
+                        control += line
 
             if control.strip():
                 yield control
@@ -182,14 +189,17 @@ class Profile:
             shutil.copytree(path_hooks, join(paths.path, "hooks.d"))
 
         dc = self._get_dirindex_conf(path_profiles_conf, codename)
-        file(paths.dirindex_conf, "w").write(dc)
+        with open(paths.dirindex_conf, "w") as fob:
+            fob.write(dc)
 
         di = self._get_dirindex(paths.dirindex_conf, rootfs)
-        file(paths.dirindex, "w").write(di)
+        with open(paths.dirindex, "w") as fob:
+            fob.write(di)
 
         packages = self._get_packages(rootfs)
-        file(paths.packages, "w").writelines([ package + "\n"
-                                               for package in packages ])
+        with open(paths.packages, "w") as fob:
+            fob.writelines([ package + "\n"
+                             for package in packages ])
 
 
         self.version = version
@@ -197,7 +207,7 @@ class Profile:
 
     def write(self, output_dir):
         path_archive = join(output_dir, "%s.tar.gz" % self.version)
-        executil.system("tar -C %s -zcf %s ." % (self.paths.path, path_archive))
+        subprocess.check_call(["tar", "-C", self.paths.path, "-zcf", path_archive, "."])
 
 def main():
 
