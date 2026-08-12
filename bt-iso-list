@@ -1,0 +1,56 @@
+#!/bin/bash
+set -euo pipefail
+
+APP=$(basename "$0")
+
+usage() {
+    cat <<EOF
+Syntax: $APP FILENAME
+
+Read newline separated appliance names from a file and run ./bt-iso for each
+one.
+
+Arguments::
+
+    filename    - path to file containing appliance list.
+    --publish   - pass '--publish' switch to bt-iso
+
+Environment::
+
+    BT_DEBUG    - verbose output (also picked up by other bt scripts)
+
+EOF
+    exit 1
+}
+
+BT_DEBUG=${BT_DEBUG:-}
+[[ -z "$BT_DEBUG" ]] || set -x
+
+publish=
+input_file=
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --publish)
+            publish="--publish";;
+        -h|--help)
+            usage;;
+        *)
+            if [[ -n "$input_file" ]]; then
+                fatal "Only one file name allowed"
+            elif [[ ! -f "$1" ]]; then
+                fatal "file not found: $1"
+            fi
+            input_file="$1";;
+    esac
+    shift
+done
+[[ -n "$input_file" ]] || fatal "One filename must be given"
+
+link=$(readlink -f "$0")
+BT=$(dirname "$link")
+export BT
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] || continue
+    "$BT/bt-iso" $publish "$line"
+done < "$input_file"
