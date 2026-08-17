@@ -212,14 +212,16 @@ done
 
 [[ -n "$appname" ]] || usage "Must give one app name"
 
-# don't try screens for tkldev & extend MAX_COUNT for gitlab & canvas
+# times to retry taking screenshots
+MAX_RETRIES=15
+# don't try screens for tkldev & extend MAX_RETRIES for gitlab & canvas
 case $appname in
     tkldev|core)
         info "$appname build - disabling screenshots as no web UI"
         no_screens="true";;
     gitlab|canvas)
         # GitLab & Canvas take ages to start...
-        export MAX_COUNT=70;; # possibly overkill
+        export MAX_RETRIES=70;; # possibly overkill
 esac
 
 # check for container ports early
@@ -479,8 +481,7 @@ if [[ -z "$no_screens" ]]; then
 
     info "taking screenshots"
     count=0
-    max_tries=60
-    while [[ "$count" -lt $max_tries ]]; do
+    while [[ "$count" -lt $MAX_RETRIES ]]; do
         count=$((count + 1))
         exit_code=0
         info "attempt $count"
@@ -495,9 +496,10 @@ if [[ -z "$no_screens" ]]; then
         fi
     done
     if [[ ! $exit_code -eq 0 ]]; then
-        warning "Screenshots failed, stopping '$appname' container: $app_cont_id"
+        warning "Screenshots failed, dumping logs & stopping '$appname' container: $app_cont_id"
+        podman logs "$app_cont_id"
         podman stop "$app_cont_id"
-        fatal "Screenshots failed after $max_tries attempts - container stopped"
+        fatal "Screenshots failed after $MAX_RETRIES attempts - container stopped"
     fi
 fi
 
