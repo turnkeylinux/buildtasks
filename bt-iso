@@ -110,6 +110,14 @@ get_codename() {
     esac
 }
 
+product_build_clean() {
+    if [[ ! -d build ]] || [[ -n "$DEBUG" ]]; then
+        return
+    fi
+    deck -D build/root.sandbox 2>/dev/null || true
+    make clean 2>/dev/null || true
+}
+
 container_status() {
     podman container inspect "$1" --format "{{.State.Status}}"
 }
@@ -124,7 +132,7 @@ container_rm() {
 image_rm() {
     local cont_name=$1
     local image_name=$2
-    info "removing '$cont_name' image: $(podman rmi "$image_name")"
+    info "removing '$cont_name' image & container: $(podman rmi -f "$image_name")"
 }
 
 check_debug() {
@@ -391,15 +399,12 @@ if [[ -n "$use_existing" ]]; then
 else
     info "Preparation done. Building appliance $appname."
     cd "$BT_PRODUCTS/$appname"
-    deck -D build/root.sandbox || true
-    make clean || true
-    mkdir -p build
+    product_build_clean
     make 2>&1 | tee build/log || true
 
     if [[ ! -e build/product.iso ]]; then
         if [[ -z "$BT_DEBUG" ]]; then
-            deck -D build/root.sandbox >/dev/null 2>&1 || true
-            make clean >/dev/null 2>&1 || true
+            product_build_clean
         fi
         fatal "Build failed..."
     fi
@@ -515,10 +520,8 @@ fi
 
 if [[ -z "$BT_DEBUG" ]]; then
     # cleanup & reset ready for next build
-    deck -D build/root.sandbox
-    make clean
+    product_build_clean
     if [[ -z "$no_screens" ]]; then
-        container_rm "$appname" "$image_name"
         container_rm "selenium" "$sel_cont_id"
         image_rm "$appname" "$image_name"
     fi
