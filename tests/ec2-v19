@@ -2,6 +2,8 @@
 """Focused checks for the credential-free v19 EBS population path."""
 
 import importlib
+import importlib.machinery
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
@@ -11,10 +13,18 @@ from unittest import mock
 
 
 EC2_ROOT = Path(__file__).resolve().parents[1] / "bin/ec2"
+SSHKEYS_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/cloud/overlay/usr/lib/inithooks/firstboot.d/40ec2-sshkeys"
+)
 sys.path.insert(0, str(EC2_ROOT))
 sys.modules.setdefault("ec2metadata", mock.Mock())
 ebs_bundle = importlib.import_module("ebs_bundle")
 ebs_populate = importlib.import_module("ebs_populate")
+sshkeys_loader = importlib.machinery.SourceFileLoader("ec2_sshkeys", str(SSHKEYS_HOOK))
+sshkeys_spec = importlib.util.spec_from_loader("ec2_sshkeys", sshkeys_loader)
+sshkeys = importlib.util.module_from_spec(sshkeys_spec)
+sshkeys_loader.exec_module(sshkeys)
 
 
 class FakeDevice:
@@ -43,6 +53,19 @@ class FakeDevice:
 
 
 class PopulateTests(unittest.TestCase):
+    def test_ssh_key_follows_the_configured_login_principal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "inithooks"
+            for value, expected in (
+                ("true", "admin"), ("TRUE", "admin"), ("false", "root"),
+            ):
+                with self.subTest(value=value):
+                    config.write_text(f"SUDOADMIN={value}\n", encoding="utf-8")
+                    self.assertEqual(expected, sshkeys.login_username(config))
+
+            config.write_text("OTHER=value\n", encoding="utf-8")
+            self.assertEqual("root", sshkeys.login_username(config))
+
     def test_local_command_imports_without_aws_site_packages(self):
         completed = subprocess.run(
             [sys.executable, "-S", str(EC2_ROOT / "ebs_populate.py"), "--help"],

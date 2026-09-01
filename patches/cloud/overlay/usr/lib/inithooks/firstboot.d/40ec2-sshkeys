@@ -10,7 +10,17 @@ if '_TURNKEY_INIT' in os.environ:
 import pwd
 import ec2metadata
 
-USERNAME = 'root'
+
+def login_username(config='/etc/default/inithooks'):
+    username = 'root'
+    with open(config) as fob:
+        for line in fob:
+            key, separator, value = line.partition('=')
+            if separator and key.strip() == 'SUDOADMIN':
+                if value.strip().strip("'\"").lower() == 'true':
+                    username = 'admin'
+                break
+    return username
 
 
 def authorize_sshkeys(keys, username):
@@ -31,7 +41,7 @@ def authorize_sshkeys(keys, username):
 def main():
     keys = ec2metadata.get('public-keys')
     if keys:
-        authorize_sshkeys(keys, USERNAME)
+        authorize_sshkeys(keys, login_username())
 
 
 if __name__ == "__main__":
