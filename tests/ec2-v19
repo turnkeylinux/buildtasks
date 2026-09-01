@@ -123,6 +123,28 @@ class PopulateTests(unittest.TestCase):
             self.assertIn((["chroot", rootfs + ".mount", "grub-install", "/dev/test"], {"check": True}), commands)
             self.assertFalse(Path(rootfs + ".mount").exists())
 
+    def test_populate_normalizes_filesystem_root_before_chroot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir(mode=0o700)
+            device = FakeDevice()
+            root_modes = []
+
+            def rsync(source, destination):
+                Path(destination).chmod(Path(source).stat().st_mode & 0o777)
+
+            def run(command, **kwargs):
+                if command[:2] == ["chroot", rootfs + ".mount"]:
+                    root_modes.append(Path(rootfs + ".mount").stat().st_mode & 0o777)
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync", side_effect=rsync):
+                ebs_bundle.populate(rootfs, device)
+
+            self.assertTrue(root_modes)
+            self.assertEqual(root_modes, [0o755] * len(root_modes))
+
     def test_unmounts_after_chroot_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             rootfs = str(Path(temporary) / "rootfs")

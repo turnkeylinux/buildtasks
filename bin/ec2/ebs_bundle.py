@@ -217,6 +217,7 @@ def populate(rootfs, device, filesystem="ext4"):
     try:
         log.info("syncing rootfs to partition")
         utils.rsync(rootfs, mount_path)
+        os.chmod(mount_path, 0o755)
 
         log.info("installing GRUB on volume")
         for submount in ("/sys", "/proc", "/dev"):
