@@ -64,42 +64,49 @@ fi
 EOF
 chmod 0755 "$commands/turnkey-version"
 
-cat > "$commands/chroot" <<'EOF'
+cat > "$commands/fab-chroot" <<'EOF'
 #!/bin/bash
 set -eu
 
-rootfs=$1
-shift
-[[ $1 == /usr/bin/env ]]
-shift
-profiles_arg=$1
-shift
-[[ $profiles_arg == PROFILES_CONF=* ]]
-guest_profiles=${profiles_arg#PROFILES_CONF=}
-[[ $1 == TKLBAM_LIB_PATH=/usr/lib/tklbam ]]
-shift
-[[ $1 == LD_LIBRARY_PATH=/usr/lib/tklbam-pypy2/bin ]]
-shift
-[[ $1 == /usr/lib/tklbam-pypy2/bin/pypy ]]
-shift
-guest_generator=$1
-root_arg=$2
-guest_output=$3
-[[ $root_arg == / ]]
+[[ $# -eq 5 ]]
+[[ $1 == -e ]]
+[[ $2 == PROFILES_CONF:TKLBAM_LIB_PATH:LD_LIBRARY_PATH ]]
+rootfs=$3
+[[ $4 == --script ]]
+wrapper=$5
+[[ $PROFILES_CONF == /var/tmp/buildtasks-tklbam-profile.*/profiles ]]
+[[ $TKLBAM_LIB_PATH == /usr/lib/tklbam ]]
+[[ $LD_LIBRARY_PATH == /usr/lib/tklbam-pypy2/bin ]]
+stage=${PROFILES_CONF%/profiles}
+guest_profiles=$PROFILES_CONF
+guest_generator=$stage/generate-tklbam-profile
+guest_output=$stage/output
+[[ $wrapper == "$rootfs$stage/run-tklbam-profile" ]]
 [[ -x $rootfs/usr/lib/tklbam-pypy2/bin/pypy ]]
 
-cmp -s "$TEST_GENERATOR" "$rootfs$guest_generator"
 cmp -s "$TEST_PROFILES/core" "$rootfs$guest_profiles/core"
 cmp -s "$TEST_PROFILES/tkldev" "$rootfs$guest_profiles/tkldev"
 cmp -s "$TEST_PROFILES/hooks/tkldev/profile-hook" \
     "$rootfs$guest_profiles/hooks/tkldev/profile-hook"
-printf 'root:%s:%s\n' "$guest_generator" "$guest_output" >> "$TEST_LOG"
-if [[ -n ${TEST_CHROOT_FAIL:-} ]]; then
-    exit "$TEST_CHROOT_FAIL"
-fi
+
+expected=$(mktemp)
+mapped=$(mktemp)
+cleanup_fab() {
+    rm -f -- "$expected" "$mapped"
+}
+trap cleanup_fab EXIT
+cat > "$expected" <<EXPECTED
+#!/bin/bash
+exec /usr/lib/tklbam-pypy2/bin/pypy "$guest_generator" / "$guest_output"
+EXPECTED
+cmp -s "$expected" "$wrapper"
+sed "s|^exec /usr/lib/tklbam-pypy2/bin/pypy |exec $TEST_PYPY |" \
+    "$wrapper" > "$mapped"
+chmod 0755 "$mapped"
+TEST_ROOTFS=$rootfs "$mapped"
 
 archive_root=$(mktemp -d)
-trap 'rm -rf -- "$archive_root"' EXIT
+trap 'rm -rf -- "$archive_root"; cleanup_fab' EXIT
 printf 'dirindex\n' > "$archive_root/dirindex"
 printf 'dirindex conf\n' > "$archive_root/dirindex.conf"
 awk '
@@ -111,7 +118,22 @@ awk '
 ' "$rootfs/var/lib/dpkg/status" | sort > "$archive_root/packages"
 tar -C "$archive_root" -zcf "$rootfs$guest_output/$TEST_NAME.tar.gz" .
 EOF
-chmod 0755 "$commands/chroot"
+chmod 0755 "$commands/fab-chroot"
+
+cat > "$commands/root-pypy" <<'EOF'
+#!/bin/bash
+set -eu
+
+guest_generator=$1
+[[ $2 == / ]]
+guest_output=$3
+cmp -s "$TEST_GENERATOR" "$TEST_ROOTFS$guest_generator"
+printf 'root:%s:%s\n' "$guest_generator" "$guest_output" >> "$TEST_LOG"
+if [[ -n ${TEST_CHROOT_FAIL:-} ]]; then
+    exit "$TEST_CHROOT_FAIL"
+fi
+EOF
+chmod 0755 "$commands/root-pypy"
 
 cat > "$commands/cp" <<'EOF'
 #!/bin/bash
@@ -163,6 +185,7 @@ run_release() {
         export TEST_GENERATOR=$bt/bin/generate-tklbam-profile
         export TEST_LOG=$log
         export TEST_NAME=$name
+        export TEST_PYPY=$commands/root-pypy
         export TEST_PROFILES=$profiles
         "$bt/bin/iso-release" --no-screens "$output"
     )
