@@ -33,10 +33,11 @@ profiles=$fixture/profiles
 commands=$fixture/bin
 log=$fixture/calls
 name=turnkey-tkldev-19.0-trixie-amd64
-install -d "$bt/bin" "$bt/config" "$profiles" "$commands"
+install -d "$bt/bin" "$bt/config" "$profiles/hooks/tkldev" "$commands"
 cp "$repo/bin/iso-release" "$repo/bin/generate-tklbam-profile" "$bt/bin/"
 printf 'core profile\n' > "$profiles/core"
 printf 'tkldev profile\n' > "$profiles/tkldev"
+printf 'profile hook\n' > "$profiles/hooks/tkldev/profile-hook"
 
 cat > "$bt/config/common.cfg" <<'EOF'
 export BT_PROFILES=${TEST_BT_PROFILES:?}
@@ -63,13 +64,71 @@ fi
 EOF
 chmod 0755 "$commands/turnkey-version"
 
+cat > "$commands/chroot" <<'EOF'
+#!/bin/bash
+set -eu
+
+rootfs=$1
+shift
+[[ $1 == /usr/bin/env ]]
+shift
+profiles_arg=$1
+shift
+[[ $profiles_arg == PROFILES_CONF=* ]]
+guest_profiles=${profiles_arg#PROFILES_CONF=}
+[[ $1 == TKLBAM_LIB_PATH=/usr/lib/tklbam ]]
+shift
+[[ $1 == /usr/lib/tklbam-pypy2/bin/pypy ]]
+shift
+guest_generator=$1
+root_arg=$2
+guest_output=$3
+[[ $root_arg == / ]]
+[[ -x $rootfs/usr/lib/tklbam-pypy2/bin/pypy ]]
+
+cmp -s "$TEST_GENERATOR" "$rootfs$guest_generator"
+cmp -s "$TEST_PROFILES/core" "$rootfs$guest_profiles/core"
+cmp -s "$TEST_PROFILES/tkldev" "$rootfs$guest_profiles/tkldev"
+cmp -s "$TEST_PROFILES/hooks/tkldev/profile-hook" \
+    "$rootfs$guest_profiles/hooks/tkldev/profile-hook"
+printf 'root:%s:%s\n' "$guest_generator" "$guest_output" >> "$TEST_LOG"
+if [[ -n ${TEST_CHROOT_FAIL:-} ]]; then
+    exit "$TEST_CHROOT_FAIL"
+fi
+
+archive_root=$(mktemp -d)
+trap 'rm -rf -- "$archive_root"' EXIT
+printf 'dirindex\n' > "$archive_root/dirindex"
+printf 'dirindex conf\n' > "$archive_root/dirindex.conf"
+awk '
+    /^Package: / { package = $2 }
+    /^Status: install ok installed$/ &&
+        package !~ /^(di-live|tkl-installer|live-boot|live-boot-initramfs-tools|live-tools)$/ {
+            print package
+        }
+' "$rootfs/var/lib/dpkg/status" | sort > "$archive_root/packages"
+tar -C "$archive_root" -zcf "$rootfs$guest_output/$TEST_NAME.tar.gz" .
+EOF
+chmod 0755 "$commands/chroot"
+
+cat > "$commands/cp" <<'EOF'
+#!/bin/bash
+set -eu
+if [[ -n ${TEST_COPY_FAIL:-} && " $* " == *'/buildtasks-tklbam-profile.'*'/output/. '* ]]; then
+    exit "$TEST_COPY_FAIL"
+fi
+exec /bin/cp "$@"
+EOF
+chmod 0755 "$commands/cp"
+
 make_product() {
     local case_name=$1
     local product=$fixture/$case_name/product
     local rootfs=$product/build/root.sandbox
     install -d "$rootfs/usr/lib/tklbam-pypy2/bin" \
-        "$rootfs/usr/lib/tklbam" "$rootfs/var/lib/dpkg" \
+        "$rootfs/usr/lib/tklbam" "$rootfs/var/lib/dpkg" "$rootfs/var/tmp" \
         "$fixture/$case_name/output"
+    install -m 0755 /bin/true "$rootfs/usr/lib/tklbam-pypy2/bin/pypy"
     printf 'changelog\n' > "$product/changelog"
     printf 'iso\n' > "$product/build/product.iso"
     cat > "$rootfs/var/lib/dpkg/status" <<'EOF'
@@ -85,54 +144,24 @@ Status: install ok installed
 Package: removed-package
 Status: deinstall ok config-files
 EOF
-    cat > "$rootfs/usr/lib/tklbam-pypy2/bin/pypy" <<'EOF'
-#!/bin/bash
-set -eu
-
-generator=$1
-rootfs=$2
-output=$3
-[[ $generator == "$TEST_GENERATOR" ]]
-[[ $PROFILES_CONF == "$TEST_PROFILES" ]]
-[[ $TKLBAM_LIB_PATH == "$rootfs/usr/lib/tklbam" ]]
-printf 'root:%s:%s\n' "$rootfs" "$output" >> "$TEST_LOG"
-if [[ -n ${TEST_ROOT_RUNTIME_FAIL:-} ]]; then
-    exit "$TEST_ROOT_RUNTIME_FAIL"
-fi
-
-archive_root=$(mktemp -d)
-cleanup_archive() {
-    rm -rf -- "$archive_root"
-}
-trap cleanup_archive EXIT
-printf 'dirindex\n' > "$archive_root/dirindex"
-printf 'dirindex conf\n' > "$archive_root/dirindex.conf"
-awk '
-    /^Package: / { package = $2 }
-    /^Status: install ok installed$/ &&
-        package !~ /^(di-live|tkl-installer|live-boot|live-boot-initramfs-tools|live-tools)$/ {
-            print package
-        }
-' "$rootfs/var/lib/dpkg/status" | sort > "$archive_root/packages"
-tar -C "$archive_root" -zcf "$output/$TEST_NAME.tar.gz" .
-EOF
-    chmod 0755 "$rootfs/usr/lib/tklbam-pypy2/bin/pypy"
     printf '%s\n' "$product"
 }
 
 run_release() {
     local product=$1
     local output=$2
-    local runtime_fail=${3:-}
+    local chroot_fail=${3:-}
+    local copy_fail=${4:-}
     (
         cd "$product"
         export PATH="$commands:$PATH"
         export TEST_BT_PROFILES=$profiles
+        export TEST_CHROOT_FAIL=$chroot_fail
+        export TEST_COPY_FAIL=$copy_fail
         export TEST_GENERATOR=$bt/bin/generate-tklbam-profile
         export TEST_LOG=$log
         export TEST_NAME=$name
         export TEST_PROFILES=$profiles
-        export TEST_ROOT_RUNTIME_FAIL=$runtime_fail
         "$bt/bin/iso-release" --no-screens "$output"
     )
 }
@@ -165,6 +194,11 @@ remove_host_pypy() {
     fi
 }
 
+assert_no_stage() {
+    ! find "$1/build/root.sandbox/var/tmp" -mindepth 1 -maxdepth 1 \
+        -name 'buildtasks-tklbam-profile.*' -print -quit | grep -q .
+}
+
 : > "$log"
 install_host_pypy
 host_product=$(make_product host)
@@ -185,8 +219,7 @@ tar -tzf "$archive" | grep -qx './dirindex.conf'
 tar -tzf "$archive" | grep -qx './packages'
 tar -xOzf "$archive" ./packages | grep -qx bash
 ! tar -xOzf "$archive" ./packages | grep -Eq '^(live-tools|tkl-installer)$'
-! find "$root_product/build/root.sandbox" -name 'buildtasks-tklbam-profile.*' \
-    -print -quit | grep -q .
+assert_no_stage "$root_product"
 
 : > "$log"
 failure_product=$(make_product failure)
@@ -197,5 +230,15 @@ set -e
 [[ $status -eq 37 ]]
 grep -q '^root:' "$log"
 [[ ! -e "$fixture/failure/output/$name.tklbam/$name.tar.gz" ]]
-! find "$failure_product/build/root.sandbox" -name 'buildtasks-tklbam-profile.*' \
-    -print -quit | grep -q .
+assert_no_stage "$failure_product"
+
+: > "$log"
+copy_product=$(make_product copy-failure)
+set +e
+run_release "$copy_product" "$fixture/copy-failure/output" '' 41
+status=$?
+set -e
+[[ $status -eq 41 ]]
+grep -q '^root:' "$log"
+[[ ! -e "$fixture/copy-failure/output/$name.tklbam/$name.tar.gz" ]]
+assert_no_stage "$copy_product"
