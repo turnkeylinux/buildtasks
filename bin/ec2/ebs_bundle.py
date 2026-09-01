@@ -30,8 +30,6 @@ import subprocess
 import sys
 import time
 
-from botocore.exceptions import ClientError
-
 import utils
 
 log = utils.get_logger("ebs-bundle")
@@ -102,6 +100,8 @@ class Volume:
 
     def delete(self, max_attempts=10):
         if self.vol:
+            from botocore.exceptions import ClientError
+
             attempt = 0
             while True:
                 attempt += 1
@@ -153,8 +153,8 @@ class Volume:
 
 
 class Device:
-    def __init__(self):
-        self.real_path = self._get_freedevice()
+    def __init__(self, real_path=None):
+        self.real_path = real_path if real_path else self._get_freedevice()
         if not self.real_path:
             raise EbsBundleError("no free devices available...")
 
@@ -197,11 +197,44 @@ class Device:
         subprocess.run(["partprobe", self.real_path], check=True)
         time.sleep(5)
         self.root_path = self.real_path
-        self.real_path = self.real_path + "2"
+        separator = "p" if os.path.basename(self.real_path).startswith("nvme") else ""
+        self.real_path = self.real_path + separator + "2"
 
     def __del__(self):
         if self.is_mounted():
             self.umount()
+
+
+def populate(rootfs, device, filesystem="ext4"):
+    """Populate one pre-attached block device without making an AWS call."""
+    log.info("creating partitions")
+    device.mkpart()
+    device.mkfs(filesystem)
+    mount_path = rootfs + ".mount"
+    device.mount(mount_path)
+
+    submounts = []
+    try:
+        log.info("syncing rootfs to partition")
+        utils.rsync(rootfs, mount_path)
+
+        log.info("installing GRUB on volume")
+        for submount in ("/sys", "/proc", "/dev"):
+            subprocess.run(
+                ["mount", "--bind", "--make-rslave", submount, mount_path + submount],
+                check=True,
+            )
+            submounts.append(submount)
+        subprocess.run(["chroot", mount_path, "grub-install", device.root_path], check=True)
+        subprocess.run(["chroot", mount_path, "update-grub"], check=True)
+        subprocess.run(["chroot", mount_path, "update-initramfs", "-u"], check=True)
+    finally:
+        for submount in reversed(submounts):
+            subprocess.run(["umount", "-l", mount_path + submount], check=False)
+        if device.is_mounted():
+            device.umount()
+        if os.path.isdir(mount_path):
+            os.rmdir(mount_path)
 
 
 def bundle(rootfs, snapshot_name, size=10, filesystem="ext4"):
@@ -214,33 +247,8 @@ def bundle(rootfs, snapshot_name, size=10, filesystem="ext4"):
     device = Device()
     volume.attach(utils.get_instanceid(), device)
 
-    log.info("creating partitions")
-    device.mkpart()
-    device.mkfs(filesystem)
-    mount_path = rootfs + ".mount"
-    device.mount(mount_path)
-
-    log.info("syncing rootfs to partition")
-    utils.rsync(rootfs, mount_path)
-
-    log.info("installing GRUB on volume")
-    submounts = ["/sys", "/proc", "/dev"]
-    for s in submounts:
-        subprocess.run(["mount", "--bind", "--make-rslave", s, mount_path + s],
-                       check=True)
-    subprocess.run(["chroot", mount_path, "grub-install", device.root_path],
-                   check=True)
-    subprocess.run(["chroot", mount_path, "update-grub"], check=True)
-    subprocess.run(["chroot", mount_path, "update-initramfs", "-u"],
-                   check=True)
-
-    submounts.reverse()
-    for s in submounts:
-        subprocess.run(["umount", "-l", mount_path + s], check=True)
-
-    device.umount()
+    populate(rootfs, device, filesystem)
     volume.detach()
-    os.removedirs(mount_path)
 
     log.info("creating snapshot from volume")
     snapshot = Snapshot()

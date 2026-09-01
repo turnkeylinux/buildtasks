@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+"""Focused checks for the credential-free v19 EBS population path."""
+
+import importlib
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+
+EC2_ROOT = Path(__file__).resolve().parents[1] / "bin/ec2"
+sys.path.insert(0, str(EC2_ROOT))
+sys.modules.setdefault("ec2metadata", mock.Mock())
+ebs_bundle = importlib.import_module("ebs_bundle")
+ebs_populate = importlib.import_module("ebs_populate")
+
+
+class FakeDevice:
+    def __init__(self):
+        self.root_path = "/dev/test"
+        self.mounted = False
+        self.calls = []
+
+    def mkpart(self):
+        self.calls.append("mkpart")
+
+    def mkfs(self, filesystem):
+        self.calls.append(("mkfs", filesystem))
+
+    def mount(self, path):
+        Path(path).mkdir()
+        self.mounted = True
+        self.calls.append(("mount", path))
+
+    def is_mounted(self):
+        return self.mounted
+
+    def umount(self):
+        self.mounted = False
+        self.calls.append("umount")
+
+
+class PopulateTests(unittest.TestCase):
+    def test_local_command_imports_without_aws_site_packages(self):
+        completed = subprocess.run(
+            [sys.executable, "-S", str(EC2_ROOT / "ebs_populate.py"), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_ec2_patch_installs_reviewed_tklamq_before_signed_hubclient(self):
+        conf = (EC2_ROOT.parents[1] / "patches/ec2/conf").read_text()
+        digest = "d972012e6aae81ada59b071ede494f46194db706a6805ce048215b510a168a2d"
+        source_commit = "85e3d33c2d943e34db2c17e05403ea4a0f756784"
+
+        self.assertIn(digest, conf)
+        self.assertIn(source_commit, conf)
+        self.assertIn("https://github.com/turnkeylinux/tklamq/pull/5", conf)
+        candidate_install = conf.index('install "$tklamq_candidate"')
+        hubclient_install = conf.index("install hubclient=0.3.0")
+        self.assertLess(candidate_install, hubclient_install)
+        self.assertIn('rm -f "$tklamq_candidate"', conf)
+        self.assertIn("dpkg-query -W", conf)
+        self.assertIn("/usr/bin/install -d -m 0755 /usr/share/doc/tklamq", conf)
+        self.assertNotIn("\ninstall -d", conf)
+        for forbidden in ("trusted=yes", "sources.list", "preferences.d", "GH_TOKEN", "AWS_"):
+            self.assertNotIn(forbidden, conf)
+
+    def test_nvme_partition_path_uses_p_separator(self):
+        device = ebs_bundle.Device("/dev/nvme1n1")
+        with mock.patch.object(ebs_bundle.subprocess, "run") as run, \
+                mock.patch.object(ebs_bundle.time, "sleep"):
+            device.mkpart()
+        self.assertEqual(device.root_path, "/dev/nvme1n1")
+        self.assertEqual(device.real_path, "/dev/nvme1n1p2")
+        self.assertEqual(run.call_count, 2)
+
+    def test_populates_and_unmounts_without_aws(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir()
+            device = FakeDevice()
+            commands = []
+
+            def run(command, **kwargs):
+                commands.append((command, kwargs))
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync") as rsync:
+                ebs_bundle.populate(rootfs, device)
+
+            self.assertEqual(device.calls[:2], ["mkpart", ("mkfs", "ext4")])
+            self.assertEqual(device.calls[-1], "umount")
+            rsync.assert_called_once_with(rootfs, rootfs + ".mount")
+            self.assertIn((["chroot", rootfs + ".mount", "grub-install", "/dev/test"], {"check": True}), commands)
+            self.assertFalse(Path(rootfs + ".mount").exists())
+
+    def test_unmounts_after_chroot_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir()
+            device = FakeDevice()
+
+            def run(command, **kwargs):
+                if command[:3] == ["chroot", rootfs + ".mount", "grub-install"]:
+                    raise RuntimeError("reproduced grub failure")
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync"):
+                with self.assertRaisesRegex(RuntimeError, "reproduced grub failure"):
+                    ebs_bundle.populate(rootfs, device)
+
+            self.assertFalse(device.mounted)
+            self.assertFalse(Path(rootfs + ".mount").exists())
+
+    def test_command_uses_explicit_local_device(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = Path(temporary) / "rootfs"
+            device = Path(temporary) / "device"
+            rootfs.mkdir()
+            device.touch()
+            with mock.patch.object(sys, "argv", ["ebs_populate.py", str(rootfs), str(device)]), \
+                    mock.patch.object(ebs_populate, "Device") as device_class, \
+                    mock.patch.object(ebs_populate, "populate") as populate:
+                ebs_populate.main()
+            device_class.assert_called_once_with(str(device))
+            populate.assert_called_once_with(str(rootfs), device_class.return_value)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
