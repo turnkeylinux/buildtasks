@@ -78,6 +78,8 @@ shift
 guest_profiles=${profiles_arg#PROFILES_CONF=}
 [[ $1 == TKLBAM_LIB_PATH=/usr/lib/tklbam ]]
 shift
+[[ $1 == LD_LIBRARY_PATH=/usr/lib/tklbam-pypy2/bin ]]
+shift
 [[ $1 == /usr/lib/tklbam-pypy2/bin/pypy ]]
 shift
 guest_generator=$1

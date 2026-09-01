@@ -122,6 +122,7 @@ if [[ -e $BT_PROFILES/$appname ]]; then
             chroot "$rootfs" /usr/bin/env \
                 PROFILES_CONF="$guest_staging/profiles" \
                 TKLBAM_LIB_PATH=/usr/lib/tklbam \
+                LD_LIBRARY_PATH=/usr/lib/tklbam-pypy2/bin \
                 /usr/lib/tklbam-pypy2/bin/pypy \
                 "$guest_staging/generate-tklbam-profile" / \
                 "$guest_staging/output"
