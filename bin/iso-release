@@ -90,7 +90,15 @@ cp build/product.iso "$O/$name.iso"
 if [[ -e $BT_PROFILES/$appname ]]; then
     mkdir -p "$O/$name.tklbam"
     export PROFILES_CONF=$BT_PROFILES
-    "$BT/bin/generate-tklbam-profile" "$O/$name.iso" "$O/$name.tklbam"
+    if [[ -x /usr/lib/tklbam-pypy2/bin/pypy ]]; then
+        "$BT/bin/generate-tklbam-profile" "$O/$name.iso" "$O/$name.tklbam"
+    else
+        rootfs=$(readlink -f "$rootfs")
+        PROFILES_CONF="$BT_PROFILES" \
+        TKLBAM_LIB_PATH="$rootfs/usr/lib/tklbam" \
+            "$rootfs/usr/lib/tklbam-pypy2/bin/pypy" \
+            "$BT/bin/generate-tklbam-profile" "$rootfs" "$O/$name.tklbam"
+    fi
 fi
 if [[ -z "$no_screens" ]]; then
     mkdir -p "$O/$name.screens"
