@@ -175,10 +175,12 @@ class PopulateTests(unittest.TestCase):
 
     def test_tls_challenge_waits_until_the_token_is_served(self):
         hook = TLS_CHALLENGE_HOOK.read_text()
-        self.assertIn("http://127.0.0.1/.well-known/acme-challenge/", hook)
-        self.assertIn("curl --silent --fail --max-time 1", hook)
+        self.assertIn('ec2metadata --public-ipv4', hook)
+        self.assertIn('--resolve "$DOMAIN:80:$public_ip"', hook)
+        self.assertIn("curl --silent --fail --max-time 1 --noproxy '*'", hook)
         self.assertIn('cmp -s - "$token_path"', hook)
-        self.assertIn("HTTP challenge server did not publish", hook)
+        self.assertIn("ready_count >= 3", hook)
+        self.assertIn("HTTP challenge was not stable", hook)
 
     def test_nvme_partition_path_uses_p_separator(self):
         device = ebs_bundle.Device("/dev/nvme1n1")

@@ -22,21 +22,41 @@ done
 
 function deploy_challenge {
     local DOMAIN="${1}" TOKEN_FILENAME="${2}" TOKEN_VALUE="${3}"
-    local challenge_url="http://127.0.0.1/.well-known/acme-challenge/$TOKEN_FILENAME"
+    local challenge_url="http://$DOMAIN/.well-known/acme-challenge/$TOKEN_FILENAME"
+    local public_ip
+    local ready_count=0
     local token_path="$WELLKNOWN/$TOKEN_FILENAME"
 
     hook_log info "Deploying challenge for $DOMAIN"
     hook_log info "Serving $token_path on http://$DOMAIN/.well-known/acme-challenge/$TOKEN_FILENAME"
-    $HTTP_BIN --deploy "$token_path"
+
+    public_ip="$(ec2metadata --public-ipv4 2>/dev/null || true)"
+    if [[ ! "$public_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        hook_log fatal "Public IPv4 address is unavailable for challenge verification"
+    fi
 
     for _attempt in {1..50}; do
-        if curl --silent --fail --max-time 1 "$challenge_url" | cmp -s - "$token_path"; then
-            return 0
+        if "$HTTP_BIN" --deploy "$token_path" 2>/dev/null; then
+            break
         fi
         sleep 0.1
     done
 
-    hook_log fatal "HTTP challenge server did not publish $TOKEN_FILENAME"
+    for _attempt in {1..50}; do
+        if curl --silent --fail --max-time 1 --noproxy '*' \
+                --resolve "$DOMAIN:80:$public_ip" "$challenge_url" \
+                | cmp -s - "$token_path"; then
+            ((ready_count += 1))
+            if (( ready_count >= 3 )); then
+                return 0
+            fi
+        else
+            ready_count=0
+        fi
+        sleep 0.2
+    done
+
+    hook_log fatal "HTTP challenge was not stable on the public instance address"
 }
 
 function clean_challenge {
