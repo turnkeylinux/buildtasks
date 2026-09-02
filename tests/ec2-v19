@@ -28,6 +28,10 @@ TLS_CHALLENGE_HOOK = (
     / "patches/ec2/overlay/usr/share/confconsole/letsencrypt"
     / "dehydrated-confconsole.hook-http-01.sh"
 )
+TLS_FIRSTBOOT_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/82hub-letsencrypt"
+)
 sys.path.insert(0, str(EC2_ROOT))
 sys.modules.setdefault("ec2metadata", mock.Mock())
 ebs_bundle = importlib.import_module("ebs_bundle")
@@ -161,6 +165,12 @@ class PopulateTests(unittest.TestCase):
         helper = TLS_HELPER.read_text()
         self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
         self.assertIn("hostname is not available yet; deferring certificate request", helper)
+
+    def test_tls_firstboot_publishes_hubdns_before_requesting_a_certificate(self):
+        hook = TLS_FIRSTBOOT_HOOK.read_text()
+        publish = hook.index("systemctl start hubdns.service")
+        certificate = hook.index("/usr/local/sbin/turnkey-tklapp-letsencrypt")
+        self.assertLess(publish, certificate)
 
     def test_tls_challenge_waits_until_the_token_is_served(self):
         hook = TLS_CHALLENGE_HOOK.read_text()
