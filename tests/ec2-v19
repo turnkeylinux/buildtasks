@@ -97,7 +97,7 @@ class PopulateTests(unittest.TestCase):
         for forbidden in ("trusted=yes", "sources.list", "preferences.d", "GH_TOKEN", "AWS_"):
             self.assertNotIn(forbidden, conf)
 
-        hubdns_digest = "49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc"
+        hubdns_digest = "4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352"
         self.assertIn(hubdns_digest, conf)
         self.assertLess(conf.index('install "$hubdns_candidate"'), hubclient_install)
         self.assertIn('rm -f "$hubdns_candidate"', conf)

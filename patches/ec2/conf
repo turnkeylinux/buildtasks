@@ -15,7 +15,7 @@ install "$tklamq_candidate"
 rm -f "$tklamq_candidate"
 
 hubdns_candidate=/root/hubdns_1.4.0+fix1_all.deb
-hubdns_sha256=49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc
+hubdns_sha256=4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352
 echo "$hubdns_sha256  $hubdns_candidate" | sha256sum --check --strict
 install "$hubdns_candidate"
 rm -f "$hubdns_candidate"
@@ -40,10 +40,11 @@ EOF
 cat > /usr/share/doc/hubdns/turnkey-v19-build-input.json <<'EOF'
 {
   "artifact": "hubdns_1.4.0+fix1_all.deb",
-  "sha256": "49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc",
+  "sha256": "4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352",
   "source_commits": [
     "cc127d63c306089059ab8eebe1d67b1db119cca6",
-    "75b616701c55fb0a2aac2b4e9535f30ed29accfb"
+    "75b616701c55fb0a2aac2b4e9535f30ed29accfb",
+    "8706ec3a5acc3b3118dbec8dc8f681c6a999160b"
   ]
 }
 EOF
