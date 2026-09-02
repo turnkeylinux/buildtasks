@@ -14,6 +14,7 @@ from unittest import mock
 
 
 EC2_ROOT = Path(__file__).resolve().parents[1] / "bin/ec2"
+BT_EC2 = Path(__file__).resolve().parents[1] / "bt-ec2"
 SSHKEYS_HOOK = (
     Path(__file__).resolve().parents[1]
     / "patches/cloud/overlay/usr/lib/inithooks/firstboot.d/40ec2-sshkeys"
@@ -58,6 +59,18 @@ class FakeDevice:
 
 
 class PopulateTests(unittest.TestCase):
+    def test_bt_ec2_can_delegate_aws_orchestration_to_its_caller(self):
+        command = BT_EC2.read_text()
+        self.assertIn("--local-device=*", command)
+        self.assertIn('[[ -b "$local_device" ]]', command)
+        local_populate = command.index(
+            '"$BT/bin/ec2/ebs_populate.py" "$rootfs" "$local_device"'
+        )
+        direct_aws = command.index(
+            '"$BT/bin/ec2/ebs.py" "${ebs_opts[@]}" "$rootfs"'
+        )
+        self.assertLess(local_populate, direct_aws)
+
     def test_boto3_client_preserves_temporary_credential_token(self):
         boto3 = mock.Mock()
         credentials = {
