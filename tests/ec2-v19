@@ -59,6 +59,13 @@ class FakeDevice:
 
 
 class PopulateTests(unittest.TestCase):
+    def test_v19_iso_verification_uses_the_trixie_images_key(self):
+        config = (EC2_ROOT.parents[1] / "config.example/common.cfg").read_text()
+        trixie_key = "DEE90D9970AE35D55B7C6C2DC6D254B76A9D9430"
+        bookworm_key = "26147592087C0EDE42143B637761DEBABBCFBA7C"
+        self.assertIn(f"export BT_GPGKEY={trixie_key}", config)
+        self.assertNotIn(bookworm_key, config)
+
     def test_bt_ec2_can_delegate_aws_orchestration_to_its_caller(self):
         command = BT_EC2.read_text()
         self.assertIn("--local-device=*", command)
