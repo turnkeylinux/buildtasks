@@ -22,8 +22,11 @@ disable_retry() {
 }
 
 certificate_is_current() {
-    openssl x509 -in "$CERT" -noout \
-        -checkhost "$fqdn" -checkend 2592000 >/dev/null 2>&1
+    local managed_cert="/var/lib/dehydrated/certs/$fqdn/fullchain.pem"
+
+    [[ -s "$managed_cert" ]] || return 1
+    openssl x509 -in "$managed_cert" -noout -checkhost "$fqdn" >/dev/null 2>&1 &&
+        openssl x509 -in "$managed_cert" -noout -checkend 2592000 >/dev/null 2>&1
 }
 
 configure_webmin_chain() {
@@ -48,6 +51,11 @@ if [[ -z "$fqdn" && -s "$HUBDNS_FQDN" ]]; then
 fi
 fqdn="${fqdn%.}"
 fqdn="${fqdn,,}"
+
+if [[ -z "$fqdn" ]]; then
+    log "Hub-managed hostname is not available yet; deferring certificate request"
+    exit 1
+fi
 
 case "$fqdn" in
     *.tklapp.com) ;;

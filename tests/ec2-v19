@@ -107,8 +107,15 @@ class PopulateTests(unittest.TestCase):
         self.assertIn("*.tklapp.com", helper)
         self.assertIn("--register --challenge http-01", helper)
         self.assertIn('-checkhost "$fqdn"', helper)
+        self.assertIn('managed_cert="/var/lib/dehydrated/certs/$fqdn/fullchain.pem"', helper)
+        self.assertEqual(helper.count('openssl x509 -in "$managed_cert" -noout'), 2)
         self.assertIn("/chain.pem", helper)
         self.assertIn("disable_retry", helper)
+
+    def test_tls_automation_retries_until_hubdns_assigns_a_name(self):
+        helper = TLS_HELPER.read_text()
+        self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
+        self.assertIn("hostname is not available yet; deferring certificate request", helper)
 
     def test_nvme_partition_path_uses_p_separator(self):
         device = ebs_bundle.Device("/dev/nvme1n1")
