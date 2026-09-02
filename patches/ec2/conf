@@ -62,15 +62,50 @@ chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
 # enable sudoadmin in rootfs
 turnkey-sudoadmin on --disable-setpass
 
-# provide for AWSMP requirment of "no default passwords"
+# AWS Marketplace images authenticate the privileged admin account with the
+# EC2 key injected at first boot. Remove generated password hashes without
+# expiring admin, so key login remains available while passwords stay locked.
 additional_users=$(grep ":[1-9][0-9][0-9][0-9]:" /etc/passwd | cut -d: -f1)
 for user in $additional_users; do
-    passwd -l $user
+    usermod --password '*' "$user"
     if [[ $user = "ansible" ]]; then
         ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
         sed -i "/.ssh/ s|root|home/admin|" $ansible_init
     fi
 done
+usermod --expiredate -1 admin
+
+# Load the EC2-only policy before any package defaults. OpenSSH uses the first
+# value it obtains for these global options.
+sshd_config=/etc/ssh/sshd_config
+sshd_include='Include /etc/ssh/sshd_config.d/*.conf'
+sed -i '\|^[[:space:]]*Include[[:space:]]\+/etc/ssh/sshd_config.d/\*\.conf[[:space:]]*$|d' \
+    "$sshd_config"
+sed -i "1i$sshd_include" "$sshd_config"
+
+# Fail the conversion if account state, embedded keys, or the effective SSH
+# policy diverges from the Marketplace guest contract.
+admin_shadow=$(getent shadow admin)
+test "$(echo "$admin_shadow" | cut -d: -f2)" = '*'
+test -z "$(echo "$admin_shadow" | cut -d: -f8)"
+test ! -s /root/.ssh/authorized_keys
+test ! -s /home/admin/.ssh/authorized_keys
+grep -qx 'SUDOADMIN=true' /etc/default/inithooks
+grep -qx 'admin ALL=(ALL) NOPASSWD:ALL' /etc/sudoers.d/99_admin
+
+sshd_testdir=$(mktemp -d)
+trap 'rm -rf "$sshd_testdir"' EXIT
+ssh-keygen -q -t ed25519 -N '' -f "$sshd_testdir/host_key"
+sshd -T -h "$sshd_testdir/host_key" > "$sshd_testdir/effective"
+for required in \
+    'passwordauthentication no' \
+    'kbdinteractiveauthentication no' \
+    'permitrootlogin no' \
+    'pubkeyauthentication yes'; do
+    grep -qx "$required" "$sshd_testdir/effective"
+done
+rm -rf "$sshd_testdir"
+trap - EXIT
 
 # init fence now launches confconsole with full options, so autolaunch disabled
 # on other headless builds. However, we want it on Hub builds.

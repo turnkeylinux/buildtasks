@@ -19,6 +19,16 @@ SSHKEYS_HOOK = (
     Path(__file__).resolve().parents[1]
     / "patches/cloud/overlay/usr/lib/inithooks/firstboot.d/40ec2-sshkeys"
 )
+EC2_PATCH_CONF = Path(__file__).resolve().parents[1] / "patches/ec2/conf"
+MARKETPLACE_SSH_POLICY = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/etc/ssh/sshd_config.d"
+    / "00-turnkey-aws-marketplace.conf"
+)
+LEGACY_HUB_ROOT_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/28ec2-sudoadmin"
+)
 TLS_HELPER = (
     Path(__file__).resolve().parents[1]
     / "patches/ec2/overlay/usr/local/sbin/turnkey-tklapp-letsencrypt"
@@ -122,6 +132,34 @@ class PopulateTests(unittest.TestCase):
 
             config.write_text("OTHER=value\n", encoding="utf-8")
             self.assertEqual("root", sshkeys.login_username(config))
+
+    def test_marketplace_ssh_policy_is_key_only_and_non_root(self):
+        directives = {}
+        for line in MARKETPLACE_SSH_POLICY.read_text().splitlines():
+            key, value = line.split(None, 1)
+            directives[key] = value
+
+        self.assertEqual("no", directives["PasswordAuthentication"])
+        self.assertEqual("no", directives["KbdInteractiveAuthentication"])
+        self.assertEqual("no", directives["PermitRootLogin"])
+        self.assertEqual("yes", directives["PubkeyAuthentication"])
+
+    def test_ec2_conversion_keeps_admin_usable_without_a_password_secret(self):
+        conf = EC2_PATCH_CONF.read_text()
+        self.assertIn("turnkey-sudoadmin on --disable-setpass", conf)
+        self.assertIn("usermod --password '*' \"$user\"", conf)
+        self.assertIn("usermod --expiredate -1 admin", conf)
+        self.assertNotIn("passwd -l", conf)
+        self.assertIn("test ! -s /root/.ssh/authorized_keys", conf)
+        self.assertIn("test ! -s /home/admin/.ssh/authorized_keys", conf)
+        self.assertIn("grep -qx 'SUDOADMIN=true' /etc/default/inithooks", conf)
+        self.assertIn("grep -qx 'admin ALL=(ALL) NOPASSWD:ALL'", conf)
+        self.assertIn('sshd -T -h "$sshd_testdir/host_key"', conf)
+        self.assertIn("'passwordauthentication no'", conf)
+        self.assertIn("'permitrootlogin no'", conf)
+
+    def test_hub_launch_does_not_switch_the_ec2_key_back_to_root(self):
+        self.assertFalse(LEGACY_HUB_ROOT_HOOK.exists())
 
     def test_local_command_imports_without_aws_site_packages(self):
         completed = subprocess.run(
