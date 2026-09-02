@@ -38,6 +38,8 @@ Options::
                           (implies --secupdates)
     --testing           - allow use of current buildtasks branch (conflicts
                           with --publish &/or --marketplace &/or --copy)
+    --local-device=     - populate this pre-attached block device and leave
+                          AWS snapshot and image registration to the caller
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
     --pvmregister       - register pvm-virtualized snapshot, too
 
@@ -49,7 +51,7 @@ EOF
 }
 
 ARGS=("$@")
-unset force secupdates all_updates increment testing pvmshim appver
+unset force secupdates all_updates increment testing local_device pvmshim appver
 ebs_opts=()
 while [[ $# -ne 0 ]]; do
     case $1 in
@@ -62,6 +64,7 @@ while [[ $# -ne 0 ]]; do
         --secupdates)   secupdates="yes";;
         --increment)    increment="yes";;
         --testing)      testing="yes";;
+        --local-device=*) local_device=${1#*=};;
         --pvmshim)      pvmshim="yes";;
         --pvmregister)  ebs_opts+=("$1");;
         *)              if [[ -n "$appver" ]]; then
@@ -245,7 +248,11 @@ umount -l "$rootfs/proc" || true
 "$BT/bin/rootfs-cleanup" "$rootfs"
 "$BT/bin/aptconf-tag" "$rootfs" ec2
 "$BT/bin/build-tag" "$rootfs" ec2
-if [[ -f /usr/bin/python ]]; then
+if [[ -n "$local_device" ]]; then
+    [[ -b "$local_device" ]] \
+        || fatal "local device is not a block device: $local_device"
+    "$BT/bin/ec2/ebs_populate.py" "$rootfs" "$local_device"
+elif [[ -f /usr/bin/python ]]; then
     "$BT/bin/ec2/legacy/ebs.py" "${ebs_opts[@]}" "$rootfs"
 else
     "$BT/bin/ec2/ebs.py" "${ebs_opts[@]}" "$rootfs"

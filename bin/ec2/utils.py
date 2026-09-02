@@ -14,19 +14,19 @@ import os
 import subprocess
 import sys
 
-import boto3
-import ec2metadata
-
 import conf
 
 
 def connect_boto3(region=None):
+    import boto3
+
     region = region if region else get_region()
     return boto3.client(
         "ec2",
         region_name=region,
         aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"))
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.environ.get("AWS_SESSION_TOKEN"))
 
 
 def get_turnkey_version(rootfs):
@@ -35,14 +35,20 @@ def get_turnkey_version(rootfs):
 
 
 def get_instanceid():
+    import ec2metadata
+
     return ec2metadata.get("instance-id")
 
 
 def get_zone():
+    import ec2metadata
+
     return ec2metadata.get("availability-zone")
 
 
 def get_region():
+    import ec2metadata
+
     return ec2metadata.get("availability-zone")[0:-1]
 
 
