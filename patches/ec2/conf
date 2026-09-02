@@ -14,10 +14,17 @@ echo "$tklamq_sha256  $tklamq_candidate" | sha256sum --check --strict
 install "$tklamq_candidate"
 rm -f "$tklamq_candidate"
 
+hubdns_candidate=/root/hubdns_1.4.0+fix1_all.deb
+hubdns_sha256=49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc
+echo "$hubdns_sha256  $hubdns_candidate" | sha256sum --check --strict
+install "$hubdns_candidate"
+rm -f "$hubdns_candidate"
+
 # hubclient remains an exact signed-archive input. The local tklamq version is
 # a normal package version so a later signed archive release can supersede it.
 install hubclient=0.3.0 sudo parted gdisk #ebsmount
 test "$(dpkg-query -W -f='${Version}' tklamq)" = 0.12.1
+test "$(dpkg-query -W -f='${Version}' hubdns)" = 1.4.0+fix1
 
 /usr/bin/install -d -m 0755 /usr/share/doc/tklamq
 cat > /usr/share/doc/tklamq/turnkey-v19-build-input.json <<'EOF'
@@ -26,6 +33,18 @@ cat > /usr/share/doc/tklamq/turnkey-v19-build-input.json <<'EOF'
   "sha256": "d972012e6aae81ada59b071ede494f46194db706a6805ce048215b510a168a2d",
   "source_commit": "85e3d33c2d943e34db2c17e05403ea4a0f756784",
   "source_pr": "https://github.com/turnkeylinux/tklamq/pull/5"
+}
+EOF
+
+/usr/bin/install -d -m 0755 /usr/share/doc/hubdns
+cat > /usr/share/doc/hubdns/turnkey-v19-build-input.json <<'EOF'
+{
+  "artifact": "hubdns_1.4.0+fix1_all.deb",
+  "sha256": "49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc",
+  "source_commits": [
+    "cc127d63c306089059ab8eebe1d67b1db119cca6",
+    "75b616701c55fb0a2aac2b4e9535f30ed29accfb"
+  ]
 }
 EOF
 

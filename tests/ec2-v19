@@ -17,6 +17,10 @@ SSHKEYS_HOOK = (
     Path(__file__).resolve().parents[1]
     / "patches/cloud/overlay/usr/lib/inithooks/firstboot.d/40ec2-sshkeys"
 )
+TLS_HELPER = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/local/sbin/turnkey-tklapp-letsencrypt"
+)
 sys.path.insert(0, str(EC2_ROOT))
 sys.modules.setdefault("ec2metadata", mock.Mock())
 ebs_bundle = importlib.import_module("ebs_bundle")
@@ -92,6 +96,19 @@ class PopulateTests(unittest.TestCase):
         self.assertNotIn("\ninstall -d", conf)
         for forbidden in ("trusted=yes", "sources.list", "preferences.d", "GH_TOKEN", "AWS_"):
             self.assertNotIn(forbidden, conf)
+
+        hubdns_digest = "49d0363dfa628b1c6503ba5d994283318cb120697aafc0bff038095ac34f45fc"
+        self.assertIn(hubdns_digest, conf)
+        self.assertLess(conf.index('install "$hubdns_candidate"'), hubclient_install)
+        self.assertIn('rm -f "$hubdns_candidate"', conf)
+
+    def test_tls_automation_is_limited_to_hub_managed_names(self):
+        helper = TLS_HELPER.read_text()
+        self.assertIn("*.tklapp.com", helper)
+        self.assertIn("--register --challenge http-01", helper)
+        self.assertIn('-checkhost "$fqdn"', helper)
+        self.assertIn("/chain.pem", helper)
+        self.assertIn("disable_retry", helper)
 
     def test_nvme_partition_path_uses_p_separator(self):
         device = ebs_bundle.Device("/dev/nvme1n1")
