@@ -1,0 +1,123 @@
+#!/bin/bash
+
+set -u
+
+readonly APP="${0##*/}"
+readonly RETRY_HOOK="/etc/cron.hourly/turnkey-tklapp-letsencrypt"
+readonly HUBDNS_FQDN="/var/lib/hubdns/fqdn"
+readonly WRAPPER="/usr/lib/confconsole/plugins.d/Lets_Encrypt/dehydrated-wrapper"
+readonly SHARE="/usr/share/confconsole/letsencrypt"
+readonly DEHYDRATED_ETC="/etc/dehydrated"
+readonly CONFIG="$DEHYDRATED_ETC/confconsole.config"
+readonly DOMAINS="$DEHYDRATED_ETC/confconsole.domains.txt"
+readonly CERT="/etc/ssl/private/cert.pem"
+
+log() {
+    logger -t "$APP" -- "$*"
+    echo "$APP: $*"
+}
+
+disable_retry() {
+    rm -f -- "$RETRY_HOOK"
+}
+
+certificate_is_current() {
+    openssl x509 -in "$CERT" -noout \
+        -checkhost "$fqdn" -checkend 2592000 >/dev/null 2>&1
+}
+
+configure_webmin_chain() {
+    local chain
+    local miniserv
+
+    chain="/var/lib/dehydrated/certs/$fqdn/chain.pem"
+    miniserv="/etc/webmin/miniserv.conf"
+    [[ -s "$chain" && -f "$miniserv" ]] || return 0
+
+    if grep -q '^extracas=' "$miniserv"; then
+        sed -i "s|^extracas=.*|extracas=$chain|" "$miniserv"
+    else
+        printf 'extracas=%s\n' "$chain" >> "$miniserv"
+    fi
+    systemctl try-restart webmin.service >/dev/null 2>&1 || true
+}
+
+fqdn="${FQDN:-}"
+if [[ -z "$fqdn" && -s "$HUBDNS_FQDN" ]]; then
+    read -r fqdn < "$HUBDNS_FQDN"
+fi
+fqdn="${fqdn%.}"
+fqdn="${fqdn,,}"
+
+case "$fqdn" in
+    *.tklapp.com) ;;
+    *)
+        disable_retry
+        exit 0
+        ;;
+esac
+
+if [[ ! "$fqdn" =~ ^[a-z0-9.-]+$ ]]; then
+    log "Refusing invalid Hub-managed hostname: $fqdn"
+    disable_retry
+    exit 0
+fi
+
+if [[ ! -x "$WRAPPER" ]]; then
+    log "Confconsole Let's Encrypt client is unavailable"
+    exit 1
+fi
+
+if certificate_is_current; then
+    configure_webmin_chain
+    disable_retry
+    exit 0
+fi
+
+public_ip="$(ec2metadata --public-ipv4 2>/dev/null || true)"
+if [[ ! "$public_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log "Public IPv4 address is not available yet"
+    exit 1
+fi
+
+dns_ready=
+for _attempt in {1..24}; do
+    resolved="$(getent ahostsv4 "$fqdn" 2>/dev/null \
+        | awk '{print $1}' | sort -u || true)"
+    if grep -Fxq -- "$public_ip" <<< "$resolved"; then
+        dns_ready=y
+        break
+    fi
+    sleep 5
+done
+
+if [[ -z "$dns_ready" ]]; then
+    log "$fqdn does not resolve to this instance yet; deferring certificate request"
+    exit 1
+fi
+
+install -d -m 0755 "$DEHYDRATED_ETC"
+if [[ ! -f "$CONFIG" ]]; then
+    install -m 0644 "$SHARE/dehydrated-confconsole.config" "$CONFIG"
+fi
+
+domains_tmp="$(mktemp "$DEHYDRATED_ETC/confconsole.domains.txt.XXXXXX")"
+printf '%s\n' "$fqdn" > "$domains_tmp"
+chmod 0644 "$domains_tmp"
+mv -f -- "$domains_tmp" "$DOMAINS"
+
+if ! "$WRAPPER" --register --challenge http-01 --log-info; then
+    log "Let's Encrypt certificate request failed"
+    exit 1
+fi
+
+if ! certificate_is_current; then
+    log "Let's Encrypt did not install a current certificate for $fqdn"
+    exit 1
+fi
+
+configure_webmin_chain
+disable_retry
+log "Installed and enabled automatic renewal for $fqdn"
+
+exit 0

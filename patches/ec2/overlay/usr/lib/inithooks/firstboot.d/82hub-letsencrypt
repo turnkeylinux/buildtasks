@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if ! /usr/local/sbin/turnkey-tklapp-letsencrypt; then
+    logger -t turnkey-tklapp-letsencrypt \
+        "Initial certificate request failed; the hourly retry remains enabled"
+fi
+
+exit 0
