@@ -4,6 +4,7 @@
 import importlib
 import importlib.machinery
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -57,6 +58,25 @@ class FakeDevice:
 
 
 class PopulateTests(unittest.TestCase):
+    def test_boto3_client_preserves_temporary_credential_token(self):
+        boto3 = mock.Mock()
+        credentials = {
+            "AWS_ACCESS_KEY_ID": "temporary-access-key",
+            "AWS_SECRET_ACCESS_KEY": "temporary-secret-key",
+            "AWS_SESSION_TOKEN": "temporary-session-token",
+        }
+        with mock.patch.dict(os.environ, credentials, clear=False), \
+                mock.patch.dict(sys.modules, {"boto3": boto3}):
+            ebs_bundle.utils.connect_boto3("us-east-1")
+
+        boto3.client.assert_called_once_with(
+            "ec2",
+            region_name="us-east-1",
+            aws_access_key_id="temporary-access-key",
+            aws_secret_access_key="temporary-secret-key",
+            aws_session_token="temporary-session-token",
+        )
+
     def test_ssh_key_follows_the_configured_login_principal(self):
         with tempfile.TemporaryDirectory() as temporary:
             config = Path(temporary) / "inithooks"
