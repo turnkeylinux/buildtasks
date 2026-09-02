@@ -32,6 +32,10 @@ TLS_FIRSTBOOT_HOOK = (
     Path(__file__).resolve().parents[1]
     / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/82hub-letsencrypt"
 )
+TLS_RETRY_CRON = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/etc/cron.d/turnkey-tklapp-letsencrypt"
+)
 sys.path.insert(0, str(EC2_ROOT))
 sys.modules.setdefault("ec2metadata", mock.Mock())
 ebs_bundle = importlib.import_module("ebs_bundle")
@@ -166,6 +170,15 @@ class PopulateTests(unittest.TestCase):
         self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
         self.assertIn("hostname is not available yet; deferring certificate request", helper)
         self.assertIn('RES_OPTIONS=rotate getent ahostsv4 "$fqdn"', helper)
+
+    def test_tls_automation_retries_minutely_until_certificate_is_ready(self):
+        helper = TLS_HELPER.read_text()
+        retry = TLS_RETRY_CRON.read_text()
+        self.assertIn("* * * * * root", retry)
+        self.assertIn("/usr/local/sbin/turnkey-tklapp-letsencrypt", retry)
+        self.assertIn("/usr/bin/flock -n /run/turnkey-tklapp-letsencrypt.lock", retry)
+        self.assertIn('RETRY_CRON="/etc/cron.d/turnkey-tklapp-letsencrypt"', helper)
+        self.assertIn('rm -f -- "$RETRY_HOOK" "$RETRY_CRON"', helper)
 
     def test_tls_firstboot_publishes_hubdns_before_requesting_a_certificate(self):
         hook = TLS_FIRSTBOOT_HOOK.read_text()

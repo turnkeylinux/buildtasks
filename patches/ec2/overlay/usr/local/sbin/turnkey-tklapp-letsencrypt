@@ -4,6 +4,7 @@ set -u
 
 readonly APP="${0##*/}"
 readonly RETRY_HOOK="/etc/cron.hourly/turnkey-tklapp-letsencrypt"
+readonly RETRY_CRON="/etc/cron.d/turnkey-tklapp-letsencrypt"
 readonly HUBDNS_FQDN="/var/lib/hubdns/fqdn"
 readonly WRAPPER="/usr/lib/confconsole/plugins.d/Lets_Encrypt/dehydrated-wrapper"
 readonly SHARE="/usr/share/confconsole/letsencrypt"
@@ -18,7 +19,7 @@ log() {
 }
 
 disable_retry() {
-    rm -f -- "$RETRY_HOOK"
+    rm -f -- "$RETRY_HOOK" "$RETRY_CRON"
 }
 
 certificate_is_current() {
