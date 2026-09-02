@@ -23,6 +23,11 @@ TLS_HELPER = (
     Path(__file__).resolve().parents[1]
     / "patches/ec2/overlay/usr/local/sbin/turnkey-tklapp-letsencrypt"
 )
+TLS_CHALLENGE_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/share/confconsole/letsencrypt"
+    / "dehydrated-confconsole.hook-http-01.sh"
+)
 sys.path.insert(0, str(EC2_ROOT))
 sys.modules.setdefault("ec2metadata", mock.Mock())
 ebs_bundle = importlib.import_module("ebs_bundle")
@@ -156,6 +161,13 @@ class PopulateTests(unittest.TestCase):
         helper = TLS_HELPER.read_text()
         self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
         self.assertIn("hostname is not available yet; deferring certificate request", helper)
+
+    def test_tls_challenge_waits_until_the_token_is_served(self):
+        hook = TLS_CHALLENGE_HOOK.read_text()
+        self.assertIn("http://127.0.0.1/.well-known/acme-challenge/", hook)
+        self.assertIn("curl --silent --fail --max-time 1", hook)
+        self.assertIn('cmp -s - "$token_path"', hook)
+        self.assertIn("HTTP challenge server did not publish", hook)
 
     def test_nvme_partition_path_uses_p_separator(self):
         device = ebs_bundle.Device("/dev/nvme1n1")
