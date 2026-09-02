@@ -90,7 +90,7 @@ fi
 
 dns_ready=
 for _attempt in {1..24}; do
-    resolved="$(getent ahostsv4 "$fqdn" 2>/dev/null \
+    resolved="$(RES_OPTIONS=rotate getent ahostsv4 "$fqdn" 2>/dev/null \
         | awk '{print $1}' | sort -u || true)"
     if grep -Fxq -- "$public_ip" <<< "$resolved"; then
         dns_ready=y

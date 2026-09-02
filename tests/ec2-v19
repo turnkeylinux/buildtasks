@@ -165,6 +165,7 @@ class PopulateTests(unittest.TestCase):
         helper = TLS_HELPER.read_text()
         self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
         self.assertIn("hostname is not available yet; deferring certificate request", helper)
+        self.assertIn('RES_OPTIONS=rotate getent ahostsv4 "$fqdn"', helper)
 
     def test_tls_firstboot_publishes_hubdns_before_requesting_a_certificate(self):
         hook = TLS_FIRSTBOOT_HOOK.read_text()
