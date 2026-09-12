@@ -90,7 +90,49 @@ cp build/product.iso "$O/$name.iso"
 if [[ -e $BT_PROFILES/$appname ]]; then
     mkdir -p "$O/$name.tklbam"
     export PROFILES_CONF=$BT_PROFILES
-    "$BT/bin/generate-tklbam-profile" "$O/$name.iso" "$O/$name.tklbam"
+    if [[ -x /usr/lib/tklbam-pypy2/bin/pypy ]]; then
+        "$BT/bin/generate-tklbam-profile" "$O/$name.iso" "$O/$name.tklbam"
+    else
+        (
+            rootfs=$(readlink -f "$rootfs")
+            [[ -x "$rootfs/usr/lib/tklbam-pypy2/bin/pypy" ]] || \
+                fatal "TKLBAM runtime not found in $rootfs"
+            staging=$(mktemp -d "$rootfs/var/tmp/buildtasks-tklbam-profile.XXXXXX")
+            guest_staging=${staging#"$rootfs"}
+            cleanup() {
+                status=$?
+                trap - EXIT
+                rm -rf -- "$staging"
+                exit "$status"
+            }
+            trap cleanup EXIT
+
+            install -d "$staging/profiles" "$staging/output"
+            install -m 0755 "$BT/bin/generate-tklbam-profile" \
+                "$staging/generate-tklbam-profile"
+            cat > "$staging/run-tklbam-profile" <<EOF
+#!/bin/bash
+exec /usr/lib/tklbam-pypy2/bin/pypy "$guest_staging/generate-tklbam-profile" / "$guest_staging/output"
+EOF
+            chmod 0755 "$staging/run-tklbam-profile"
+            cp "$BT_PROFILES/core" "$staging/profiles/core"
+            if [[ "$appname" != "core" ]]; then
+                cp "$BT_PROFILES/$appname" "$staging/profiles/$appname"
+            fi
+            if [[ -d "$BT_PROFILES/hooks/$appname" ]]; then
+                install -d "$staging/profiles/hooks"
+                cp -a "$BT_PROFILES/hooks/$appname" "$staging/profiles/hooks/"
+            fi
+
+            PROFILES_CONF="$guest_staging/profiles" \
+            TKLBAM_LIB_PATH=/usr/lib/tklbam \
+            LD_LIBRARY_PATH=/usr/lib/tklbam-pypy2/bin \
+                fab-chroot \
+                -e PROFILES_CONF:TKLBAM_LIB_PATH:LD_LIBRARY_PATH \
+                "$rootfs" --script "$staging/run-tklbam-profile"
+            cp -a "$staging/output/." "$O/$name.tklbam/"
+        )
+    fi
 fi
 if [[ -z "$no_screens" ]]; then
     mkdir -p "$O/$name.screens"

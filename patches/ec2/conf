@@ -8,7 +8,46 @@ install() {
         install $@
 }
 
-install hubclient sudo parted gdisk #ebsmount
+tklamq_candidate=/root/tklamq_0.12.1_all.deb
+tklamq_sha256=d972012e6aae81ada59b071ede494f46194db706a6805ce048215b510a168a2d
+echo "$tklamq_sha256  $tklamq_candidate" | sha256sum --check --strict
+install "$tklamq_candidate"
+rm -f "$tklamq_candidate"
+
+hubdns_candidate=/root/hubdns_1.4.0+fix1_all.deb
+hubdns_sha256=4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352
+echo "$hubdns_sha256  $hubdns_candidate" | sha256sum --check --strict
+install "$hubdns_candidate"
+rm -f "$hubdns_candidate"
+
+# hubclient remains an exact signed-archive input. The local tklamq version is
+# a normal package version so a later signed archive release can supersede it.
+install hubclient=0.3.0 sudo parted gdisk #ebsmount
+test "$(dpkg-query -W -f='${Version}' tklamq)" = 0.12.1
+test "$(dpkg-query -W -f='${Version}' hubdns)" = 1.4.0+fix1
+
+/usr/bin/install -d -m 0755 /usr/share/doc/tklamq
+cat > /usr/share/doc/tklamq/turnkey-v19-build-input.json <<'EOF'
+{
+  "artifact": "tklamq_0.12.1_all.deb",
+  "sha256": "d972012e6aae81ada59b071ede494f46194db706a6805ce048215b510a168a2d",
+  "source_commit": "85e3d33c2d943e34db2c17e05403ea4a0f756784",
+  "source_pr": "https://github.com/turnkeylinux/tklamq/pull/5"
+}
+EOF
+
+/usr/bin/install -d -m 0755 /usr/share/doc/hubdns
+cat > /usr/share/doc/hubdns/turnkey-v19-build-input.json <<'EOF'
+{
+  "artifact": "hubdns_1.4.0+fix1_all.deb",
+  "sha256": "4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352",
+  "source_commits": [
+    "cc127d63c306089059ab8eebe1d67b1db119cca6",
+    "75b616701c55fb0a2aac2b4e9535f30ed29accfb",
+    "8706ec3a5acc3b3118dbec8dc8f681c6a999160b"
+  ]
+}
+EOF
 
 # grub tweaks
 DEFAULT=/etc/default/grub
@@ -23,15 +62,50 @@ chmod 644 /var/lib/inithooks/turnkey-init-fence/htdocs/*.png
 # enable sudoadmin in rootfs
 turnkey-sudoadmin on --disable-setpass
 
-# provide for AWSMP requirment of "no default passwords"
+# AWS Marketplace images authenticate the privileged admin account with the
+# EC2 key injected at first boot. Remove generated password hashes without
+# expiring admin, so key login remains available while passwords stay locked.
 additional_users=$(grep ":[1-9][0-9][0-9][0-9]:" /etc/passwd | cut -d: -f1)
 for user in $additional_users; do
-    passwd -l $user
+    usermod --password '*' "$user"
     if [[ $user = "ansible" ]]; then
         ansible_init=/usr/lib/inithooks/firstboot.d/50ansible-key
         sed -i "/.ssh/ s|root|home/admin|" $ansible_init
     fi
 done
+usermod --expiredate -1 admin
+
+# Load the EC2-only policy before any package defaults. OpenSSH uses the first
+# value it obtains for these global options.
+sshd_config=/etc/ssh/sshd_config
+sshd_include='Include /etc/ssh/sshd_config.d/*.conf'
+sed -i '\|^[[:space:]]*Include[[:space:]]\+/etc/ssh/sshd_config.d/\*\.conf[[:space:]]*$|d' \
+    "$sshd_config"
+sed -i "1i$sshd_include" "$sshd_config"
+
+# Fail the conversion if account state, embedded keys, or the effective SSH
+# policy diverges from the Marketplace guest contract.
+admin_shadow=$(getent shadow admin)
+test "$(echo "$admin_shadow" | cut -d: -f2)" = '*'
+test -z "$(echo "$admin_shadow" | cut -d: -f8)"
+test ! -s /root/.ssh/authorized_keys
+test ! -s /home/admin/.ssh/authorized_keys
+grep -qx 'SUDOADMIN=true' /etc/default/inithooks
+grep -qx 'admin ALL=(ALL) NOPASSWD:ALL' /etc/sudoers.d/99_admin
+
+sshd_testdir=$(mktemp -d)
+trap 'rm -rf "$sshd_testdir"' EXIT
+ssh-keygen -q -t ed25519 -N '' -f "$sshd_testdir/host_key"
+sshd -T -h "$sshd_testdir/host_key" > "$sshd_testdir/effective"
+for required in \
+    'passwordauthentication no' \
+    'kbdinteractiveauthentication no' \
+    'permitrootlogin no' \
+    'pubkeyauthentication yes'; do
+    grep -qx "$required" "$sshd_testdir/effective"
+done
+rm -rf "$sshd_testdir"
+trap - EXIT
 
 # init fence now launches confconsole with full options, so autolaunch disabled
 # on other headless builds. However, we want it on Hub builds.

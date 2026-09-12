@@ -43,10 +43,12 @@ EOF
     exit 1
 }
 
-# catch --help first
-if [[ " $* " == *"--help"* ]] || [[ " $* " == *"-h"* ]]; then
-    usage
-fi
+# Catch help options without treating a rootfs path containing "-h" as one.
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h) usage;;
+    esac
+done
 path_to_rootfs=$1
 shift
 

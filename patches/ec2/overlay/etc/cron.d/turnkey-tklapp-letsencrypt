@@ -1,0 +1,2 @@
+# Retry initial Hub-managed TLS without delaying first-boot completion.
+* * * * * root /usr/bin/flock -n /run/turnkey-tklapp-letsencrypt.lock /usr/local/sbin/turnkey-tklapp-letsencrypt >/dev/null 2>&1

@@ -1,0 +1,322 @@
+#!/usr/bin/python3
+"""Focused checks for the credential-free v19 EBS population path."""
+
+import importlib
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+
+EC2_ROOT = Path(__file__).resolve().parents[1] / "bin/ec2"
+BT_EC2 = Path(__file__).resolve().parents[1] / "bt-ec2"
+SSHKEYS_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/cloud/overlay/usr/lib/inithooks/firstboot.d/40ec2-sshkeys"
+)
+EC2_PATCH_CONF = Path(__file__).resolve().parents[1] / "patches/ec2/conf"
+MARKETPLACE_SSH_POLICY = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/etc/ssh/sshd_config.d"
+    / "00-turnkey-aws-marketplace.conf"
+)
+LEGACY_HUB_ROOT_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/28ec2-sudoadmin"
+)
+TLS_HELPER = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/local/sbin/turnkey-tklapp-letsencrypt"
+)
+TLS_CHALLENGE_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/share/confconsole/letsencrypt"
+    / "dehydrated-confconsole.hook-http-01.sh"
+)
+TLS_FIRSTBOOT_HOOK = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/82hub-letsencrypt"
+)
+TLS_RETRY_CRON = (
+    Path(__file__).resolve().parents[1]
+    / "patches/ec2/overlay/etc/cron.d/turnkey-tklapp-letsencrypt"
+)
+sys.path.insert(0, str(EC2_ROOT))
+sys.modules.setdefault("ec2metadata", mock.Mock())
+ebs_bundle = importlib.import_module("ebs_bundle")
+ebs_populate = importlib.import_module("ebs_populate")
+sshkeys_loader = importlib.machinery.SourceFileLoader("ec2_sshkeys", str(SSHKEYS_HOOK))
+sshkeys_spec = importlib.util.spec_from_loader("ec2_sshkeys", sshkeys_loader)
+sshkeys = importlib.util.module_from_spec(sshkeys_spec)
+sshkeys_loader.exec_module(sshkeys)
+
+
+class FakeDevice:
+    def __init__(self):
+        self.root_path = "/dev/test"
+        self.mounted = False
+        self.calls = []
+
+    def mkpart(self):
+        self.calls.append("mkpart")
+
+    def mkfs(self, filesystem):
+        self.calls.append(("mkfs", filesystem))
+
+    def mount(self, path):
+        Path(path).mkdir()
+        self.mounted = True
+        self.calls.append(("mount", path))
+
+    def is_mounted(self):
+        return self.mounted
+
+    def umount(self):
+        self.mounted = False
+        self.calls.append("umount")
+
+
+class PopulateTests(unittest.TestCase):
+    def test_v19_iso_verification_uses_the_trixie_images_key(self):
+        config = (EC2_ROOT.parents[1] / "config.example/common.cfg").read_text()
+        trixie_key = "DEE90D9970AE35D55B7C6C2DC6D254B76A9D9430"
+        bookworm_key = "26147592087C0EDE42143B637761DEBABBCFBA7C"
+        self.assertIn(f"export BT_GPGKEY={trixie_key}", config)
+        self.assertNotIn(bookworm_key, config)
+
+    def test_bt_ec2_can_delegate_aws_orchestration_to_its_caller(self):
+        command = BT_EC2.read_text()
+        self.assertIn("--local-device=*", command)
+        self.assertIn('[[ -b "$local_device" ]]', command)
+        local_populate = command.index(
+            '"$BT/bin/ec2/ebs_populate.py" "$rootfs" "$local_device"'
+        )
+        direct_aws = command.index(
+            '"$BT/bin/ec2/ebs.py" "${ebs_opts[@]}" "$rootfs"'
+        )
+        self.assertLess(local_populate, direct_aws)
+
+    def test_boto3_client_preserves_temporary_credential_token(self):
+        boto3 = mock.Mock()
+        credentials = {
+            "AWS_ACCESS_KEY_ID": "temporary-access-key",
+            "AWS_SECRET_ACCESS_KEY": "temporary-secret-key",
+            "AWS_SESSION_TOKEN": "temporary-session-token",
+        }
+        with mock.patch.dict(os.environ, credentials, clear=False), \
+                mock.patch.dict(sys.modules, {"boto3": boto3}):
+            ebs_bundle.utils.connect_boto3("us-east-1")
+
+        boto3.client.assert_called_once_with(
+            "ec2",
+            region_name="us-east-1",
+            aws_access_key_id="temporary-access-key",
+            aws_secret_access_key="temporary-secret-key",
+            aws_session_token="temporary-session-token",
+        )
+
+    def test_ssh_key_follows_the_configured_login_principal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "inithooks"
+            for value, expected in (
+                ("true", "admin"), ("TRUE", "admin"), ("false", "root"),
+            ):
+                with self.subTest(value=value):
+                    config.write_text(f"SUDOADMIN={value}\n", encoding="utf-8")
+                    self.assertEqual(expected, sshkeys.login_username(config))
+
+            config.write_text("OTHER=value\n", encoding="utf-8")
+            self.assertEqual("root", sshkeys.login_username(config))
+
+    def test_marketplace_ssh_policy_is_key_only_and_non_root(self):
+        directives = {}
+        for line in MARKETPLACE_SSH_POLICY.read_text().splitlines():
+            key, value = line.split(None, 1)
+            directives[key] = value
+
+        self.assertEqual("no", directives["PasswordAuthentication"])
+        self.assertEqual("no", directives["KbdInteractiveAuthentication"])
+        self.assertEqual("no", directives["PermitRootLogin"])
+        self.assertEqual("yes", directives["PubkeyAuthentication"])
+
+    def test_ec2_conversion_keeps_admin_usable_without_a_password_secret(self):
+        conf = EC2_PATCH_CONF.read_text()
+        self.assertIn("turnkey-sudoadmin on --disable-setpass", conf)
+        self.assertIn("usermod --password '*' \"$user\"", conf)
+        self.assertIn("usermod --expiredate -1 admin", conf)
+        self.assertNotIn("passwd -l", conf)
+        self.assertIn("test ! -s /root/.ssh/authorized_keys", conf)
+        self.assertIn("test ! -s /home/admin/.ssh/authorized_keys", conf)
+        self.assertIn("grep -qx 'SUDOADMIN=true' /etc/default/inithooks", conf)
+        self.assertIn("grep -qx 'admin ALL=(ALL) NOPASSWD:ALL'", conf)
+        self.assertIn('sshd -T -h "$sshd_testdir/host_key"', conf)
+        self.assertIn("'passwordauthentication no'", conf)
+        self.assertIn("'permitrootlogin no'", conf)
+
+    def test_hub_launch_does_not_switch_the_ec2_key_back_to_root(self):
+        self.assertFalse(LEGACY_HUB_ROOT_HOOK.exists())
+
+    def test_local_command_imports_without_aws_site_packages(self):
+        completed = subprocess.run(
+            [sys.executable, "-S", str(EC2_ROOT / "ebs_populate.py"), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_ec2_patch_installs_reviewed_tklamq_before_signed_hubclient(self):
+        conf = (EC2_ROOT.parents[1] / "patches/ec2/conf").read_text()
+        digest = "d972012e6aae81ada59b071ede494f46194db706a6805ce048215b510a168a2d"
+        source_commit = "85e3d33c2d943e34db2c17e05403ea4a0f756784"
+
+        self.assertIn(digest, conf)
+        self.assertIn(source_commit, conf)
+        self.assertIn("https://github.com/turnkeylinux/tklamq/pull/5", conf)
+        candidate_install = conf.index('install "$tklamq_candidate"')
+        hubclient_install = conf.index("install hubclient=0.3.0")
+        self.assertLess(candidate_install, hubclient_install)
+        self.assertIn('rm -f "$tklamq_candidate"', conf)
+        self.assertIn("dpkg-query -W", conf)
+        self.assertIn("/usr/bin/install -d -m 0755 /usr/share/doc/tklamq", conf)
+        self.assertNotIn("\ninstall -d", conf)
+        for forbidden in ("trusted=yes", "sources.list", "preferences.d", "GH_TOKEN", "AWS_"):
+            self.assertNotIn(forbidden, conf)
+
+        hubdns_digest = "4e255c838cbd6c2a6f64041c3a3d088acd3166d935f60aaf41d30d39d95b6352"
+        self.assertIn(hubdns_digest, conf)
+        self.assertLess(conf.index('install "$hubdns_candidate"'), hubclient_install)
+        self.assertIn('rm -f "$hubdns_candidate"', conf)
+
+    def test_tls_automation_is_limited_to_hub_managed_names(self):
+        helper = TLS_HELPER.read_text()
+        self.assertIn("*.tklapp.com", helper)
+        self.assertIn("--register --challenge http-01", helper)
+        self.assertIn('-checkhost "$fqdn"', helper)
+        self.assertIn('managed_cert="/var/lib/dehydrated/certs/$fqdn/fullchain.pem"', helper)
+        self.assertEqual(helper.count('openssl x509 -in "$managed_cert" -noout'), 2)
+        self.assertIn("/chain.pem", helper)
+        self.assertIn("disable_retry", helper)
+
+    def test_tls_automation_retries_until_hubdns_assigns_a_name(self):
+        helper = TLS_HELPER.read_text()
+        self.assertIn('if [[ -z "$fqdn" ]]; then', helper)
+        self.assertIn("hostname is not available yet; deferring certificate request", helper)
+        self.assertIn('RES_OPTIONS=rotate getent ahostsv4 "$fqdn"', helper)
+
+    def test_tls_automation_retries_minutely_until_certificate_is_ready(self):
+        helper = TLS_HELPER.read_text()
+        retry = TLS_RETRY_CRON.read_text()
+        self.assertIn("* * * * * root", retry)
+        self.assertIn("/usr/local/sbin/turnkey-tklapp-letsencrypt", retry)
+        self.assertIn("/usr/bin/flock -n /run/turnkey-tklapp-letsencrypt.lock", retry)
+        self.assertIn('RETRY_CRON="/etc/cron.d/turnkey-tklapp-letsencrypt"', helper)
+        self.assertIn('rm -f -- "$RETRY_HOOK" "$RETRY_CRON"', helper)
+
+    def test_tls_firstboot_publishes_hubdns_before_requesting_a_certificate(self):
+        hook = TLS_FIRSTBOOT_HOOK.read_text()
+        publish = hook.index("systemctl start hubdns.service")
+        certificate = hook.index("/usr/local/sbin/turnkey-tklapp-letsencrypt")
+        self.assertLess(publish, certificate)
+
+    def test_tls_challenge_waits_until_the_token_is_served(self):
+        hook = TLS_CHALLENGE_HOOK.read_text()
+        self.assertIn('ec2metadata --public-ipv4', hook)
+        self.assertIn('--resolve "$DOMAIN:80:$public_ip"', hook)
+        self.assertIn("curl --silent --fail --max-time 1 --noproxy '*'", hook)
+        self.assertIn('cmp -s - "$token_path"', hook)
+        self.assertIn("ready_count >= 3", hook)
+        self.assertIn("HTTP challenge was not stable", hook)
+
+    def test_nvme_partition_path_uses_p_separator(self):
+        device = ebs_bundle.Device("/dev/nvme1n1")
+        with mock.patch.object(ebs_bundle.subprocess, "run") as run, \
+                mock.patch.object(ebs_bundle.time, "sleep"):
+            device.mkpart()
+        self.assertEqual(device.root_path, "/dev/nvme1n1")
+        self.assertEqual(device.real_path, "/dev/nvme1n1p2")
+        self.assertEqual(run.call_count, 2)
+
+    def test_populates_and_unmounts_without_aws(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir()
+            device = FakeDevice()
+            commands = []
+
+            def run(command, **kwargs):
+                commands.append((command, kwargs))
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync") as rsync:
+                ebs_bundle.populate(rootfs, device)
+
+            self.assertEqual(device.calls[:2], ["mkpart", ("mkfs", "ext4")])
+            self.assertEqual(device.calls[-1], "umount")
+            rsync.assert_called_once_with(rootfs, rootfs + ".mount")
+            self.assertIn((["chroot", rootfs + ".mount", "grub-install", "/dev/test"], {"check": True}), commands)
+            self.assertFalse(Path(rootfs + ".mount").exists())
+
+    def test_populate_normalizes_filesystem_root_before_chroot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir(mode=0o700)
+            device = FakeDevice()
+            root_modes = []
+
+            def rsync(source, destination):
+                Path(destination).chmod(Path(source).stat().st_mode & 0o777)
+
+            def run(command, **kwargs):
+                if command[:2] == ["chroot", rootfs + ".mount"]:
+                    root_modes.append(Path(rootfs + ".mount").stat().st_mode & 0o777)
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync", side_effect=rsync):
+                ebs_bundle.populate(rootfs, device)
+
+            self.assertTrue(root_modes)
+            self.assertEqual(root_modes, [0o755] * len(root_modes))
+
+    def test_unmounts_after_chroot_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = str(Path(temporary) / "rootfs")
+            Path(rootfs).mkdir()
+            device = FakeDevice()
+
+            def run(command, **kwargs):
+                if command[:3] == ["chroot", rootfs + ".mount", "grub-install"]:
+                    raise RuntimeError("reproduced grub failure")
+                return mock.Mock(returncode=0)
+
+            with mock.patch.object(ebs_bundle.subprocess, "run", side_effect=run), \
+                    mock.patch.object(ebs_bundle.utils, "rsync"):
+                with self.assertRaisesRegex(RuntimeError, "reproduced grub failure"):
+                    ebs_bundle.populate(rootfs, device)
+
+            self.assertFalse(device.mounted)
+            self.assertFalse(Path(rootfs + ".mount").exists())
+
+    def test_command_uses_explicit_local_device(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            rootfs = Path(temporary) / "rootfs"
+            device = Path(temporary) / "device"
+            rootfs.mkdir()
+            device.touch()
+            with mock.patch.object(sys, "argv", ["ebs_populate.py", str(rootfs), str(device)]), \
+                    mock.patch.object(ebs_populate, "Device") as device_class, \
+                    mock.patch.object(ebs_populate, "populate") as populate:
+                ebs_populate.main()
+            device_class.assert_called_once_with(str(device))
+            populate.assert_called_once_with(str(rootfs), device_class.return_value)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
