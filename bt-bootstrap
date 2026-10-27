@@ -190,7 +190,7 @@ mv "build/bootstrap-$FAB_ARCH.tar.gz" "$O/$BOOTSTRAP_TARBALL"
 
 if [[ "$publish" == "yes" ]]; then
     export PUBLISH_DEST=${BT_PUBLISH_IMGS}/bootstrap/
-    "$BT/bin/publish-files" "$O/$BOOTSTRAP_TARBALL"
+    "$BT/bin/publish-files" "$O/$BOOTSTRAP_TARBALL"{,.hash}
 
     export PUBLISH_DEST=${BT_PUBLISH_META}/
     "$BT/bin/publish-files" "$O/$BOOTSTRAP_TARBALL"{.manifest,.hash,.buildenv}
