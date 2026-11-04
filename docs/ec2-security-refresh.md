@@ -70,7 +70,15 @@ prepare a new batch from the retained state.
 `run --cleanup` waits for its image tasks, runs a separate CloudTask cleanup
 phase, terminates batch-tagged workers and test instances, and deletes their
 remaining EBS volumes. It retains the snapshots backing registered output AMIs.
-The source images and their snapshots remain available for rollback.
+After replacement deliveries or Hub mappings are active and verified, retire
+the superseded AMIs and delete their unneeded backing snapshots. Do not keep
+rollback copies unless requested. Check launch-template references and update
+the next batch's worker image before retiring its source. Existing instances
+do not require their original AMI or snapshot to remain registered or stored.
+
+A disposable benchmark must also deregister its output AMIs and delete their
+snapshots. Record resource lifetimes before cleanup and distinguish costs
+calculated from measured usage from charges actually posted by AWS.
 
 After an interrupted controller, run the same cleanup explicitly:
 
