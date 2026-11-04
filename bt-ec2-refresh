@@ -1,0 +1,529 @@
+#!/usr/bin/env python3
+"""Refresh unbooted AMIs in parallel, boot-test, publish, and clean batch resources."""
+import argparse
+import concurrent.futures as futures
+import datetime
+import ipaddress
+import json
+import os
+from pathlib import Path
+import queue
+import re
+import shlex
+import subprocess
+import threading
+import time
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+
+HERE = Path(__file__).resolve().parent
+
+
+def save(path, data):
+    tmp = path.with_suffix('.new')
+    tmp.write_text(json.dumps(data, indent=2, default=str) + '\n')
+    tmp.replace(path)
+
+
+def wait_until(check, seconds=900, delay=5):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        result = check()
+        if result:
+            return result
+        time.sleep(delay)
+    raise TimeoutError('Timed out waiting for AWS/guest state')
+
+
+class Refresh:
+    def __init__(self, args):
+        self.args = args
+        self.state = Path(args.state).resolve()
+        self.resources = json.loads((self.state / 'resources.json').read_text())
+        self.batch = self.resources['batch']
+        self.region = self.resources['region']
+        session = boto3.Session(region_name=self.region)
+        assert session.client('sts').get_caller_identity()['Account'] == self.resources['account']
+        self.ec2 = session.client('ec2', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=64))
+        self.catalog = session.client('marketplace-catalog', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=32))
+        self.rows = json.loads((self.state / 'plan.json').read_text())
+        self.finish_pool = futures.ThreadPoolExecutor(max_workers=args.workers)
+        self.finish_jobs = []
+        self.finish_lock = threading.Lock()
+        self.publish_lock = threading.Lock()
+        self.key = self.state / 'worker-key'
+
+    def log(self, app, message):
+        print(datetime.datetime.now(datetime.timezone.utc).isoformat(), app, message, flush=True)
+
+    def tags(self, app, lifecycle='disposable'):
+        return [{'Key': 'RefreshBatch', 'Value': self.batch}, {'Key': 'Appliance', 'Value': app},
+                {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-security-refresh'}]
+
+    def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None):
+        identity = ['-o', 'HostKeyAlias=' + host_alias] if host_alias else []
+        return subprocess.run(['ssh', '-F', '/dev/null'] + identity + ['-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new',
+                               '-o', 'UserKnownHostsFile=' + str(self.state / 'known_hosts'), '-i', str(self.key),
+                               'admin@' + ip, command], input=input, text=True, capture_output=True, timeout=timeout)
+
+    def cloudtask(self, worker, app, command, job):
+        # Run existing CloudTask in the retained LibreSBX controller. Package code
+        # runs on credential-free workers; AWS lifecycle calls remain here.
+        base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
+        argv = ['sbx', '--name', self.args.sandbox, self.args.project, 'bash', '-c',
+                'mkdir -p "$1"; shift; exec "$@"', '_', base + '/sessions/' + app, 'env',
+                'PYTHONPATH=' + base + ':' + self.args.pylib + ':' + str(Path(self.args.cloudtask).parent),
+                self.args.python2, base + '/cloudtask-existing-workers',
+                '--force', '--workers=' + worker['ip'], '--split=1', '--user=admin',
+                '--ssh-identity=' + base + '/worker-key',
+                '--sessions=' + base + '/sessions/' + app, '--timeout=900', command]
+        for attempt in range(3):
+            with (self.state / (app + '.log')).open('w') as log:
+                result = subprocess.run(argv, input=job + '\n', text=True, stdout=log, stderr=subprocess.STDOUT, timeout=1000)
+            if result.returncode == 0:
+                return
+            if 'No managed sandbox matches selector' not in (self.state / (app + '.log')).read_text():
+                break
+            time.sleep(2)
+        raise RuntimeError('CloudTask failed; see ' + app + '.log')
+
+    def volume(self, vid):
+        return self.ec2.describe_volumes(VolumeIds=[vid])['Volumes'][0]
+
+    def instance(self, iid):
+        try:
+            return self.ec2.describe_instances(InstanceIds=[iid])['Reservations'][0]['Instances'][0]
+        except ClientError as exc:
+            if exc.response['Error']['Code'] == 'InvalidInstanceID.NotFound':
+                return {'State': {'Name': 'pending'}}
+            raise
+
+    def prepare_worker(self, worker):
+        def ready():
+            try:
+                r = self.ssh(worker['ip'], 'sudo true', timeout=10)
+                return r.returncode == 0
+            except subprocess.TimeoutExpired:
+                return False
+        wait_until(ready, 300)
+        script = (HERE / 'bin/refresh-ec2-rootfs').read_text()
+        r = self.ssh(worker['ip'], 'cat > /home/admin/refresh-ec2-rootfs && chmod 755 /home/admin/refresh-ec2-rootfs', input=script)
+        if r.returncode:
+            raise RuntimeError(r.stderr)
+
+    def patch(self, row, worker):
+        app = row['app']
+        path = self.state / (app + '-state.json')
+        item = json.loads(path.read_text()) if path.exists() else dict(row)
+        if item.get('ami'):
+            return item
+        if item.get('snapshot'):
+            return item
+        original = self.ec2.describe_images(ImageIds=[row['source_ami']])['Images'][0]
+        assert original['OwnerId'] == self.resources['account'] and original['State'] == 'available'
+        mappings = [x for x in original['BlockDeviceMappings'] if 'Ebs' in x]
+        assert len(mappings) == 1 and mappings[0]['DeviceName'] == original['RootDeviceName']
+        item['original'] = original
+        if not item.get('volume'):
+            v = self.ec2.create_volume(SnapshotId=mappings[0]['Ebs']['SnapshotId'], AvailabilityZone=worker['az'],
+                                       VolumeType='gp3', Encrypted=False,
+                                       TagSpecifications=[{'ResourceType': 'volume', 'Tags': self.tags(app)}],
+                                       ClientToken=self.batch + '-' + app + '-r' + str(self.resources.get('generation', 1)))
+            item['volume'] = v['VolumeId']
+            save(path, item)
+        vid = item['volume']
+        current = self.volume(vid)
+        if current['Attachments']:
+            self.ec2.detach_volume(VolumeId=vid, InstanceId=current['Attachments'][0]['InstanceId'])
+        wait_until(lambda: self.volume(vid)['State'] == 'available', 180)
+        self.ec2.attach_volume(VolumeId=vid, InstanceId=worker['id'], Device='/dev/sdf')
+        item['worker'] = worker['id']; save(path, item)
+        wait_until(lambda: any(a['State'] == 'attached' for a in self.volume(vid)['Attachments']), 120)
+        item['status'] = 'PATCHING'; item.pop('error', None); save(path, item)
+        self.log(app, 'patching ' + vid)
+        self.cloudtask(worker, app, 'sudo /home/admin/refresh-ec2-rootfs', shlex.join([vid, app, self.batch]))
+        if 'REFRESH_VERIFIED app=' + app not in (self.state / (app + '.log')).read_text():
+            raise RuntimeError('Guest verification marker absent')
+        snap = self.ec2.create_snapshot(VolumeId=vid, Description=self.batch + ' ' + app,
+                                        TagSpecifications=[{'ResourceType': 'snapshot', 'Tags': self.tags(app, 'release')}])
+        item['snapshot'] = snap['SnapshotId']; item['status'] = 'SNAPSHOTTING'; save(path, item)
+        self.ec2.detach_volume(VolumeId=vid, InstanceId=worker['id'])
+        wait_until(lambda: self.volume(vid)['State'] == 'available', 120)
+        self.log(app, 'snapshot ' + item['snapshot'])
+        return item
+
+    def finish(self, item):
+        app = item['app']; path = self.state / (app + '-state.json')
+        try:
+            if not item.get('ami'):
+                def snapshot_ready():
+                    snap = self.ec2.describe_snapshots(SnapshotIds=[item['snapshot']])['Snapshots'][0]
+                    if snap['State'] == 'error':
+                        raise RuntimeError('Snapshot failed')
+                    return snap['State'] == 'completed'
+                wait_until(snapshot_ready, 1800, 10)
+                original = item['original']
+                root = next(x['Ebs'] for x in original['BlockDeviceMappings'] if x['DeviceName'] == original['RootDeviceName'])
+                request = dict(Name='turnkey-' + app + '-' + item['version'] + '-security-refresh-r' + str(self.resources.get('generation', 1)),
+                               Description='TurnKey ' + app + ' security refresh; automatic first-boot security updates',
+                               Architecture=original['Architecture'], RootDeviceName=original['RootDeviceName'],
+                               VirtualizationType='hvm', EnaSupport=True, ImdsSupport='v2.0',
+                               BlockDeviceMappings=[{'DeviceName': original['RootDeviceName'], 'Ebs': {
+                                   'SnapshotId': item['snapshot'], 'VolumeType': 'gp3', 'VolumeSize': root['VolumeSize'],
+                                   'DeleteOnTermination': True}}])
+                if original.get('BootMode'): request['BootMode'] = original['BootMode']
+                item['ami'] = self.ec2.register_image(**request)['ImageId']; save(path, item)
+                self.ec2.create_tags(Resources=[item['ami']], Tags=self.tags(app, 'release'))
+            if not item.get('volume_deleted'):
+                self.ec2.delete_volume(VolumeId=item['volume']); item['volume_deleted'] = True; save(path, item)
+            if not item.get('boot_verified'):
+                self.boot_test(item)
+                item['boot_verified'] = True; item['status'] = 'VERIFIED'; item.pop('error', None); save(path, item)
+            if self.args.publish:
+                self.publish(item)
+            self.log(app, item['status'])
+        except Exception as exc:
+            item['error'] = str(exc); item['status'] = 'ERROR'; save(path, item)
+            self.log(app, 'ERROR ' + str(exc))
+
+    def boot_test(self, item):
+        app = item['app']; path = self.state / (app + '-state.json')
+        if item.get('test_instance') and self.instance(item['test_instance'])['State']['Name'] in ['terminated', 'shutting-down']:
+            item.setdefault('previous_test_instances', []).append(item.pop('test_instance'))
+        if not item.get('test_instance'):
+            item['test_attempt'] = item.get('test_attempt', 0) + 1
+            save(path, item)
+            r = self.ec2.run_instances(ImageId=item['ami'], InstanceType='m7i.large', MinCount=1, MaxCount=1,
+                                      KeyName=self.resources['key_name'], SubnetId=self.resources['subnet'],
+                                      SecurityGroupIds=[self.resources['security_group']],
+                                      MetadataOptions={'HttpTokens': 'required'},
+                                      TagSpecifications=[{'ResourceType': k, 'Tags': self.tags(app)} for k in ['instance', 'volume']],
+                                      ClientToken=self.batch + '-test-' + app + '-r' + str(self.resources.get('generation', 1)) + '-' + str(item['test_attempt']))
+            item['test_instance'] = r['Instances'][0]['InstanceId']; save(path, item)
+        iid = item['test_instance']; self.log(app, 'boot test ' + iid)
+        try:
+            ip = wait_until(lambda: self.instance(iid).get('PublicIpAddress'), 180)
+            command = "sudo sh -c 'systemctl show inithooks.service -p Result -p ActiveState; test -f /var/log/inithooks.log && tail -5 /var/log/inithooks.log'"
+            def complete():
+                try:
+                    r = self.ssh(ip, command, timeout=12, host_alias=iid)
+                    return r.returncode == 0 and 'ActiveState=inactive' in r.stdout and 'Inithooks run completed' in r.stdout
+                except subprocess.TimeoutExpired:
+                    return False
+            wait_until(complete, 720)
+            script = '''set -eu
+systemctl show inithooks.service -p Result -p ActiveState
+cat /var/log/inithooks.log
+uname -r
+cat /var/log/inithooks/secupdates.log
+! grep -q '^ERR:' /var/log/inithooks.log
+journalctl -b -t inithooks --no-pager | grep '\\[95secupdates\\] security updates being installed'
+! journalctl -b -t inithooks --no-pager | grep -q '\\[95secupdates\\] security updates skipped'
+grep -qx 'export SEC_UPDATES=FORCE' /usr/lib/inithooks/firstboot.d/29preseed
+systemctl is-active cron turnkey-init-fence
+sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|pubkeyauthentication) '
+test -z "$(dpkg --audit)"
+v=$(dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
+[ -z "$v" ] || dpkg --compare-versions "$v" ge 1.1.0-2+deb13u1
+printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
+'''
+            r = self.ssh(ip, 'sudo bash -s', input=script, timeout=45, host_alias=iid)
+            (self.state / (app + '-boot.log')).write_text(r.stdout + r.stderr)
+            if r.returncode or 'BOOT_VERIFIED' not in r.stdout:
+                raise RuntimeError('Boot verification failed; see ' + app + '-boot.log')
+        finally:
+            self.ec2.terminate_instances(InstanceIds=[iid])
+
+    def publish(self, item):
+        if not item.get('boot_verified'):
+            raise ValueError('Publication requires a verified boot')
+        if item.get('change_set_id'):
+            return
+        app = item['app']; path = self.state / (app + '-state.json')
+        # Marketplace serializes changes per product. Retain pending submissions
+        # for a later publish invocation rather than canceling another review.
+        active = self.catalog.list_change_sets(Catalog='AWSMarketplace', FilterList=[
+            {'Name': 'EntityId', 'ValueList': [item['product_id']]},
+            {'Name': 'Status', 'ValueList': ['PREPARING', 'APPLYING']}], MaxResults=20).get('ChangeSetSummaryList', [])
+        if active:
+            item['status'] = 'WAIT_EXISTING_REVIEW'; item['active_reviews'] = active; save(path, item); return
+        ent = self.catalog.describe_entity(Catalog='AWSMarketplace', EntityId=item['product_id'])
+        option = item['delivery']; rec = option['Recommendations']
+        details = {'AmiSource': {'AmiId': item['ami'], 'AccessRoleArn': self.args.ingestion_role,
+                                'UserName': 'admin', 'OperatingSystemName': 'DEBIAN',
+                                'OperatingSystemVersion': '13/Trixie', 'ScanningPort': 22},
+                   'UsageInstructions': option['Instructions']['Usage'],
+                   'RecommendedInstanceType': rec['InstanceType'],
+                   'SecurityGroups': [{'IpProtocol': r['Protocol'], 'FromPort': r['FromPort'], 'ToPort': r['ToPort'],
+                                       'IpRanges': r['CidrIps']} for r in rec['SecurityGroups']]}
+        if option['Instructions'].get('Access'):
+            access = option['Instructions']['Access']
+            details['AccessEndpointUrl'] = {'Protocol': access['Protocol'], 'Port': access['Port']}
+        request = {'ChangeType': 'AddDeliveryOptions', 'Entity': {'Type': 'AmiProduct@1.0', 'Identifier': ent['EntityIdentifier']},
+                   'DetailsDocument': {'Version': {'VersionTitle': item['version'],
+                                                   'ReleaseNotes': 'Available Debian and TurnKey security updates are bundled into this image, including the Brotli fix for CVE-2026-111497 / DSA-6582-1. First boot automatically installs any newer security updates, with daily security updates enabled.'},
+                                       'DeliveryOptions': [{'Details': {'AmiDeliveryOptionDetails': details}}]}}
+        save(self.state / (app + '-publication-request.json'), request)
+        name = self.batch + '-' + app
+        response = self.catalog.start_change_set(Catalog='AWSMarketplace', ChangeSetName=name, ClientRequestToken=name, ChangeSet=[request])
+        item['change_set_id'] = response['ChangeSetId']; item['status'] = 'SUBMITTED'; save(path, item)
+
+    def reconcile(self, item):
+        if not item.get('change_set_id'):
+            return
+        path = self.state / (item['app'] + '-state.json')
+        review = self.catalog.describe_change_set(Catalog='AWSMarketplace', ChangeSetId=item['change_set_id'])
+        item['publication_status'] = review['Status']
+        save(self.state / (item['app'] + '-publication-status.json'), review)
+        if review['Status'] == 'SUCCEEDED':
+            ent = self.catalog.describe_entity(Catalog='AWSMarketplace', EntityId=item['product_id'])
+            data = ent.get('DetailsDocument') or json.loads(ent['Details'])
+            version = next((v for v in data['Versions'] if v['VersionTitle'] == item['version']), None)
+            item['new_delivery_public'] = bool(version and any(o['Visibility'] == 'Public' for o in version['DeliveryOptions']))
+            if item['new_delivery_public'] and not item.get('retirement_change_set_id'):
+                old = [o['Id'] for v in data['Versions'] if v['VersionTitle'] != item['version']
+                       for o in v['DeliveryOptions'] if o['Visibility'] == 'Public']
+                if old:
+                    request = {'ChangeType': 'RestrictDeliveryOptions',
+                               'Entity': {'Type': 'AmiProduct@1.0', 'Identifier': ent['EntityIdentifier']},
+                               'DetailsDocument': {'DeliveryOptionIds': old}}
+                    name = self.batch + '-retire-' + item['app']
+                    result = self.catalog.start_change_set(Catalog='AWSMarketplace', ChangeSetName=name,
+                                                          ClientRequestToken=name, ChangeSet=[request])
+                    item['retirement_change_set_id'] = result['ChangeSetId']
+                else:
+                    item['retirement_status'] = 'SUCCEEDED'
+        if item.get('retirement_change_set_id'):
+            result = self.catalog.describe_change_set(Catalog='AWSMarketplace', ChangeSetId=item['retirement_change_set_id'])
+            item['retirement_status'] = result['Status']
+        save(path, item)
+
+    def run(self):
+        jobs = queue.Queue()
+        rows = self.rows
+        if self.args.apps: rows = [r for r in rows if r['app'] in self.args.apps.split(',')]
+        for row in sorted(rows, key=lambda x: (x['app'] != 'core', x['app'])): jobs.put(row)
+        def work(worker):
+            self.prepare_worker(worker)
+            while True:
+                try: row = jobs.get_nowait()
+                except queue.Empty: return
+                try:
+                    item = self.patch(row, worker)
+                    with self.finish_lock: self.finish_jobs.append(self.finish_pool.submit(self.finish, item))
+                except Exception as exc:
+                    path = self.state / (row['app'] + '-state.json')
+                    item = json.loads(path.read_text()) if path.exists() else dict(row)
+                    item.update(status='ERROR', error=str(exc)); save(path, item)
+                    self.log(row['app'], 'ERROR ' + str(exc))
+                    # A failed patch may leave a volume attached. Unmounting runs
+                    # in the guest EXIT trap; detach before assigning another job.
+                    if item.get('volume'):
+                        self.ec2.detach_volume(VolumeId=item['volume'], InstanceId=worker['id'])
+                        wait_until(lambda: self.volume(item['volume'])['State'] == 'available', 180)
+                finally: jobs.task_done()
+        with futures.ThreadPoolExecutor(max_workers=self.args.workers) as pool:
+            list(pool.map(work, self.resources['workers'][self.args.worker_offset:][:min(len(rows), self.args.workers)]))
+        for job in self.finish_jobs: job.result()
+        self.finish_pool.shutdown()
+        failed = [row['app'] for row in rows if not json.loads((self.state / (row['app'] + '-state.json')).read_text()).get('boot_verified')]
+        if failed:
+            raise RuntimeError('Images did not pass verification: ' + ', '.join(failed))
+
+    def watch_publication(self):
+        deadline = time.monotonic() + self.args.watch_hours * 3600
+        while True:
+            pending, failed, completed, errors = [], [], [], {}
+            for row in self.rows:
+                app = row['app']
+                path = self.state / (app + '-state.json')
+                item = json.loads(path.read_text()) if path.exists() else dict(row)
+                if not item.get('boot_verified'):
+                    failed.append(app)
+                    continue
+                try:
+                    self.publish(item)
+                    self.reconcile(item)
+                except Exception as exc:
+                    errors[app] = str(exc)
+                    pending.append(app)
+                    continue
+                if item.get('publication_status') in ['FAILED', 'CANCELLED'] or item.get('retirement_status') in ['FAILED', 'CANCELLED']:
+                    failed.append(app)
+                elif item.get('publication_status') == 'SUCCEEDED' and (
+                        item.get('retirement_status') == 'SUCCEEDED' or
+                        (item['visibility'] != 'Public' and not item.get('new_delivery_public'))):
+                    completed.append(app)
+                else:
+                    pending.append(app)
+            report = dict(checked_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                          completed=completed, pending=pending, failed=failed, errors=errors)
+            save(self.state / 'publication-watch.json', report)
+            self.log('publication', '%d completed, %d pending, %d failed' % (len(completed), len(pending), len(failed)))
+            if not pending:
+                if failed: raise RuntimeError('Publication failed: ' + ', '.join(failed))
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Publication review is still pending; see publication-watch.json')
+            time.sleep(self.args.poll_seconds)
+
+    def cleanup(self):
+        # A separate CloudTask confirms the workers have no mounted patch volumes
+        # before AWS teardown. Never select resources outside this exact batch.
+        cleanup_errors = []
+        def clean_worker(w):
+            try:
+                if self.instance(w['id'])['State']['Name'] == 'running':
+                    self.cloudtask(w, 'cleanup-' + w['id'], 'sudo sh -c', shlex.quote('set -eu; if findmnt -rn -o TARGET | grep -q "^/mnt/refresh-"; then exit 1; fi; sync; echo CLEANUP_VERIFIED'))
+                    if 'CLEANUP_VERIFIED' not in (self.state / ('cleanup-' + w['id'] + '.log')).read_text():
+                        raise RuntimeError('Cleanup marker absent')
+            except Exception as exc:
+                cleanup_errors.append({'worker': w['id'], 'error': str(exc)})
+        with futures.ThreadPoolExecutor(max_workers=self.args.workers) as pool:
+            list(pool.map(clean_worker, self.resources['workers']))
+        filters = [{'Name': 'tag:RefreshBatch', 'Values': [self.batch]}]
+        instances = [i for r in self.ec2.describe_instances(Filters=filters)['Reservations'] for i in r['Instances']]
+        ids = [i['InstanceId'] for i in instances if i['State']['Name'] != 'terminated']
+        if ids: self.ec2.terminate_instances(InstanceIds=ids)
+        wait_until(lambda: all(self.instance(i)['State']['Name'] == 'terminated' for i in ids), 300)
+        volumes = self.ec2.describe_volumes(Filters=filters)['Volumes']
+        for v in volumes:
+            if v['State'] != 'available': raise RuntimeError('Batch volume still attached: ' + v['VolumeId'])
+            self.ec2.delete_volume(VolumeId=v['VolumeId'])
+        wait_until(lambda: not self.ec2.describe_volumes(Filters=filters)['Volumes'], 180)
+        remaining = []
+        for snapshot in self.ec2.describe_snapshots(OwnerIds=[self.resources['account']], Filters=filters)['Snapshots']:
+            references = self.ec2.describe_images(Owners=[self.resources['account']], Filters=[
+                {'Name': 'block-device-mapping.snapshot-id', 'Values': [snapshot['SnapshotId']]}])['Images']
+            if not references:
+                self.ec2.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
+        self.ec2.delete_key_pair(KeyName=self.resources['key_name'])
+        try:
+            self.ec2.delete_security_group(GroupId=self.resources['security_group'])
+        except ClientError as exc:
+            if exc.response['Error']['Code'] != 'InvalidGroup.NotFound':
+                raise
+        self.key.unlink(missing_ok=True)
+        base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
+        subprocess.run(['sbx', '--name', self.args.sandbox, self.args.project, 'rm', '-f', base + '/worker-key'], check=True)
+        save(self.state / 'cleanup.json', {'batch': self.batch, 'instance_ids': [i['InstanceId'] for i in instances],
+                                         'remaining_volumes': [], 'complete': True, 'cloudtask_errors': cleanup_errors,
+                                         'retained_snapshots': 'Only AMI output snapshots; source release snapshots untouched'})
+        self.log('cleanup', 'All batch instances terminated and working volumes removed')
+
+
+
+def prepare(args):
+    """Create a repeat batch from retained, verified outputs of a previous batch."""
+    import base64
+    import urllib.request
+    previous = Path(args.from_batch).resolve()
+    state = Path(args.state).resolve()
+    if state.exists() and any(state.iterdir()):
+        raise SystemExit('Choose an empty state directory for a new batch')
+    state.mkdir(parents=True, exist_ok=True); state.chmod(0o700)
+    old = json.loads((previous / 'resources.json').read_text())
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    batch = args.batch or 'tkl-mp-refresh-' + stamp
+    assert re.fullmatch(r'[A-Za-z0-9-]{1,60}', batch)
+    session = boto3.Session(region_name=old['region'])
+    assert session.client('sts').get_caller_identity()['Account'] == old['account']
+    ec2 = session.client('ec2'); catalog = session.client('marketplace-catalog')
+    rows = []
+    for row in json.loads((previous / 'plan.json').read_text()):
+        path = previous / (row['app'] + '-state.json')
+        prior = json.loads(path.read_text()) if path.exists() else {}
+        source = prior['ami'] if prior.get('boot_verified') else row['source_ami']
+        ent = catalog.describe_entity(Catalog='AWSMarketplace', EntityId=row['product_id'])
+        data = ent.get('DetailsDocument') or json.loads(ent['Details'])
+        version = max((v for v in data['Versions'] if re.fullmatch(r'19\.[0-9.]+', v['VersionTitle'])),
+                      key=lambda v: tuple(map(int, v['VersionTitle'].split('.'))))
+        title = '.'.join(version['VersionTitle'].split('.')[:2]) + '.' + stamp.replace('T', '').replace('Z', '')
+        rows.append(dict(app=row['app'], product_id=row['product_id'], source_ami=source,
+                         old_version=version['VersionTitle'], version=title,
+                         visibility=data['Description']['Visibility'], delivery=version['DeliveryOptions'][0]))
+        save(state / (row['app'] + '-catalog-before.json'), ent)
+    save(state / 'plan.json', rows)
+    key = state / 'worker-key'
+    subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key)], check=True)
+    resources = {k: old[k] for k in ['region', 'account', 'subnet', 'worker_ami']}
+    resources.update(batch=batch, workers=[], key_name=batch,
+                     cloudtask_root=args.cloudtask_root or '/home/agent/' + state.name)
+    save(state / 'resources.json', resources)
+    ec2.import_key_pair(KeyName=batch, PublicKeyMaterial=key.with_suffix('.pub').read_bytes())
+    vpc = ec2.describe_subnets(SubnetIds=[old['subnet']])['Subnets'][0]['VpcId']
+    resources['security_group'] = ec2.create_security_group(GroupName=batch, Description='Temporary parallel AMI refresh workers', VpcId=vpc)['GroupId']
+    save(state / 'resources.json', resources)
+    with urllib.request.urlopen('https://checkip.amazonaws.com', timeout=15) as response:
+        ip = str(ipaddress.ip_address(response.read().decode().strip()))
+    ec2.authorize_security_group_ingress(GroupId=resources['security_group'], IpPermissions=[
+        {'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22, 'IpRanges': [{'CidrIp': ip + '/32'}]}])
+    tags = [{'Key': 'RefreshBatch', 'Value': batch}, {'Key': 'TurnKeyLifecycle', 'Value': 'disposable'}]
+    launched = ec2.run_instances(ImageId=old['worker_ami'], InstanceType='m7i.large', MinCount=args.workers, MaxCount=args.workers,
+                                 KeyName=batch, SubnetId=old['subnet'], SecurityGroupIds=[resources['security_group']],
+                                 MetadataOptions={'HttpTokens': 'required'}, ClientToken=batch,
+                                 TagSpecifications=[{'ResourceType': k, 'Tags': tags} for k in ['instance', 'volume']])
+    resources['workers'] = [{'id': i['InstanceId'], 'az': i['Placement']['AvailabilityZone']} for i in launched['Instances']]
+    save(state / 'resources.json', resources)
+    for worker in resources['workers']:
+        worker['ip'] = wait_until(lambda: ec2.describe_instances(InstanceIds=[worker['id']])['Reservations'][0]['Instances'][0].get('PublicIpAddress'), 180)
+    save(state / 'resources.json', resources)
+    # Give CloudTask only the batch SSH key, never AWS credentials.
+    setup = "from pathlib import Path; import base64; p=Path(%r); p.mkdir(parents=True,exist_ok=True); p.chmod(0o700); (p/'worker-key').write_bytes(base64.b64decode(%r)); (p/'worker-key').chmod(0o600); (p/'hub.py').write_text(%r)" % (
+        resources['cloudtask_root'], base64.b64encode(key.read_bytes()).decode(),
+        'class Spawner(object):\n    def __init__(self, *args, **kwargs):\n        raise RuntimeError("Use preallocated workers")\n')
+    setup += '; (p/"cloudtask-existing-workers").write_bytes(base64.b64decode(%r))' % base64.b64encode((HERE / 'bin/cloudtask-existing-workers').read_bytes()).decode()
+    subprocess.run(['sbx', '--name', args.sandbox, args.project, 'python3', '-'], input=setup, text=True, check=True)
+    print('Prepared', len(rows), 'images on', args.workers, 'workers:', state)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('action', choices=['prepare', 'run', 'publish', 'watch', 'status', 'cleanup'])
+    p.add_argument('--state', required=True)
+    p.add_argument('--workers', type=int, default=12)
+    p.add_argument('--worker-offset', type=int, default=0)
+    p.add_argument('--apps')
+    p.add_argument('--from-batch')
+    p.add_argument('--batch')
+    p.add_argument('--cleanup', action='store_true')
+    p.add_argument('--publish', action='store_true')
+    p.add_argument('--watch-hours', type=float, default=168)
+    p.add_argument('--poll-seconds', type=int, default=300)
+    p.add_argument('--sandbox', default='sbx-turnkey-410fd764949b')
+    p.add_argument('--project', default='/home/z/projects/turnkey')
+    p.add_argument('--cloudtask-root')
+    p.add_argument('--python2', default='/home/agent/turnkey-pypy2-runtime-root/usr/lib/tklbam-pypy2/bin/pypy')
+    p.add_argument('--pylib', default='/home/agent/v19-release-work/turnkey-pylib/pylib')
+    p.add_argument('--cloudtask', default='/home/agent/cloudtask/cmd_cloudtask.py')
+    p.add_argument('--ingestion-role', default='arn:aws:iam::096457495696:role/awsmp-ami-ingestion')
+    args = p.parse_args()
+    if args.action == 'prepare':
+        if not args.from_batch: p.error('prepare requires --from-batch')
+        prepare(args); return
+    r = Refresh(args)
+    if args.action == 'run':
+        try:
+            r.run()
+        finally:
+            r.finish_pool.shutdown(wait=True)
+            if args.cleanup: r.cleanup()
+    elif args.action == 'cleanup': r.cleanup()
+    elif args.action == 'watch': r.watch_publication()
+    else:
+        for path in sorted(r.state.glob('*-state.json')):
+            item = json.loads(path.read_text())
+            if args.action == 'publish' and item.get('boot_verified'):
+                r.publish(item)
+                r.reconcile(item)
+            if args.action == 'status' and item.get('change_set_id'):
+                review = r.catalog.describe_change_set(Catalog='AWSMarketplace', ChangeSetId=item['change_set_id'])
+                item['publication_status'] = review['Status']; save(path, item)
+                save(r.state / (item['app'] + '-publication-status.json'), review)
+            print(item['app'], item.get('status'), item.get('publication_status', ''), item.get('error', ''))
+
+
+if __name__ == '__main__':
+    main()

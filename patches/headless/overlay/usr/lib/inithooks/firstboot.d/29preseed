@@ -1,6 +1,9 @@
 #!/bin/bash -e
 # generic preseeding of inithooks.conf if it doesn't exist
 
+# The preseed file is absent on fresh images; read its path independently.
+source /etc/default/inithooks
+
 [[ -n "$_TURNKEY_INIT" ]] && exit 0
 
 [[ -e "$INITHOOKS_CONF" ]] && exit 0

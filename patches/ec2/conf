@@ -10,6 +10,11 @@ install() {
 
 install hubclient sudo parted gdisk #ebsmount
 
+# EC2 instances install security updates at launch, including Marketplace launches
+# without Hub preseeding. Keep the interactive initialization fence in place.
+sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
+    /usr/lib/inithooks/firstboot.d/29preseed
+
 # grub tweaks
 DEFAULT=/etc/default/grub
 sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT=.*\)"$/\1 xencons=ttyS0 console=ttyS0"/' $DEFAULT

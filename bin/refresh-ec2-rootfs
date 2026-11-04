@@ -1,0 +1,105 @@
+#!/bin/bash
+# Refresh an unbooted EC2 root volume. The controller owns its AWS lifecycle.
+set -euo pipefail
+if [[ ${1:-} != --isolated ]]; then
+    exec unshare --mount --propagation private "$0" --isolated "$@"
+fi
+shift
+volume=${1:?volume ID required}
+app=${2:?appliance required}
+batch=${3:?batch required}
+[[ $volume =~ ^vol-[a-f0-9]+$ && $app =~ ^[a-z0-9-]+$ && $batch =~ ^[a-zA-Z0-9-]+$ ]]
+root=/mnt/refresh-$app
+serial=${volume//-/}
+udevadm settle
+for attempt in {1..30}; do
+    disk=$(lsblk -dnpo NAME,SERIAL | awk -v serial="$serial" '$2==serial {print $1}')
+    [[ -n $disk ]] && break
+    sleep 1
+done
+[[ -b ${disk:-/nonexistent} ]]
+# Source AMIs use a BIOS boot partition followed by the ext4 root partition.
+part=${disk}p2
+[[ -b $part ]]
+[[ $(lsblk -no MOUNTPOINTS "$disk" | tr -d '[:space:]') == '' ]]
+mkdir -p "$root"
+mount "$part" "$root"
+policy=$root/usr/sbin/policy-rc.d
+resolver=$root/etc/resolv.conf
+policy_changed=false
+resolver_changed=false
+cleanup() {
+    status=$?
+    trap - EXIT
+    if $policy_changed; then
+    if [[ -e $root/.refresh-policy-present ]]; then
+        mv "$root/.refresh-policy" "$policy"
+        rm "$root/.refresh-policy-present"
+    else
+        rm -f "$policy"
+    fi
+    fi
+    if $resolver_changed; then
+        rm -f "$resolver"
+        if [[ -e $root/.refresh-resolver-present ]]; then
+            mv "$root/.refresh-resolver" "$resolver"
+            rm "$root/.refresh-resolver-present"
+        fi
+    fi
+    sync
+    umount -R "$root"
+    exit "$status"
+}
+trap cleanup EXIT
+[[ -f $root/etc/default/inithooks ]]
+grep -qx 'RUN_FIRSTBOOT=true' "$root/etc/default/inithooks"
+! find "$root/root" "$root/home" -name authorized_keys -type f -size +0c | grep -q .
+[[ -z $(chroot "$root" dpkg --audit) ]]
+if [[ -e $policy || -L $policy ]]; then
+    mv "$policy" "$root/.refresh-policy"
+    touch "$root/.refresh-policy-present"
+fi
+policy_changed=true
+printf '#!/bin/sh\nexit 101\n' > "$policy"
+chmod 755 "$policy"
+if [[ -e $resolver || -L $resolver ]]; then
+    mv "$resolver" "$root/.refresh-resolver"
+    touch "$root/.refresh-resolver-present"
+fi
+resolver_changed=true
+cp -L /etc/resolv.conf "$resolver"
+mount --rbind /dev "$root/dev"
+mount --make-rslave "$root/dev"
+mount -t proc proc "$root/proc"
+mount -t sysfs sysfs "$root/sys"
+mount -t tmpfs tmpfs "$root/run"
+export DEBIAN_FRONTEND=noninteractive
+chroot "$root" apt-get -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT -o APT::Update::Error-Mode=any -o Acquire::Retries=3 update
+chroot "$root" apt-get -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT -y --no-remove dist-upgrade \
+    -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/security.sources.sources \
+    -o Dir::Etc::sourceparts=nonexistent \
+    -o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold
+sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
+    "$root/usr/lib/inithooks/firstboot.d/29preseed"
+if ! grep -qx 'source /etc/default/inithooks' "$root/usr/lib/inithooks/firstboot.d/29preseed"; then
+    sed -i '2i source /etc/default/inithooks' "$root/usr/lib/inithooks/firstboot.d/29preseed"
+fi
+grep -qx 'export SEC_UPDATES=FORCE' "$root/usr/lib/inithooks/firstboot.d/29preseed"
+grep -qx 'RUN_FIRSTBOOT=true' "$root/etc/default/inithooks"
+grep -qx 'PasswordAuthentication no' "$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf"
+grep -qx 'PermitRootLogin no' "$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf"
+[[ -z $(chroot "$root" dpkg --audit) ]]
+! find "$root/root" "$root/home" -name authorized_keys -type f -size +0c | grep -q .
+version=$(chroot "$root" dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
+if [[ -n $version ]]; then
+    chroot "$root" dpkg --compare-versions "$version" ge '1.1.0-2+deb13u1'
+fi
+if [[ $app == gitlab ]]; then
+    chroot "$root" dpkg --compare-versions "$(chroot "$root" dpkg-query -W -f='${Version}' gitlab-ce)" ge '19.3.7-ce.0'
+fi
+printf 'batch=%s\nupdated_at=%s\nfirstboot_security_updates=FORCE\n' "$batch" "$(date -u +%FT%TZ)" > "$root/var/lib/turnkey-info/security-refresh"
+chroot "$root" apt-get clean
+rm -f "$root"/var/log/apt/* "$root/var/log/dpkg.log"
+find "$root/var/lib/apt/lists" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+printf 'REFRESH_VERIFIED app=%s brotli=%s firstboot=FORCE\n' "$app" "${version:-absent}"
+sync
