@@ -58,7 +58,16 @@ mv /sbin/modprobe /sbin/modprobe.orig
 ln -s /bin/true /sbin/modprobe
 
 # root password is set outside of container
-chmod -x /usr/lib/inithooks/firstboot.d/30rootpass
+# Persist the mode across inithooks package upgrades.
+rootpass=/usr/lib/inithooks/firstboot.d/30rootpass
+dpkg-statoverride --list "$rootpass" >/dev/null || \
+    dpkg-statoverride --add root root 0644 "$rootpass"
+chmod 0644 "$rootpass"
+
+# The container unit overrides the legacy headless virtual-console service.
+# Keep it in /etc so package upgrades retain this deployment configuration.
+systemctl reenable inithooks.service
+chmod 0755 /root/.profile.d/turnkey-init-fence
 
 # redirect inithook output (preseeded headless deployment)
 sed -i '/REDIRECT_OUTPUT/ s/=.*/=true/g' /etc/default/inithooks

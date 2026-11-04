@@ -1,0 +1,17 @@
+[Unit]
+Description=Initialize TurnKey container
+After=network.target
+Before=container-getty@1.service console-getty.service
+ConditionKernelCommandLine=!noinithooks
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/default/inithooks
+ExecStart=/usr/lib/inithooks/run
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

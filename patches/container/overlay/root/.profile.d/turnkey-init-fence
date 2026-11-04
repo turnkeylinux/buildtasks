@@ -1,1 +1,20 @@
-/usr/bin/dtach -A /root/.inithooks.dtach -Ez /bin/bash -c "TERM=xterm; turnkey-init --full-confconsole"
+# Only authenticated interactive logins should start the setup dialog.
+case $- in
+    *i*)
+        if [ -t 0 ] && [ -t 1 ]; then
+            echo 'Preparing TurnKey setup...'
+            if systemctl start inithooks.service; then
+                # Boot initialization may have completed unattended setup.
+                if systemctl is-enabled --quiet turnkey-init-fence.service; then
+                    /usr/bin/dtach -A /root/.inithooks.dtach -Ez \
+                        /bin/bash -c 'case ${TERM:-} in ""|dumb) TERM=xterm;; esac; export TERM; turnkey-init --full-confconsole'
+                    if systemctl is-enabled --quiet turnkey-init-fence.service; then
+                        echo 'Setup is not complete. Run turnkey-init to continue.'
+                    fi
+                fi
+            else
+                echo 'Startup initialization failed. Check journalctl -u inithooks, then run turnkey-init.'
+            fi
+        fi
+        ;;
+esac
