@@ -84,7 +84,9 @@ class Refresh:
                 result = subprocess.run(argv, input=job + '\n', text=True, stdout=log, stderr=subprocess.STDOUT, timeout=1000)
             if result.returncode == 0:
                 return
-            if 'No managed sandbox matches selector' not in (self.state / (app + '.log')).read_text():
+            output = (self.state / (app + '.log')).read_text()
+            if not any(message in output for message in ['No managed sandbox matches selector',
+                       'Could not temporarily start sandbox for session reconciliation']):
                 break
             time.sleep(2)
         raise RuntimeError('CloudTask failed; see ' + app + '.log')
@@ -218,6 +220,7 @@ systemctl show inithooks.service -p Result -p ActiveState
 cat /var/log/inithooks.log
 uname -r
 cat /var/log/inithooks/secupdates.log
+grep -q '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.' /var/log/inithooks/secupdates.log
 ! grep -q '^ERR:' /var/log/inithooks.log
 journalctl -b -t inithooks --no-pager | grep '\\[95secupdates\\] security updates being installed'
 ! journalctl -b -t inithooks --no-pager | grep -q '\\[95secupdates\\] security updates skipped'

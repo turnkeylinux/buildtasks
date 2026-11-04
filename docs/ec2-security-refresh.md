@@ -4,6 +4,8 @@
 unbooted source images, sets EC2 first-boot updates to `FORCE`, and boot-tests
 each candidate before submitting a new version to its existing Marketplace
 listing. First boot checks for fixes released after the image was built.
+If a security update requires stable-repository dependencies, the refresh
+installs those dependencies too and requires zero pending security upgrades.
 
 The retained batch directory contains the product/source mapping, resource IDs,
 per-image update and boot logs, publication requests, and cleanup evidence. Use

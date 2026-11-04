@@ -74,11 +74,28 @@ mount -t proc proc "$root/proc"
 mount -t sysfs sysfs "$root/sys"
 mount -t tmpfs tmpfs "$root/run"
 export DEBIAN_FRONTEND=noninteractive
+export LC_ALL=C
 chroot "$root" apt-get -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT -o APT::Update::Error-Mode=any -o Acquire::Retries=3 update
 chroot "$root" apt-get -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT -y --no-remove dist-upgrade \
     -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/security.sources.sources \
     -o Dir::Etc::sourceparts=nonexistent \
     -o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold
+# Security packages can require dependencies from the stable repository, for
+# example ImageMagick's Perl bindings after a stable Perl ABI update.
+security_candidates() {
+    chroot "$root" apt \
+        -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/security.sources.sources \
+        -o Dir::Etc::sourceparts=nonexistent list --upgradable 2>/dev/null |
+        awk '/\[upgradable from:/ {split($1, name, "/"); print name[1] "=" $2}'
+}
+pending=$(security_candidates)
+if [[ -n $pending ]]; then
+    mapfile -t targets <<< "$pending"
+    chroot "$root" apt-get -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT \
+        -y --no-remove --only-upgrade install "${targets[@]}" \
+        -o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold
+fi
+[[ -z $(security_candidates) ]]
 sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
     "$root/usr/lib/inithooks/firstboot.d/29preseed"
 if ! grep -qx 'source /etc/default/inithooks' "$root/usr/lib/inithooks/firstboot.d/29preseed"; then
