@@ -101,5 +101,30 @@ class PublicationTest(unittest.TestCase):
             refresh.instance('i-new')
 
 
+class ClientTokenTest(unittest.TestCase):
+    def test_existing_tokens_keep_their_idempotency_identity(self):
+        for token in ['batch-core-r1', 'x' * 64]:
+            self.assertEqual(module.ec2_client_token(token), token)
+
+    def test_long_tokens_are_stable_and_distinguish_attempts(self):
+        token = 'x' * 60 + '-test-lighttpd-php-fastcgi-r1-1'
+        first = module.ec2_client_token(token)
+        self.assertEqual(len(first), 64)
+        self.assertEqual(first, module.ec2_client_token(token))
+        self.assertNotEqual(first, module.ec2_client_token(token[:-1] + '2'))
+
+    def test_long_appliance_name_sends_an_accepted_boot_request_token(self):
+        refresh = module.Refresh.__new__(module.Refresh)
+        refresh.batch = 'tkl-use1-refresh-benchmark-20261104'
+        refresh.resources = dict(key_name='test-key', subnet='subnet-test', security_group='sg-test')
+        refresh.ec2 = Mock()
+        refresh.ec2.run_instances.side_effect = RuntimeError('request captured')
+        with tempfile.TemporaryDirectory() as directory:
+            refresh.state = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, 'request captured'):
+                refresh.boot_test(dict(app='lighttpd-php-fastcgi', ami='ami-test'))
+        self.assertLessEqual(len(refresh.ec2.run_instances.call_args.kwargs['ClientToken']), 64)
+
+
 if __name__ == '__main__':
     unittest.main()

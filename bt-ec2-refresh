@@ -3,6 +3,7 @@
 import argparse
 import concurrent.futures as futures
 import datetime
+import hashlib
 import ipaddress
 import json
 import os
@@ -19,6 +20,11 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 HERE = Path(__file__).resolve().parent
+
+
+def ec2_client_token(value):
+    """Preserve existing tokens; hash longer ones to EC2's 64-character limit."""
+    return value if len(value) <= 64 else hashlib.sha256(value.encode('ascii')).hexdigest()
 
 
 def save(path, data):
@@ -132,7 +138,7 @@ class Refresh:
             v = self.ec2.create_volume(SnapshotId=mappings[0]['Ebs']['SnapshotId'], AvailabilityZone=worker['az'],
                                        VolumeType='gp3', Encrypted=False,
                                        TagSpecifications=[{'ResourceType': 'volume', 'Tags': self.tags(app)}],
-                                       ClientToken=self.batch + '-' + app + '-r' + str(self.resources.get('generation', 1)))
+                                       ClientToken=ec2_client_token(self.batch + '-' + app + '-r' + str(self.resources.get('generation', 1))))
             item['volume'] = v['VolumeId']
             save(path, item)
         vid = item['volume']
@@ -202,7 +208,7 @@ class Refresh:
                                       SecurityGroupIds=[self.resources['security_group']],
                                       MetadataOptions={'HttpTokens': 'required'},
                                       TagSpecifications=[{'ResourceType': k, 'Tags': self.tags(app)} for k in ['instance', 'volume']],
-                                      ClientToken=self.batch + '-test-' + app + '-r' + str(self.resources.get('generation', 1)) + '-' + str(item['test_attempt']))
+                                      ClientToken=ec2_client_token(self.batch + '-test-' + app + '-r' + str(self.resources.get('generation', 1)) + '-' + str(item['test_attempt'])))
             item['test_instance'] = r['Instances'][0]['InstanceId']; save(path, item)
         iid = item['test_instance']; self.log(app, 'boot test ' + iid)
         try:
