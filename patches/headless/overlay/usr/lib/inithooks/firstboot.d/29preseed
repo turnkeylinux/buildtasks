@@ -4,7 +4,21 @@
 # The preseed file is absent on fresh images; read its path independently.
 source /etc/default/inithooks
 
-[[ -n "$_TURNKEY_INIT" ]] && exit 0
+# Only discard credentials this hook generated, and only while they are
+# unchanged. Supplied or subsequently edited preseeds remain authoritative.
+generated_hash_file="${INITHOOKS_CONF}.headless-generated.sha256"
+if [[ -n "$_TURNKEY_INIT" ]]; then
+    if [[ -f "$generated_hash_file" ]]; then
+        read -r generated_hash _ < "$generated_hash_file" || true
+        if [[ -f "$INITHOOKS_CONF" && "$generated_hash" =~ ^[0-9a-f]{64}$ ]] &&
+            [[ "$(sha256sum < "$INITHOOKS_CONF")" == "$generated_hash  -" ]]; then
+            rm -- "$INITHOOKS_CONF"
+        fi
+        # A changed, finalized or missing config also consumes stale provenance.
+        rm -- "$generated_hash_file"
+    fi
+    exit 0
+fi
 
 [[ -e "$INITHOOKS_CONF" ]] && exit 0
 
@@ -28,7 +42,9 @@ while [ -z "$check" ]; do
     fi
 done
 
-cat>$INITHOOKS_CONF<<EOF
+# Generated fallback credentials and their provenance are root-only.
+umask 077
+cat>"$INITHOOKS_CONF"<<EOF
 export ROOT_PASS=$MASTERPASS
 export DB_PASS=$MASTERPASS
 export APP_PASS=$MASTERPASS
@@ -39,5 +55,8 @@ export SEC_ALERTS=SKIP
 export SEC_UPDATES=SKIP
 export AUTO_RUN=TRUE
 EOF
+chmod 600 "$INITHOOKS_CONF"
+sha256sum < "$INITHOOKS_CONF" > "$generated_hash_file"
+chmod 600 "$generated_hash_file"
 
 chmod +x /usr/lib/inithooks/firstboot.d/??turnkey-init-fence*
