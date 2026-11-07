@@ -58,3 +58,9 @@ after automatic execution ended. No database or credential operation was used,
 and this does not attribute the earlier missing-socket exception to overlap.
 The immediate path uses one unit-state query and no polling; only an active or
 queued automatic run waits.
+
+Container units use `Type=oneshot` with `RemainAfterExit=yes`. Their completed
+`active/exited` state reaches interactive setup through the same original
+firstboot flag and hook-log checks as a completed EC2 unit. Running or queued
+units still wait; an exited unit with a failed or incomplete original setup
+shows the existing recovery instruction.

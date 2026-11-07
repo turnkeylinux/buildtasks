@@ -18,11 +18,22 @@ class FirstLoginTest(unittest.TestCase):
   self.state()
  def command(self,name,body):
   p=self.root/'bin'/name;p.write_text('#!/bin/sh\n'+body+'\n');p.chmod(0o755)
- def state(self,active='inactive',result='success',condition='yes',started='123',job='0',next=False):
-  (self.root/('next' if next else 'unit')).write_text(f'ActiveState={active}\nResult={result}\nConditionResult={condition}\nExecMainStartTimestampMonotonic={started}\nJob={job}\n')
+ def state(self,active='inactive',result='success',condition='yes',started='123',job='0',next=False,substate='dead'):
+  (self.root/('next' if next else 'unit')).write_text(f'ActiveState={active}\nSubState={substate}\nResult={result}\nConditionResult={condition}\nExecMainStartTimestampMonotonic={started}\nJob={job}\n')
  def run_helper(self):return subprocess.run(['bash',str(self.helper)],env=self.env,capture_output=True,text=True,timeout=3)
  def test_active_boot_waits_then_enters_interactive(self):
   self.state('activating');self.state(next=True);r=self.run_helper();self.assertEqual(r.returncode,0,r.stderr);self.assertIn('Waiting for automatic setup',r.stdout);self.assertEqual(self.calls.read_text(),'sleep\ninteractive --full-confconsole\n')
+ def test_container_completed_oneshot_enters_without_wait(self):
+  unit=(ROOT/'patches/container/overlay/etc/systemd/system/inithooks.service').read_text();self.assertIn('Type=oneshot',unit);self.assertIn('RemainAfterExit=yes',unit)
+  self.state('active',substate='exited');r=self.run_helper();self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(self.calls.read_text(),'interactive --full-confconsole\n')
+ def test_container_activating_waits_until_completed_oneshot(self):
+  self.state('activating',substate='start');self.state('active',substate='exited',next=True);r=self.run_helper();self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(self.calls.read_text(),'sleep\ninteractive --full-confconsole\n')
+ def test_container_completed_unit_preserves_failed_hook(self):
+  self.state('active',substate='exited');self.defaults.write_text('RUN_FIRSTBOOT=true\nINITHOOKS_LOGFILE='+str(self.log)+'\n');self.log.write_text('INFO: Running firstboot scripts\nERR: [40app] failed - exit code1\n');before=(self.defaults.read_bytes(),self.log.read_bytes());r=self.run_helper();self.assertEqual(r.returncode,1);self.assertIn('has not been retried',r.stderr);self.assertFalse(self.calls.exists());self.assertEqual(before,(self.defaults.read_bytes(),self.log.read_bytes()))
+ def test_active_running_unit_still_waits(self):
+  self.state('active',substate='running');self.state(next=True);r=self.run_helper();self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(self.calls.read_text(),'sleep\ninteractive --full-confconsole\n')
+ def test_completed_container_with_queued_job_still_waits(self):
+  self.state('active',substate='exited',job='42');self.state('active',substate='exited',next=True);r=self.run_helper();self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(self.calls.read_text(),'sleep\ninteractive --full-confconsole\n')
  def test_queued_unit_waits_before_execution(self):
   self.state(started='0',job='42');self.state(next=True);self.assertEqual(self.run_helper().returncode,0);self.assertTrue(self.calls.read_text().startswith('sleep\n'))
  def test_skipped_pve_unit_enters_without_wait_or_reading_setup(self):

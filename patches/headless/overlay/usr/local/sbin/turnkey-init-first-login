@@ -12,22 +12,28 @@ failure() {
 
 announced=false
 while :; do
-    properties=$(systemctl show inithooks.service --property=ActiveState,Result,ConditionResult,ExecMainStartTimestampMonotonic,Job) || {
+    properties=$(systemctl show inithooks.service --property=ActiveState,SubState,Result,ConditionResult,ExecMainStartTimestampMonotonic,Job) || {
         echo 'Cannot inspect automatic setup; check inithooks.service before running turnkey-init.' >&2
         exit 1
     }
-    active= result= condition= started= job=
+    active= substate= result= condition= started= job=
     while IFS='=' read -r key value; do
         case "$key" in
             ActiveState) active=$value ;;
+            SubState) substate=$value ;;
             Result) result=$value ;;
             ConditionResult) condition=$value ;;
             ExecMainStartTimestampMonotonic) started=$value ;;
             Job) job=$value ;;
         esac
     done <<< "$properties"
-    [[ "$started" =~ ^[0-9]+$ && "$condition" =~ ^(yes|no)$ && -n "$active" && -n "$result" ]] || failure
-    if [[ "$active" =~ ^(activating|active|reloading|deactivating)$ || ( -n "$job" && "$job" != 0 ) ]]; then
+    [[ "$started" =~ ^[0-9]+$ && "$condition" =~ ^(yes|no)$ && -n "$active" && -n "$substate" && -n "$result" ]] || failure
+    # Container oneshots remain active/exited after their runner has finished.
+    completed=false
+    if [[ "$active" == inactive || ( "$active" == active && "$substate" == exited ) ]]; then
+        completed=true
+    fi
+    if [[ "$active" =~ ^(activating|reloading|deactivating)$ || ( "$active" == active && "$completed" == false ) || ( -n "$job" && "$job" != 0 ) ]]; then
         if [[ "$announced" == false ]]; then
             echo 'Waiting for automatic setup to finish. Press Ctrl-C to cancel this login.'
             announced=true
@@ -40,7 +46,7 @@ done
 
 # PVE/LXC may skip this boot unit and need interactive setup immediately.
 if [[ "$started" != 0 ]]; then
-    [[ "$active" == inactive && "$result" == success ]] || failure
+    [[ "$completed" == true && "$result" == success ]] || failure
     source /etc/default/inithooks
     [[ "${RUN_FIRSTBOOT,,}" == false ]] || failure
     # The headless unit's shell can report success after its runner failed.
