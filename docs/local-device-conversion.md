@@ -1,0 +1,13 @@
+# Controller-owned EC2 conversion
+
+Use `bt-ec2 --testing --local-device=/dev/disk/by-id/EXACT_VOLUME_ID prestashop-19.0-trixie-amd64` on a provisioned converter. The caller owns volume creation, attachment, selecting the exact disposable whole disk, snapshot registration and cleanup. This mode populates the disk and generates build metadata; it makes no AWS lifecycle calls and skips AWS package setup. Provision the normal extraction, partitioning, filesystem, GRUB and initramfs tools first.
+
+The device must be a block device with `lsblk` TYPE `disk`, a supported NVMe, Xen, SCSI or virtio disk name, and no mounted filesystem on it or its partitions. Device-mapper, loop, partition and other block types are rejected. This validation runs before configuration/setup/extraction and again immediately before population. `bin/ec2/ebs_populate.py --check-device DEVICE` performs only that check. Its existing contents will be replaced. NVMe root partitions use `p2`; Xen/SCSI names use `2`. Mounts created while populating are cleaned up on a failed GRUB or initramfs command, and the failure propagates to the caller.
+
+Local-device mode requires `--testing` and rejects AWS name, copy, publish, marketplace, PVM and force options before configuration or setup. Keep credentials outside the conversion environment; the controller performs subsequent AWS operations. Retain the exact input ISO hash, source and buildtasks commit, output verification and terminal log before registering an image.
+
+The legacy automatic AWS volume path remains outside this mode. Its current `utils.connect` dependency is unavailable and is not repaired here. Use the explicit local-device controller path for this delivery.
+
+`generate-signature` also accepts Proxmox `debian-13-turnkey-APP_19.0-REV_amd64.tar.gz` filenames under `RELEASE=debian/trixie`, including a new packaging revision. The Debian and TurnKey versions must match the release. It generates checksum text and public key instructions using the existing release-key contract; signing is a separate authorized action. A packaging revision rename requires regenerating the checksum text for the final filename, then signing that text.
+
+Run the offline regression suite with `python3 -m unittest discover -s tests -p 'test_*.py'`. Device writes, mount commands, AWS clients and key commands in the conversion tests are test doubles. The positive Bash CLI harness retains the actual option parser and dispatch; it substitutes only the block-node predicate and external commands so no host disk is needed. It also proves a failed early device check prevents extraction.

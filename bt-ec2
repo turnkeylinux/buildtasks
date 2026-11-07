@@ -38,6 +38,8 @@ Options::
                           (implies --secupdates)
     --testing           - allow use of current buildtasks branch (conflicts
                           with --publish &/or --marketplace &/or --copy)
+    --local-device=     - populate a controller-owned, pre-attached whole disk;
+                          requires --testing; no AWS lifecycle/publication
     --pvmshim           - apply paravirtual shim so snapshot is pvm compat.
     --pvmregister       - register pvm-virtualized snapshot, too
 
@@ -49,7 +51,7 @@ EOF
 }
 
 ARGS=("$@")
-unset force secupdates all_updates increment testing pvmshim appver
+unset force secupdates all_updates increment testing local_device pvmshim appver
 ebs_opts=()
 while [[ $# -ne 0 ]]; do
     case $1 in
@@ -62,8 +64,12 @@ while [[ $# -ne 0 ]]; do
         --secupdates)   secupdates="yes";;
         --increment)    increment="yes";;
         --testing)      testing="yes";;
+        --local-device=*) [[ -z "$local_device" ]] || fatal "duplicate --local-device";
+                          local_device=${1#*=};
+                          [[ -n "$local_device" ]] || fatal "empty local device";;
         --pvmshim)      pvmshim="yes";;
         --pvmregister)  ebs_opts+=("$1");;
+        -*)             fatal "unknown option: $1";;
         *)              if [[ -n "$appver" ]]; then
                             usage
                         else
@@ -74,6 +80,12 @@ while [[ $# -ne 0 ]]; do
 done
 
 [[ -n "$appver" ]] || usage
+if [[ -n "$local_device" ]]; then
+    [[ "$testing" == "yes" ]] || fatal "--local-device requires --testing"
+    [[ ${#ebs_opts[@]} == 0 && -z "$pvmshim" && -z "$force" ]] \
+        || fatal "--local-device conflicts with AWS name/copy/publish/marketplace/PVM/force options"
+    [[ -b "$local_device" ]] || fatal "local device is not a block device: $local_device"
+fi
 [[ -n "$secupdates" ]] || warning "--secupdates was not specified"
 if [[ -n "$secupdates" ]] && [[ -n "$increment" ]]; then
     warning "--increment implies --secupdates"
@@ -90,10 +102,15 @@ fi
 BT=$(dirname "$(readlink -f "$0")")
 export BT
 export BT_CONFIG=$BT/config
+# Refuse unsupported or mounted devices before setup, extraction or patching.
+# Population validates again immediately before the first partition write.
+if [[ -n "$local_device" ]]; then
+    "$BT/bin/ec2/ebs_populate.py" --check-device "$local_device"
+fi
 # shellcheck source=config.example/common.cfg
 source "$BT_CONFIG/common.cfg"
 # shellcheck source=config.example/aws.cfg
-source "$BT_CONFIG/aws.cfg"
+[[ -n "$local_device" ]] || source "$BT_CONFIG/aws.cfg"
 
 if [[ "$publish" == "yes" ]]; then
     [[ -n "$BT_PUBLISH_META" ]] || fatal "BT_PUBLISH_META not set"
@@ -138,7 +155,7 @@ if [[ "$TKL_HOST_VER" != "$TKL_BUILD_VER" ]]; then
     fi
 fi
 
-"$BT/bin/aws-setup"
+[[ -n "$local_device" ]] || "$BT/bin/aws-setup"
 
 read -r appname appversion codename arch <<< "$(turnkey-version -s "$appver" -a)"
 
@@ -159,7 +176,7 @@ fi
 os_arch=$(dpkg --print-architecture)
 [[ "$arch" == "$os_arch" ]] || fatal "os_arch mismatch: $arch != $os_arch"
 
-if [[ ! -e /root/ec2-setup.done ]]; then
+if [[ -z "$local_device" && ! -e /root/ec2-setup.done ]]; then
     "$BT/bin/ec2-setup"
     touch /root/ec2-setup.done
 fi
@@ -245,7 +262,9 @@ umount -l "$rootfs/proc" || true
 "$BT/bin/rootfs-cleanup" "$rootfs"
 "$BT/bin/aptconf-tag" "$rootfs" ec2
 "$BT/bin/build-tag" "$rootfs" ec2
-if [[ -f /usr/bin/python ]]; then
+if [[ -n "$local_device" ]]; then
+    "$BT/bin/ec2/ebs_populate.py" "$rootfs" "$local_device"
+elif [[ -f /usr/bin/python ]]; then
     "$BT/bin/ec2/legacy/ebs.py" "${ebs_opts[@]}" "$rootfs"
 else
     "$BT/bin/ec2/ebs.py" "${ebs_opts[@]}" "$rootfs"

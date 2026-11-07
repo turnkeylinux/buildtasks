@@ -70,6 +70,15 @@ if [[ "$(basename "$filename")" == bootstrap-$CODENAME*.tar.gz ]]; then
     BRANCH="$(get_tkl_ver_no "$CODENAME")"
 elif [[ "$filename" == "turnkey"*".iso" ]]; then
     BRANCH="$(sed -En 's|^[a-z0-9-]+-([0-9]+)\.[0-9].*|\1|p'<<<"$filename").x"
+elif [[ "$filename" =~ ^debian-([0-9]+)-turnkey-[a-z0-9-]+_([0-9]+)\.[0-9][0-9a-z.+~]*-[0-9]+_(amd64|arm64)\.tar\.gz$ ]]; then
+    DEBIAN_VERSION=${BASH_REMATCH[1]}
+    BRANCH=${BASH_REMATCH[2]}.x
+    [[ "$BRANCH" == "$(get_tkl_ver_no "$CODENAME")" ]] \
+        || fatal "PVE version does not match release $RELEASE"
+    case "$CODENAME:$DEBIAN_VERSION" in
+        bookworm:12|trixie:13|forky:14) ;;
+        *) fatal "PVE Debian version does not match release $RELEASE" ;;
+    esac
 else
     fatal "Unexpected filename: $filename"
 fi

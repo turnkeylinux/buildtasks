@@ -26,6 +26,8 @@ Options:
 
 import getopt
 import os
+import re
+import stat
 import subprocess
 import sys
 import time
@@ -153,8 +155,8 @@ class Volume:
 
 
 class Device:
-    def __init__(self):
-        self.real_path = self._get_freedevice()
+    def __init__(self, real_path=None):
+        self.real_path = real_path if real_path else self._get_freedevice()
         if not self.real_path:
             raise EbsBundleError("no free devices available...")
 
@@ -197,11 +199,59 @@ class Device:
         subprocess.run(["partprobe", self.real_path], check=True)
         time.sleep(5)
         self.root_path = self.real_path
-        self.real_path = self.real_path + "2"
+        separator = "p" if os.path.basename(self.real_path).startswith("nvme") else ""
+        self.real_path = self.real_path + separator + "2"
 
     def __del__(self):
         if self.is_mounted():
             self.umount()
+
+
+def validate_local_device(path):
+    """Refuse non-disks and disks with mounted filesystems before partitioning."""
+    path = os.path.realpath(path)
+    if not stat.S_ISBLK(os.stat(path).st_mode):
+        raise EbsBundleError("local device is not a block device: " + path)
+    kind = subprocess.run(["lsblk", "-dn", "-o", "TYPE", path],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    if kind != "disk":
+        raise EbsBundleError("local device must have whole-disk TYPE disk: " + path)
+    if not re.fullmatch(r"(?:nvme[0-9]+n[0-9]+|xvd[a-z]+|sd[a-z]+|vd[a-z]+)",
+                        os.path.basename(path)):
+        raise EbsBundleError("unsupported local whole-disk name: " + path)
+    mounts = subprocess.run(["lsblk", "-nr", "-o", "MOUNTPOINT", path],
+                            capture_output=True, text=True, check=True).stdout
+    if mounts.strip():
+        raise EbsBundleError("local device or a partition is mounted: " + path)
+    return path
+
+
+def populate(rootfs, device, filesystem="ext4"):
+    """Populate a validated controller-owned disk, without AWS lifecycle calls."""
+    device.mkpart()
+    device.mkfs(filesystem)
+    mount_path = rootfs + ".mount"
+    submounts = []
+    mounted = False
+    try:
+        device.mount(mount_path)
+        mounted = True
+        utils.rsync(rootfs, mount_path)
+        os.chmod(mount_path, 0o755)
+        for submount in ("/sys", "/proc", "/dev"):
+            subprocess.run(["mount", "--bind", "--make-rslave", submount,
+                            mount_path + submount], check=True)
+            submounts.append(submount)
+        subprocess.run(["chroot", mount_path, "grub-install", device.root_path], check=True)
+        subprocess.run(["chroot", mount_path, "update-grub"], check=True)
+        subprocess.run(["chroot", mount_path, "update-initramfs", "-u"], check=True)
+    finally:
+        for submount in reversed(submounts):
+            subprocess.run(["umount", "-l", mount_path + submount], check=False)
+        if mounted:
+            device.umount()
+        if os.path.isdir(mount_path):
+            os.rmdir(mount_path)
 
 
 def bundle(rootfs, snapshot_name, size=10, filesystem="ext4"):
