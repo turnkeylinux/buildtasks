@@ -1,0 +1,57 @@
+#!/bin/bash
+# Keep ordinary headless login from racing automatic firstboot hooks.
+set -euo pipefail
+trap 'printf "\nSetup wait canceled; automatic initialization is unchanged.\n"; exit 130' INT
+trap 'printf "\nSetup wait canceled; automatic initialization is unchanged.\n"; exit 143' TERM
+
+failure() {
+    echo 'Automatic setup failed or remains incomplete; it has not been retried.' >&2
+    echo 'Inspect /var/log/inithooks.log. After correcting the error, run: turnkey-init' >&2
+    exit 1
+}
+
+announced=false
+while :; do
+    properties=$(systemctl show inithooks.service --property=ActiveState,Result,ConditionResult,ExecMainStartTimestampMonotonic,Job) || {
+        echo 'Cannot inspect automatic setup; check inithooks.service before running turnkey-init.' >&2
+        exit 1
+    }
+    active= result= condition= started= job=
+    while IFS='=' read -r key value; do
+        case "$key" in
+            ActiveState) active=$value ;;
+            Result) result=$value ;;
+            ConditionResult) condition=$value ;;
+            ExecMainStartTimestampMonotonic) started=$value ;;
+            Job) job=$value ;;
+        esac
+    done <<< "$properties"
+    [[ "$started" =~ ^[0-9]+$ && "$condition" =~ ^(yes|no)$ && -n "$active" && -n "$result" ]] || failure
+    if [[ "$active" =~ ^(activating|active|reloading|deactivating)$ || ( -n "$job" && "$job" != 0 ) ]]; then
+        if [[ "$announced" == false ]]; then
+            echo 'Waiting for automatic setup to finish. Press Ctrl-C to cancel this login.'
+            announced=true
+        fi
+        sleep 1
+        continue
+    fi
+    break
+done
+
+# PVE/LXC may skip this boot unit and need interactive setup immediately.
+if [[ "$started" != 0 ]]; then
+    [[ "$active" == inactive && "$result" == success ]] || failure
+    source /etc/default/inithooks
+    [[ "${RUN_FIRSTBOOT,,}" == false ]] || failure
+    # The headless unit's shell can report success after its runner failed.
+    # Preserve that original hook outcome instead of silently retrying it.
+    awk '
+        /^INFO: Running firstboot scripts$/ { seen=1; failed=0; done=0; next }
+        seen && /^ERR: / { failed=1 }
+        seen && /^INFO: \[98finalize\] successfully completed$/ { done=1 }
+        END { exit(!seen || failed || !done) }
+    ' "${INITHOOKS_LOGFILE:-/var/log/inithooks.log}" || failure
+elif [[ "$active" != inactive || "$result" != success ]]; then
+    failure
+fi
+exec /usr/sbin/turnkey-init --full-confconsole

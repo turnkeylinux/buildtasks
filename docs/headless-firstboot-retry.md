@@ -29,3 +29,32 @@ They cover fallback generation followed by a required-hook failure and
 interactive prompting, supplied and edited preseeds, successful finalization,
 missing or invalid provenance, private modes and repeated retry. Actual platform
 firstboot/failure recovery remains a separate runtime acceptance case.
+
+## First login while automatic setup is running
+
+The headless login profile keeps its single dtach command and shared interactive
+socket. The command now starts `turnkey-init-first-login`, which waits for the
+automatic inithooks unit to settle before opening interactive setup. The waiting
+message explains Ctrl-C cancellation; canceling leaves automatic setup and its
+protection unchanged.
+
+A boot unit that never executed, including a condition-skipped PVE/LXC unit,
+reaches interactive setup promptly. After an automatic execution, the helper
+checks the unit result, the firstboot flag and the latest required-hook outcome.
+A failed or incomplete automatic run displays the log location and supported
+manual retry command instead of silently retrying. This matters because the
+headless unit's shell wrapper can report success after its runner failed.
+
+The single-command profile remains compatible with `turnkey-sudoadmin`, which
+prefixes each line with sudo and rewrites the root socket path for admin. The
+helper belongs to the headless build overlay; direct administrator invocations
+of `turnkey-init` retain their existing behavior.
+
+Focused tests cover waiting, skipped/failed units, preserved original failure,
+normal completion, cancellation and the copied admin profile. A harmless local
+barrier reproduction with the actual dispatch loops and dtach first demonstrated
+overlap, then verified that the guarded admin profile entered its hook only
+after automatic execution ended. No database or credential operation was used,
+and this does not attribute the earlier missing-socket exception to overlap.
+The immediate path uses one unit-state query and no polling; only an active or
+queued automatic run waits.

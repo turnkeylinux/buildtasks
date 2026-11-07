@@ -1,1 +1,1 @@
-/usr/bin/dtach -A /root/.inithooks.dtach -Ez /bin/bash -c "turnkey-init --full-confconsole"
+/usr/bin/dtach -A /root/.inithooks.dtach -Ez /usr/local/sbin/turnkey-init-first-login
