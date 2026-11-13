@@ -8,6 +8,8 @@ shift
 volume=${1:?volume ID required}
 app=${2:?appliance required}
 batch=${3:?batch required}
+hotfix=${4:-}
+profile_output=${5:-}
 [[ $volume =~ ^vol-[a-f0-9]+$ && $app =~ ^[a-z0-9-]+$ && $batch =~ ^[a-zA-Z0-9-]+$ ]]
 root=/mnt/refresh-$app
 serial=${volume//-/}
@@ -28,9 +30,7 @@ policy=$root/usr/sbin/policy-rc.d
 resolver=$root/etc/resolv.conf
 policy_changed=false
 resolver_changed=false
-cleanup() {
-    status=$?
-    trap - EXIT
+restore_files() {
     if $policy_changed; then
     if [[ -e $root/.refresh-policy-present ]]; then
         mv "$root/.refresh-policy" "$policy"
@@ -38,6 +38,7 @@ cleanup() {
     else
         rm -f "$policy"
     fi
+    policy_changed=false
     fi
     if $resolver_changed; then
         rm -f "$resolver"
@@ -46,6 +47,13 @@ cleanup() {
             rm "$root/.refresh-resolver-present"
         fi
     fi
+    policy_changed=false
+    resolver_changed=false
+}
+cleanup() {
+    status=$?
+    trap - EXIT
+    restore_files
     sync
     umount -R "$root"
     exit "$status"
@@ -96,6 +104,10 @@ if [[ -n $pending ]]; then
         -o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold
 fi
 [[ -z $(security_candidates) ]]
+if [[ -n $hotfix ]]; then
+    [[ -n $profile_output && -f $hotfix ]]
+    python3 "$(dirname "$hotfix")/ec2-hotfix.py" install "$root" "$hotfix" "$app"
+fi
 sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
     "$root/usr/lib/inithooks/firstboot.d/29preseed"
 if ! grep -qx 'source /etc/default/inithooks' "$root/usr/lib/inithooks/firstboot.d/29preseed"; then
@@ -118,5 +130,9 @@ printf 'batch=%s\nupdated_at=%s\nfirstboot_security_updates=FORCE\n' "$batch" "$
 chroot "$root" apt-get clean
 rm -f "$root"/var/log/apt/* "$root/var/log/dpkg.log"
 find "$root/var/lib/apt/lists" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+if [[ -n $hotfix ]]; then
+    restore_files
+    python3 "$(dirname "$hotfix")/ec2-hotfix.py" profile "$root" "$hotfix" "$app" --output "$profile_output"
+fi
 printf 'REFRESH_VERIFIED app=%s brotli=%s firstboot=FORCE\n' "$app" "${version:-absent}"
 sync

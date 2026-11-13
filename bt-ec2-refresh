@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Refresh unbooted AMIs in parallel, boot-test, publish, and clean batch resources."""
 import argparse
+import base64
+import importlib.util
+import io
+import tarfile
 import concurrent.futures as futures
 import datetime
 import hashlib
@@ -20,6 +24,71 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 HERE = Path(__file__).resolve().parent
+
+_spec = importlib.util.spec_from_file_location('ec2_hotfix', HERE / 'bin/ec2-hotfix.py')
+hotfix = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(hotfix)
+
+
+def selected_rows(rows, apps=None):
+    if not apps:
+        return rows
+    names = {name.strip() for name in apps.split(',')}
+    missing = names - {row['app'] for row in rows}
+    if missing:
+        raise ValueError('Unknown apps: ' + ', '.join(sorted(missing)))
+    return [row for row in rows if row['app'] in names]
+
+
+def verify_controller_source(manifest, path):
+    """Bind the executing adapter and canonical generators to retained main."""
+    revision = manifest['sources']['controller_main']
+    subprocess.run(['git', '-C', str(HERE), 'merge-base', '--is-ancestor', revision, 'refs/heads/main'], check=True)
+    for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py']:
+        committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
+        if committed != (HERE / relative).read_bytes():
+            raise ValueError('Executing adapter differs from committed main: ' + relative)
+    for name, relative in [('profile_generator', 'bin/generate-tklbam-profile'), ('aptconf_tag', 'bin/aptconf-tag')]:
+        revision = manifest['sources']['buildtasks_main']
+        committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
+        if committed != hotfix.asset_path(Path(path).resolve().parent, manifest[name]).read_bytes():
+            raise ValueError('Canonical generator differs from committed buildtasks source')
+
+
+def qa_receipt(path, item, *, customer=False):
+    """Read externally performed QA; availability alone cannot satisfy this gate."""
+    if not path or not Path(path).is_file():
+        return None
+    path = Path(path)
+    entry = json.loads(path.read_text()).get(item['app'])
+    if not entry:
+        return None
+    if (entry.get('result') != 'PASS' or entry.get('source_ami') != item['ami']
+            or entry.get('version') != item['version']):
+        raise ValueError('QA receipt identity differs')
+    evidence = entry.get('evidence', [])
+    if not evidence:
+        raise ValueError('QA receipt has no evidence')
+    for proof in evidence:
+        target = Path(proof['path'])
+        if not target.is_absolute():
+            target = path.parent / target
+        if hotfix.sha(target) != proof['sha256']:
+            raise ValueError('QA evidence hash differs')
+    if customer:
+        if set(entry.get('delivery_ids', [])) != set(item.get('new_delivery_ids', [])):
+            raise ValueError('Customer QA is for different delivery options')
+        regions = entry.get('regions', {})
+        if not item.get('marketplace_regions') or set(regions) != set(item['marketplace_regions']):
+            raise ValueError('Customer QA region coverage differs')
+        for result in regions.values():
+            if result.get('result') != 'PASS' or not result.get('customer_ami') or not result.get('launch_instance'):
+                raise ValueError('Missing actual Marketplace customer launch')
+    elif item.get('hotfix_manifest_sha256'):
+        if (entry.get('manifest_sha256') != item['hotfix_manifest_sha256']
+                or entry.get('profile_sha256') != item['profile']['profile_sha256']):
+            raise ValueError('Source QA is for different hotfix/profile inputs')
+    return hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
 
 
 def ec2_client_token(value):
@@ -50,11 +119,24 @@ class Refresh:
         self.resources = json.loads((self.state / 'resources.json').read_text())
         self.batch = self.resources['batch']
         self.region = self.resources['region']
+        cleanup = args.action == 'cleanup'
+        plan = json.loads((self.state / 'plan.json').read_text())
+        self.rows = plan if cleanup else selected_rows(plan, args.apps)
+        manifest = self.resources.get('hotfix_manifest')
+        self.hotfix_path = self.state / manifest if manifest else None
+        self.hotfix = hotfix.load(self.hotfix_path) if manifest and not cleanup else None
+        if args.workers is None:
+            args.workers = min(4, max(1, len(self.resources['workers']))) if manifest else 12
+        if manifest and not cleanup and not 1 <= args.workers <= 4:
+            raise ValueError('Hotfix workers must be between one and four')
+        if manifest and not cleanup and hotfix.sha(self.hotfix_path) != self.resources['hotfix_manifest_sha256']:
+            raise ValueError('Frozen hotfix manifest changed')
+        if manifest and args.action in ('run', 'publish', 'watch'):
+            verify_controller_source(self.hotfix, self.hotfix_path)
         session = boto3.Session(region_name=self.region)
         assert session.client('sts').get_caller_identity()['Account'] == self.resources['account']
         self.ec2 = session.client('ec2', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=64))
         self.catalog = session.client('marketplace-catalog', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=32))
-        self.rows = json.loads((self.state / 'plan.json').read_text())
         self.finish_pool = futures.ThreadPoolExecutor(max_workers=args.workers)
         self.finish_jobs = []
         self.finish_lock = threading.Lock()
@@ -66,7 +148,7 @@ class Refresh:
 
     def tags(self, app, lifecycle='disposable'):
         return [{'Key': 'RefreshBatch', 'Value': self.batch}, {'Key': 'Appliance', 'Value': app},
-                {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-security-refresh'}]
+                {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-hotfix' if getattr(self, 'hotfix', None) else 'marketplace-security-refresh'}]
 
     def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None):
         identity = ['-o', 'HostKeyAlias=' + host_alias] if host_alias else []
@@ -78,7 +160,7 @@ class Refresh:
         # Run existing CloudTask in the retained LibreSBX controller. Package code
         # runs on credential-free workers; AWS lifecycle calls remain here.
         base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
-        argv = ['sbx', '--name', self.args.sandbox, self.args.project, 'bash', '-c',
+        argv = ['sbx', 'exec', self.args.sandbox, '--', 'bash', '-c',
                 'mkdir -p "$1"; shift; exec "$@"', '_', base + '/sessions/' + app, 'env',
                 'PYTHONPATH=' + base + ':' + self.args.pylib + ':' + str(Path(self.args.cloudtask).parent),
                 self.args.python2, base + '/cloudtask-existing-workers',
@@ -120,17 +202,104 @@ class Refresh:
         r = self.ssh(worker['ip'], 'cat > /home/admin/refresh-ec2-rootfs && chmod 755 /home/admin/refresh-ec2-rootfs', input=script)
         if r.returncode:
             raise RuntimeError(r.stderr)
+        if self.hotfix:
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode='w') as archive:
+                for path in self.hotfix_path.parent.rglob('*'):
+                    if path.is_file():
+                        archive.add(path, arcname=str(path.relative_to(self.hotfix_path.parent)))
+                archive.add(HERE / 'bin/ec2-hotfix.py', arcname='ec2-hotfix.py')
+            command = 'mkdir -p ' + shlex.quote(self.hotfix_remote()) + ' && base64 -d | tar -xf - -C ' + shlex.quote(self.hotfix_remote())
+            result = self.ssh(worker['ip'], command, input=base64.b64encode(stream.getvalue()).decode(), timeout=120)
+            if result.returncode:
+                raise RuntimeError(result.stderr)
+
+    def hotfix_remote(self):
+        return '/home/admin/ec2-hotfix-' + self.batch
+
+    def collect_profile(self, row, worker):
+        remote = self.hotfix_remote() + '/profiles/' + row['app']
+        result = self.ssh(worker['ip'], 'sudo tar -C ' + shlex.quote(remote) + ' -czf - . | base64 -w0', timeout=120)
+        if result.returncode:
+            raise RuntimeError(result.stderr)
+        output = self.state / 'profiles' / row['app']
+        output.mkdir(parents=True, exist_ok=True)
+        identity = 'turnkey-' + row['app'] + '-' + self.hotfix['technical_release'] + '-trixie-amd64'
+        expected = {identity + '.tar.gz', 'packages.tsv', 'profile-receipt.json'}
+        with tarfile.open(fileobj=io.BytesIO(base64.b64decode(result.stdout, validate=True))) as archive:
+            bodies = {}
+            for member in archive:
+                if member.isdir() and member.name in ('.', './'):
+                    continue
+                name = member.name.removeprefix('./')
+                if name not in expected or not member.isfile():
+                    raise ValueError('Unexpected profile export member')
+                if name in bodies:
+                    raise ValueError('Duplicate profile export member')
+                bodies[name] = archive.extractfile(member).read()
+        if set(bodies) != expected:
+            raise ValueError('Incomplete profile export')
+        receipt = json.loads(bodies['profile-receipt.json'])
+        if (receipt.get('identity') != identity or not receipt.get('pristine')
+                or receipt.get('manifest_sha256') != hotfix.sha(self.hotfix_path)
+                or receipt.get('source_ami') != row['source_ami']
+                or hashlib.sha256(bodies[identity + '.tar.gz']).hexdigest() != receipt['profile_sha256']
+                or hashlib.sha256(bodies['packages.tsv']).hexdigest() != receipt['packages_sha256']):
+            raise ValueError('Profile export binding differs')
+        for name, body in bodies.items():
+            target = output / name
+            if target.exists() and target.read_bytes() != body:
+                raise ValueError('Existing profile export differs')
+        for name, body in bodies.items():
+            target = output / name
+            if not target.exists():
+                temporary = target.with_suffix(target.suffix + '.new')
+                temporary.write_bytes(body)
+                temporary.replace(target)
+        receipt['local_path'] = str((output / (identity + '.tar.gz')).relative_to(self.state))
+        return receipt
+
+    def profile_published(self, item):
+        path = getattr(self.args, 'profile_publications', None)
+        if not path or not Path(path).is_file():
+            return False
+        receipt = json.loads(Path(path).read_text()).get(item['app'], {})
+        expected = item['profile']
+        if (receipt.get('identity') != expected['identity']
+                or receipt.get('profile_sha256') != expected['profile_sha256']
+                or receipt.get('public_readback_sha256') != expected['profile_sha256']
+                or not receipt.get('url', '').startswith('https://')):
+            raise ValueError('Published profile receipt differs from pristine candidate')
+        item['profile_publication_sha256'] = hashlib.sha256(json.dumps(receipt, sort_keys=True).encode()).hexdigest()
+        return True
 
     def patch(self, row, worker):
         app = row['app']
         path = self.state / (app + '-state.json')
         item = json.loads(path.read_text()) if path.exists() else dict(row)
+        if self.hotfix:
+            if item.get('hotfix_manifest_sha256') and item['hotfix_manifest_sha256'] != hotfix.sha(self.hotfix_path):
+                raise ValueError('Candidate state belongs to different hotfix inputs')
         if item.get('ami'):
             return item
         if item.get('snapshot'):
             return item
+        if self.hotfix and item.get('patch_complete'):
+            staged_worker = next((entry for entry in self.resources['workers'] if entry['id'] == item.get('worker')), None)
+            if staged_worker is None:
+                raise RuntimeError('Staged patch worker is unavailable; explicitly restart the unpublished candidate from frozen source inputs')
+            return self.complete_patch(row, item, staged_worker)
+        if self.hotfix and item.get('volume'):
+            raise RuntimeError('Previous patch did not reach a verified stage; explicitly restart the unpublished candidate instead of reapplying overlays')
         original = self.ec2.describe_images(ImageIds=[row['source_ami']])['Images'][0]
         assert original['OwnerId'] == self.resources['account'] and original['State'] == 'available'
+        if self.hotfix:
+            frozen = self.hotfix['apps'][app]
+            if row['source_ami'] != frozen['source_ami']:
+                raise ValueError('Source AMI differs from frozen hotfix input')
+            snapshot = next(entry['Ebs']['SnapshotId'] for entry in original['BlockDeviceMappings'] if entry['DeviceName'] == original['RootDeviceName'])
+            if snapshot != frozen['source_snapshot']:
+                raise ValueError('Source snapshot differs from frozen hotfix input')
         mappings = [x for x in original['BlockDeviceMappings'] if 'Ebs' in x]
         assert len(mappings) == 1 and mappings[0]['DeviceName'] == original['RootDeviceName']
         item['original'] = original
@@ -151,13 +320,31 @@ class Refresh:
         wait_until(lambda: any(a['State'] == 'attached' for a in self.volume(vid)['Attachments']), 120)
         item['status'] = 'PATCHING'; item.pop('error', None); save(path, item)
         self.log(app, 'patching ' + vid)
-        self.cloudtask(worker, app, 'sudo /home/admin/refresh-ec2-rootfs', shlex.join([vid, app, self.batch]))
+        arguments = [vid, app, self.batch]
+        if self.hotfix:
+            arguments += [self.hotfix_remote() + '/hotfix.json', self.hotfix_remote() + '/profiles/' + app]
+        self.cloudtask(worker, app, 'sudo /home/admin/refresh-ec2-rootfs', shlex.join(arguments))
         if 'REFRESH_VERIFIED app=' + app not in (self.state / (app + '.log')).read_text():
             raise RuntimeError('Guest verification marker absent')
+        if self.hotfix:
+            # Persist the completed filesystem boundary before fallible export.
+            # Resumes collect the same bytes without reinstalling or reindexing.
+            item.update(patch_complete=True, hotfix_manifest_sha256=hotfix.sha(self.hotfix_path), status='PROFILE_EXPORT_PENDING')
+            save(path, item)
+        return self.complete_patch(row, item, worker)
+
+    def complete_patch(self, row, item, worker):
+        app, vid = item['app'], item['volume']
+        path = self.state / (app + '-state.json')
+        if self.hotfix:
+            item['profile'] = self.collect_profile(row, worker)
+            item['root_marker_sha256'] = item['profile']['root_marker_sha256']
+            save(path, item)
         snap = self.ec2.create_snapshot(VolumeId=vid, Description=self.batch + ' ' + app,
                                         TagSpecifications=[{'ResourceType': 'snapshot', 'Tags': self.tags(app, 'release')}])
         item['snapshot'] = snap['SnapshotId']; item['status'] = 'SNAPSHOTTING'; save(path, item)
-        self.ec2.detach_volume(VolumeId=vid, InstanceId=worker['id'])
+        for attachment in self.volume(vid)['Attachments']:
+            self.ec2.detach_volume(VolumeId=vid, InstanceId=attachment['InstanceId'])
         wait_until(lambda: self.volume(vid)['State'] == 'available', 120)
         self.log(app, 'snapshot ' + item['snapshot'])
         return item
@@ -174,8 +361,8 @@ class Refresh:
                 wait_until(snapshot_ready, 1800, 10)
                 original = item['original']
                 root = next(x['Ebs'] for x in original['BlockDeviceMappings'] if x['DeviceName'] == original['RootDeviceName'])
-                request = dict(Name='turnkey-' + app + '-' + item['version'] + '-security-refresh-r' + str(self.resources.get('generation', 1)),
-                               Description='TurnKey ' + app + ' security refresh; automatic first-boot security updates',
+                request = dict(Name='turnkey-' + app + '-' + item.get('technical_release', item['version']) + ('-hotfix-r' if self.hotfix else '-security-refresh-r') + str(self.resources.get('generation', 1)),
+                               Description=item.get('ami_description', 'TurnKey ' + app + ' security refresh; automatic first-boot security updates'),
                                Architecture=original['Architecture'], RootDeviceName=original['RootDeviceName'],
                                VirtualizationType='hvm', EnaSupport=True, ImdsSupport='v2.0',
                                BlockDeviceMappings=[{'DeviceName': original['RootDeviceName'], 'Ebs': {
@@ -183,9 +370,15 @@ class Refresh:
                                    'DeleteOnTermination': True}}])
                 if original.get('BootMode'): request['BootMode'] = original['BootMode']
                 item['ami'] = self.ec2.register_image(**request)['ImageId']; save(path, item)
-                self.ec2.create_tags(Resources=[item['ami']], Tags=self.tags(app, 'release'))
+                tags = self.tags(app, 'release')
+                if self.hotfix:
+                    tags.append({'Key': 'TurnKeyHubCatalog', 'Value': 'v19'})
+                self.ec2.create_tags(Resources=[item['ami']], Tags=tags)
             if not item.get('volume_deleted'):
                 self.ec2.delete_volume(VolumeId=item['volume']); item['volume_deleted'] = True; save(path, item)
+            if self.hotfix and not self.profile_published(item):
+                item['status'] = 'PROFILE_PENDING_PUBLICATION'; save(path, item)
+                self.log(app, item['status']); return
             if not item.get('boot_verified'):
                 self.boot_test(item)
                 item['boot_verified'] = True; item['status'] = 'VERIFIED'; item.pop('error', None); save(path, item)
@@ -238,6 +431,11 @@ v=$(dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
 [ -z "$v" ] || dpkg --compare-versions "$v" ge 1.1.0-2+deb13u1
 printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
 '''
+            if getattr(self, 'hotfix', None):
+                script += '\ntest "$(cat /etc/turnkey_version)" = ' + shlex.quote(item['profile']['identity']) + '\n'
+                for name, package in self.hotfix['packages'].items():
+                    script += 'test "$(dpkg-query -W -f=\'${Version}\' ' + shlex.quote(name) + ')" = ' + shlex.quote(package['version']) + '\n'
+                script += 'test "$(sha256sum /var/lib/turnkey-info/hotfix.json | cut -d\' \' -f1)" = ' + shlex.quote(item['root_marker_sha256']) + '\n' if item.get('root_marker_sha256') else ''
             r = self.ssh(ip, 'sudo bash -s', input=script, timeout=45, host_alias=iid)
             (self.state / (app + '-boot.log')).write_text(r.stdout + r.stderr)
             if r.returncode or 'BOOT_VERIFIED' not in r.stdout:
@@ -250,6 +448,11 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
             raise ValueError('Publication requires a verified boot')
         if item.get('change_set_id'):
             return
+        if getattr(self, 'hotfix', None):
+            proof = qa_receipt(getattr(self.args, 'source_acceptance', None), item)
+            if not proof:
+                item['status'] = 'WAIT_SOURCE_QA'; save(self.state / (item['app'] + '-state.json'), item); return
+            item['source_acceptance_sha256'] = proof
         app = item['app']; path = self.state / (app + '-state.json')
         # Marketplace serializes changes per product. Retain pending submissions
         # for a later publish invocation rather than canceling another review.
@@ -272,7 +475,7 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
             details['AccessEndpointUrl'] = {'Protocol': access['Protocol'], 'Port': access['Port']}
         request = {'ChangeType': 'AddDeliveryOptions', 'Entity': {'Type': 'AmiProduct@1.0', 'Identifier': ent['EntityIdentifier']},
                    'DetailsDocument': {'Version': {'VersionTitle': item['version'],
-                                                   'ReleaseNotes': 'Available Debian and TurnKey security updates are bundled into this image, including the Brotli fix for CVE-2026-111497 / DSA-6582-1. First boot automatically installs any newer security updates, with daily security updates enabled.'},
+                                                   'ReleaseNotes': item.get('release_notes', 'Available Debian and TurnKey security updates are bundled. First boot and daily maintenance install newer security updates.')},
                                        'DeliveryOptions': [{'Details': {'AmiDeliveryOptionDetails': details}}]}}
         save(self.state / (app + '-publication-request.json'), request)
         name = self.batch + '-' + app
@@ -290,10 +493,23 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
             ent = self.catalog.describe_entity(Catalog='AWSMarketplace', EntityId=item['product_id'])
             data = ent.get('DetailsDocument') or json.loads(ent['Details'])
             version = next((v for v in data['Versions'] if v['VersionTitle'] == item['version']), None)
-            item['new_delivery_public'] = bool(version and any(o['Visibility'] == 'Public' for o in version['DeliveryOptions']))
-            if item['new_delivery_public'] and not item.get('retirement_change_set_id'):
-                old = [o['Id'] for v in data['Versions'] if v['VersionTitle'] != item['version']
-                       for o in v['DeliveryOptions'] if o['Visibility'] == 'Public']
+            public = [o['Id'] for o in version['DeliveryOptions'] if o['Visibility'] == 'Public'] if version else []
+            item['new_delivery_ids'] = public
+            item['new_delivery_public'] = bool(public) and data.get('Description', {}).get('Visibility', item.get('visibility')) == 'Public'
+            proof = qa_receipt(getattr(self.args, 'customer_acceptance', None), item, customer=True) if getattr(self, 'hotfix', None) and item['new_delivery_public'] else None
+            item['customer_verified'] = bool(proof)
+            if proof:
+                item['customer_acceptance_sha256'] = proof
+            if not getattr(self, 'hotfix', None):
+                item['retirement_status'] = 'NOT_REQUESTED'
+            if proof and not item.get('retirement_change_set_id'):
+                requested = set(item.get('superseded_delivery_ids', []))
+                old_options = {o['Id']: o for v in data['Versions']
+                               if re.match(r'^19\.0(?:[.\-]|$)', v['VersionTitle']) and v['VersionTitle'] != item['version']
+                               for o in v['DeliveryOptions']}
+                if not requested <= set(old_options):
+                    raise ValueError('Retirement IDs are outside superseded 19.0 deliveries')
+                old = sorted(key for key in requested if old_options[key]['Visibility'] == 'Public')
                 if old:
                     request = {'ChangeType': 'RestrictDeliveryOptions',
                                'Entity': {'Type': 'AmiProduct@1.0', 'Identifier': ent['EntityIdentifier']},
@@ -311,8 +527,7 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
 
     def run(self):
         jobs = queue.Queue()
-        rows = self.rows
-        if self.args.apps: rows = [r for r in rows if r['app'] in self.args.apps.split(',')]
+        rows = selected_rows(self.rows, self.args.apps)
         for row in sorted(rows, key=lambda x: (x['app'] != 'core', x['app'])): jobs.put(row)
         def work(worker):
             self.prepare_worker(worker)
@@ -330,7 +545,8 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
                     # A failed patch may leave a volume attached. Unmounting runs
                     # in the guest EXIT trap; detach before assigning another job.
                     if item.get('volume'):
-                        self.ec2.detach_volume(VolumeId=item['volume'], InstanceId=worker['id'])
+                        for attachment in self.volume(item['volume'])['Attachments']:
+                            self.ec2.detach_volume(VolumeId=item['volume'], InstanceId=attachment['InstanceId'])
                         wait_until(lambda: self.volume(item['volume'])['State'] == 'available', 180)
                 finally: jobs.task_done()
         with futures.ThreadPoolExecutor(max_workers=self.args.workers) as pool:
@@ -344,8 +560,8 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
     def watch_publication(self):
         deadline = time.monotonic() + self.args.watch_hours * 3600
         while True:
-            pending, failed, completed, errors = [], [], [], {}
-            for row in self.rows:
+            pending, failed, completed, errors, available = [], [], [], {}, []
+            for row in selected_rows(self.rows, self.args.apps):
                 app = row['app']
                 path = self.state / (app + '-state.json')
                 item = json.loads(path.read_text()) if path.exists() else dict(row)
@@ -361,14 +577,17 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
                     continue
                 if item.get('publication_status') in ['FAILED', 'CANCELLED'] or item.get('retirement_status') in ['FAILED', 'CANCELLED']:
                     failed.append(app)
-                elif item.get('publication_status') == 'SUCCEEDED' and (
-                        item.get('retirement_status') == 'SUCCEEDED' or
-                        (item['visibility'] != 'Public' and not item.get('new_delivery_public'))):
+                elif ((getattr(self, 'hotfix', None) and item.get('customer_verified') and item.get('retirement_status') == 'SUCCEEDED')
+                      or (not getattr(self, 'hotfix', None) and item.get('publication_status') == 'SUCCEEDED'
+                          and (item.get('new_delivery_public') or item.get('visibility') != 'Public'))):
                     completed.append(app)
                 else:
                     pending.append(app)
+                if item.get('new_delivery_public'):
+                    available.append(app)
             report = dict(checked_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                          completed=completed, pending=pending, failed=failed, errors=errors)
+                          completed=completed, available=available, pending=pending, failed=failed, errors=errors,
+                          completion_scope='customer-verification' if getattr(self, 'hotfix', None) else 'aws-publication')
             save(self.state / 'publication-watch.json', report)
             self.log('publication', '%d completed, %d pending, %d failed' % (len(completed), len(pending), len(failed)))
             if not pending:
@@ -416,7 +635,7 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
                 raise
         self.key.unlink(missing_ok=True)
         base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
-        subprocess.run(['sbx', '--name', self.args.sandbox, self.args.project, 'rm', '-f', base + '/worker-key'], check=True)
+        subprocess.run(['sbx', 'exec', self.args.sandbox, '--', 'rm', '-f', base + '/worker-key'], check=True)
         save(self.state / 'cleanup.json', {'batch': self.batch, 'instance_ids': [i['InstanceId'] for i in instances],
                                          'remaining_volumes': [], 'complete': True, 'cloudtask_errors': cleanup_errors,
                                          'retained_snapshots': 'Only AMI output snapshots; source release snapshots untouched'})
@@ -437,22 +656,65 @@ def prepare(args):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     batch = args.batch or 'tkl-mp-refresh-' + stamp
     assert re.fullmatch(r'[A-Za-z0-9-]{1,60}', batch)
+    manifest_path = getattr(args, 'hotfix_manifest', None)
+    manifest = hotfix.load(manifest_path) if manifest_path else None
+    if getattr(args, 'workers', None) is None:
+        args.workers = 1 if manifest else 12
+    input_plan = Path(args.plan_file) if getattr(args, 'plan_file', None) else previous / 'plan.json'
+    if manifest:
+        if not 1 <= args.workers <= 4:
+            raise ValueError('Hotfix workers must be explicitly scoped between one and four')
+        verify_controller_source(manifest, manifest_path)
+    if manifest and not getattr(args, 'plan_file', None):
+        raise ValueError('Hotfix prepare requires an explicit frozen --plan-file')
+    inputs = selected_rows(json.loads(input_plan.read_text()), args.apps)
+    if not inputs:
+        raise ValueError('No selected input rows')
+    if manifest:
+        for row in inputs:
+            frozen = manifest['apps'][row['app']]
+            if row['source_ami'] != frozen['source_ami'] or not row.get('marketplace_regions') or not row.get('delivery') or not row.get('old_version'):
+                raise ValueError('Frozen source, delivery or Marketplace regions missing')
+    if manifest:
+        subprocess.run(['sbx', 'exec', args.sandbox, '--', 'bash', '-ec',
+                        'test -x "$1"; test -f "$2"; test -d "$3"', '_', args.python2, args.cloudtask, args.pylib], check=True)
     session = boto3.Session(region_name=old['region'])
     assert session.client('sts').get_caller_identity()['Account'] == old['account']
     ec2 = session.client('ec2'); catalog = session.client('marketplace-catalog')
     rows = []
-    for row in json.loads((previous / 'plan.json').read_text()):
+    for row in inputs:
         path = previous / (row['app'] + '-state.json')
         prior = json.loads(path.read_text()) if path.exists() else {}
-        source = prior['ami'] if prior.get('boot_verified') else row['source_ami']
+        source = row['source_ami'] if manifest or getattr(args, 'plan_file', None) else (prior['ami'] if prior.get('boot_verified') else row['source_ami'])
+        if manifest:
+            frozen = manifest['apps'][row['app']]
+            if source != frozen['source_ami']:
+                raise ValueError('Plan source differs from frozen hotfix source')
+            image = ec2.describe_images(ImageIds=[source])['Images'][0]
+            if image['OwnerId'] != old['account'] or image['State'] != 'available':
+                raise ValueError('Frozen source AMI is unavailable or not publisher-owned')
+            root = [entry['Ebs']['SnapshotId'] for entry in image['BlockDeviceMappings'] if entry['DeviceName'] == image['RootDeviceName'] and 'Ebs' in entry]
+            if root != [frozen['source_snapshot']]:
+                raise ValueError('Frozen source snapshot differs')
         ent = catalog.describe_entity(Catalog='AWSMarketplace', EntityId=row['product_id'])
         data = ent.get('DetailsDocument') or json.loads(ent['Details'])
-        version = max((v for v in data['Versions'] if re.fullmatch(r'19\.[0-9.]+', v['VersionTitle'])),
-                      key=lambda v: tuple(map(int, v['VersionTitle'].split('.'))))
-        title = '.'.join(version['VersionTitle'].split('.')[:2]) + '.' + stamp.replace('T', '').replace('Z', '')
+        if manifest:
+            version = next((v for v in data['Versions'] if v['VersionTitle'] == row['old_version']), None)
+            if not version or not any(o['Id'] == row['delivery']['Id'] for o in version['DeliveryOptions']):
+                raise ValueError('Frozen delivery is absent from current Marketplace product')
+        else:
+            version = max((v for v in data['Versions'] if re.fullmatch(r'19\.[0-9.]+', v['VersionTitle'])),
+                          key=lambda v: tuple(map(int, v['VersionTitle'].split('.'))))
+        title = manifest['release'] if manifest else '.'.join(version['VersionTitle'].split('.')[:2]) + '.' + stamp.replace('T', '').replace('Z', '')
         rows.append(dict(app=row['app'], product_id=row['product_id'], source_ami=source,
                          old_version=version['VersionTitle'], version=title,
-                         visibility=data['Description']['Visibility'], delivery=version['DeliveryOptions'][0]))
+                         visibility=data['Description']['Visibility'], delivery=row['delivery'] if manifest else version['DeliveryOptions'][0]))
+        if manifest:
+            rows[-1].update(source_main=frozen['source_main'], release_notes=manifest['release_notes'],
+                            technical_release=manifest['technical_release'],
+                            ami_description='TurnKey ' + row['app'] + ' ' + manifest['release'] + ' maintenance release',
+                            superseded_delivery_ids=frozen.get('superseded_delivery_ids', []),
+                            marketplace_regions=row['marketplace_regions'])
         save(state / (row['app'] + '-catalog-before.json'), ent)
     save(state / 'plan.json', rows)
     key = state / 'worker-key'
@@ -460,6 +722,10 @@ def prepare(args):
     resources = {k: old[k] for k in ['region', 'account', 'subnet', 'worker_ami']}
     resources.update(batch=batch, workers=[], key_name=batch,
                      cloudtask_root=args.cloudtask_root or '/home/agent/' + state.name)
+    if manifest:
+        hotfix.freeze(manifest_path, state / 'hotfix-inputs')
+        resources['hotfix_manifest'] = 'hotfix-inputs/hotfix.json'
+        resources['hotfix_manifest_sha256'] = hotfix.sha(state / resources['hotfix_manifest'])
     save(state / 'resources.json', resources)
     ec2.import_key_pair(KeyName=batch, PublicKeyMaterial=key.with_suffix('.pub').read_bytes())
     vpc = ec2.describe_subnets(SubnetIds=[old['subnet']])['Subnets'][0]['VpcId']
@@ -484,7 +750,7 @@ def prepare(args):
         resources['cloudtask_root'], base64.b64encode(key.read_bytes()).decode(),
         'class Spawner(object):\n    def __init__(self, *args, **kwargs):\n        raise RuntimeError("Use preallocated workers")\n')
     setup += '; (p/"cloudtask-existing-workers").write_bytes(base64.b64decode(%r))' % base64.b64encode((HERE / 'bin/cloudtask-existing-workers').read_bytes()).decode()
-    subprocess.run(['sbx', '--name', args.sandbox, args.project, 'python3', '-'], input=setup, text=True, check=True)
+    subprocess.run(['sbx', 'exec', args.sandbox, '--', 'python3', '-'], input=setup, text=True, check=True)
     print('Prepared', len(rows), 'images on', args.workers, 'workers:', state)
 
 
@@ -492,10 +758,15 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('action', choices=['prepare', 'run', 'publish', 'watch', 'status', 'cleanup'])
     p.add_argument('--state', required=True)
-    p.add_argument('--workers', type=int, default=12)
+    p.add_argument('--workers', type=int, help='hotfix defaults to the prepared pool (one during prepare); legacy defaults to12')
     p.add_argument('--worker-offset', type=int, default=0)
     p.add_argument('--apps')
     p.add_argument('--from-batch')
+    p.add_argument('--plan-file', help='explicit frozen app/product/source rows for prepare')
+    p.add_argument('--hotfix-manifest', help='frozen signed-package/source/profile inputs for prepare')
+    p.add_argument('--profile-publications', help='matching additive public profile readback receipts, required before hotfix boot')
+    p.add_argument('--source-acceptance', help='actual source-AMI app/native QA receipts before hotfix submission')
+    p.add_argument('--customer-acceptance', help='actual Marketplace customer-image QA receipts before retirement')
     p.add_argument('--batch')
     p.add_argument('--cleanup', action='store_true')
     p.add_argument('--publish', action='store_true')
@@ -522,7 +793,10 @@ def main():
     elif args.action == 'cleanup': r.cleanup()
     elif args.action == 'watch': r.watch_publication()
     else:
-        for path in sorted(r.state.glob('*-state.json')):
+        for row in r.rows:
+            path = r.state / (row['app'] + '-state.json')
+            if not path.exists():
+                continue
             item = json.loads(path.read_text())
             if args.action == 'publish' and item.get('boot_verified'):
                 r.publish(item)

@@ -41,8 +41,9 @@ The script submits only images that pass first-boot checks, including installed
 Brotli fixes, initialization completion, daily updates, and the web initialization
 fence. Publication records distinguish submission from AWS's review result.
 An existing review on a product defers its new submission. `publish` retries
-these submissions and retires older public delivery options after AWS approves
-the replacement and makes it public:
+these submissions. For a legacy security refresh, watch completion records AWS
+publication review and availability; delivery retirement follows the caller's
+verified cutover workflow:
 
 ```sh
 ./bt-ec2-refresh publish --state /path/to/batch
@@ -56,14 +57,61 @@ supervised background service:
 ```
 
 It checks every five minutes for up to seven days, retries deferred submissions,
-and retires superseded deliveries after the replacement is public. Inspect
-`publication-watch.json` for completed, pending, and failed products. This phase
+and records available, completed, pending, and failed products in
+`publication-watch.json`. Its `completion_scope` identifies AWS publication for
+legacy refreshes or actual customer verification for a hotfix. This phase
 needs controller AWS access but no EC2 workers or batch SSH key.
 
 A nonzero refresh exit means at least one image did not pass verification.
-Read that appliance's `APP-state.json`, `APP.log`, and `APP-boot.log`.
+Read the app's `APP-state.json`, `APP.log`, and `APP-boot.log`.
 Before cleanup, rerun selected jobs with `run --apps app1,app2`. After cleanup,
 prepare a new batch from the retained state.
+
+## Scoped 19.0 hotfix
+
+Use a frozen manifest and plan for the Core/LAMP canary. The accepted package
+baseline supplies exact versions and signed APT hashes, including TKLBAM 1.5.6
+and Confconsole 2.2.6. These versions are manifest inputs rather than controller
+pins. The public release is 19.0.3; its EC2 identity and genuine profile use the
+separate technical revision 19.0.3.3. Preserve each app's complete canonical
+profile configuration and hook modes.
+
+```sh
+./bt-ec2-refresh prepare --from-batch /path/to/worker-seed \
+    --state /path/to/hotfix-batch --apps core,lamp --workers 1 \
+    --plan-file /path/to/frozen-plan.json \
+    --hotfix-manifest /path/to/hotfix.json
+./bt-ec2-refresh run --state /path/to/hotfix-batch --apps core,lamp --workers 1
+```
+
+The first run exports each pristine EC2
+profile and its hash-bound receipt, then pauses at `PROFILE_PENDING_PUBLICATION`
+before boot. Retain the batch workers/key while publishing those distinct
+profiles additively. Supply `--profile-publications FILE` when resuming run;
+each app's receipt must match the exported identity, profile hash and public
+readback hash. Run actual native/app QA and provide its evidence through
+`--source-acceptance FILE` before publish. Watch with
+`--customer-acceptance FILE` after actual Marketplace customer-image launches in
+every frozen region. AWS availability alone keeps a hotfix pending.
+
+Prepare and resumed run, publish and watch verify that the executing adapter
+matches the declared committed main revision. Cleanup remains usable when
+source or input validation fails. App selection applies to every phase.
+
+A failed export after the worker's verified patch resumes that staged output
+from its original worker. It validates the complete profile export before
+retaining files or snapshotting, and reuses matching bytes after interruption.
+Keep that worker available until the export is retained. Every retained volume
+without a verified patch boundary requires an explicit fresh unpublished
+candidate from frozen inputs, including abrupt interruptions recorded as
+`PATCHING` or with no status. Reapplying overlays to that root is refused.
+Resolve any existing profile publication/identity before changing candidate
+bytes.
+
+Hotfix retirement uses only explicit `superseded_delivery_ids` belonging to
+other 19.0 versions, after matching customer QA. Public v18 and unselected
+delivery options remain available. Root owns AMI/snapshot retirement after
+catalog, customer and reference checks.
 
 ## Cleanup
 
