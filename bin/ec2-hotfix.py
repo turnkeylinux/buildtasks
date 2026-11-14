@@ -152,9 +152,13 @@ def install(root, manifest, app):
     config = root / 'etc/webmin/miniserv.conf'
     lines = config.read_text().splitlines()
     chain = [line for line in lines if line.startswith('extracas=')]
-    require(not chain or chain == ['extracas=/etc/ssl/private/cert.pem'], 'source has a different Webmin chain configuration')
-    if not chain:
-        config.write_text('\n'.join(lines + ['extracas=/etc/ssl/private/cert.pem']) + '\n')
+    canonical_chain = 'extracas=/etc/ssl/private/cert.pem'
+    require(chain in ([], ['extracas='], [canonical_chain]), 'source has a different Webmin chain configuration')
+    if chain == ['extracas=']:
+        lines[lines.index('extracas=')] = canonical_chain
+        config.write_text('\n'.join(lines) + '\n')
+    elif not chain:
+        config.write_text('\n'.join(lines + [canonical_chain]) + '\n')
     technical = identity + '-trixie-amd64'
     (root / 'etc/turnkey_version').write_text(technical + '\n')
     run(['bash', asset_path(manifest.parent, data['aptconf_tag']), root, 'ec2'])

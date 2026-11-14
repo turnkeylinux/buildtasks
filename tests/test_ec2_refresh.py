@@ -216,8 +216,8 @@ class HotfixInputTest(unittest.TestCase):
                 module.hotfix.install(root, self.manifest, 'lamp')
         self.assertFalse(any('apt-get' in c.args[0] for c in runner.call_args_list))
 
-    def test_install_preserves_settings_and_uses_only_frozen_package_targets(self):
-        root=self.factory(); calls=[]
+    def install(self, root):
+        calls=[]
         def command(args):
             args=list(map(str,args)); calls.append(args)
             if 'apt-cache' in args:return 'SHA256: '+'b'*64
@@ -228,6 +228,10 @@ class HotfixInputTest(unittest.TestCase):
             return ''
         with patch.object(module.hotfix,'run',side_effect=command):
             module.hotfix.install(root,self.manifest,'lamp')
+        return calls
+
+    def test_install_preserves_settings_and_uses_only_frozen_package_targets(self):
+        root=self.factory(); calls=self.install(root)
         config=(root/'etc/webmin/miniserv.conf').read_text()
         self.assertIn('custom=value\n',config)
         self.assertIn('extracas=/etc/ssl/private/cert.pem\n',config)
@@ -236,6 +240,36 @@ class HotfixInputTest(unittest.TestCase):
         self.assertEqual(set(apt[apt.index('install')+1:]),{name+'=1.0' for name in module.hotfix.PACKAGES})
         self.assertIn('APT::Get::AllowUnauthenticated=false',apt)
         self.assertTrue(any('--purge' in args and 'turnkey-lamp-19.0' in args for args in calls))
+
+    def test_install_normalizes_single_stock_empty_webmin_chain(self):
+        root = self.factory(); config = root / 'etc/webmin/miniserv.conf'
+        config.write_text('port=12321\nextracas=\ncustom=value\n')
+        self.install(root)
+        self.assertEqual(config.read_text(), 'port=12321\nextracas=/etc/ssl/private/cert.pem\ncustom=value\n')
+
+    def test_install_preserves_canonical_webmin_chain_idempotently(self):
+        root = self.factory(); config = root / 'etc/webmin/miniserv.conf'
+        original = 'port=12321\nextracas=/etc/ssl/private/cert.pem\ncustom=value\n'
+        config.write_text(original)
+        os.utime(config, ns=(1_000_000_000, 1_000_000_000))
+        self.install(root)
+        self.install(root)
+        self.assertEqual(config.read_text(), original)
+        self.assertEqual(config.stat().st_mtime_ns, 1_000_000_000)
+
+    def test_install_rejects_custom_or_duplicate_webmin_chain(self):
+        root = self.factory(); config = root / 'etc/webmin/miniserv.conf'
+        for chain in [
+                'extracas=/etc/custom.pem\n',
+                'extracas=\nextracas=\n',
+                'extracas=/etc/ssl/private/cert.pem\nextracas=/etc/ssl/private/cert.pem\n',
+                'extracas=\nextracas=/etc/ssl/private/cert.pem\n']:
+            with self.subTest(chain=chain):
+                original = 'port=12321\n' + chain + 'custom=value\n'
+                config.write_text(original)
+                with self.assertRaisesRegex(ValueError, 'different Webmin chain'):
+                    self.install(root)
+                self.assertEqual(config.read_text(), original)
 
     def test_profile_uses_final_readonly_root_and_retains_hook_mode(self):
         root = self.factory(); output = self.base / 'output'; calls = []
