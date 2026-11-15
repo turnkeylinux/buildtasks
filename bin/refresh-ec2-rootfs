@@ -115,8 +115,21 @@ if ! grep -qx 'source /etc/default/inithooks' "$root/usr/lib/inithooks/firstboot
 fi
 grep -qx 'export SEC_UPDATES=FORCE' "$root/usr/lib/inithooks/firstboot.d/29preseed"
 grep -qx 'RUN_FIRSTBOOT=true' "$root/etc/default/inithooks"
-grep -qx 'PasswordAuthentication no' "$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf"
-grep -qx 'PermitRootLogin no' "$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf"
+# Older EC2 conversions lack the canonical key-only SSH drop-in.
+ssh_policy=$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf
+if [[ ! -e $ssh_policy && ! -L $ssh_policy ]]; then
+    printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' \
+        'PermitRootLogin no' 'PubkeyAuthentication yes' |
+        install -o 0 -g 0 -m 644 /dev/stdin "$ssh_policy"
+fi
+# /run is a temporary mount; sshd requires its privilege-separation directory.
+install -d -o 0 -g 0 -m 755 "$root/run/sshd"
+ssh_admin=$(chroot "$root" /usr/sbin/sshd -T -C user=admin,host=localhost,addr=127.0.0.1)
+grep -qx 'passwordauthentication no' <<< "$ssh_admin"
+grep -qx 'kbdinteractiveauthentication no' <<< "$ssh_admin"
+grep -qx 'pubkeyauthentication yes' <<< "$ssh_admin"
+ssh_root=$(chroot "$root" /usr/sbin/sshd -T -C user=root,host=localhost,addr=127.0.0.1)
+grep -qx 'permitrootlogin no' <<< "$ssh_root"
 [[ -z $(chroot "$root" dpkg --audit) ]]
 ! find "$root/root" "$root/home" -name authorized_keys -type f -size +0c | grep -q .
 version=$(chroot "$root" dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
