@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "patches/ec2/overlay/usr/lib/inithooks/firstboot.d/28ec2-sudoadmin"
@@ -156,6 +158,98 @@ chroot() {
     def test_root_match_override_is_rejected(self):
         self.config.write_text(self.base + 'Match User root\nPermitRootLogin yes\n')
         self.assertNotEqual(self.apply_policy().returncode, 0)
+
+
+@unittest.skipUnless(Path('/usr/lib/apt/apt-helper').is_file(),
+                     'requires Debian apt-helper')
+class EC2InstallTransportTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.parts = self.root / 'etc/apt/apt.conf.d'
+        self.parts.mkdir(parents=True)
+        (self.parts / '00proxy').write_text(
+            'Acquire::http::Proxy "http://127.0.0.1:1";\n'
+            'Acquire::https::Proxy "http://127.0.0.1:1";\n')
+        (self.parts / '00proxy').chmod(0o640)
+        config = self.root / 'apt.conf'
+        # APT_CONFIG loads first, so its naive DIRECT values lose to 00proxy.
+        config.write_text('Dir::Etc::parts "' + str(self.parts) + '";\n'
+                          'Dir::Etc::main "/dev/null";\n'
+                          'Acquire::http::Proxy "DIRECT";\n'
+                          'Acquire::https::Proxy "DIRECT";\n')
+        self.env = dict(os.environ, APT_CONFIG=str(config))
+        for key in ('no_proxy', 'NO_PROXY'):
+            self.env.pop(key, None)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                payload = b'fixture-bytes\n'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.env['FIXTURE_URL'] = 'http://127.0.0.1:' + str(self.server.server_port) + '/bytes'
+        self.env['FIXTURE_OUTPUT'] = str(self.root / 'download')
+        self.hotfix = self.root / 'hotfix.json'
+        self.hotfix.write_text('{}')
+
+    def configs(self):
+        return {p.name: (p.read_bytes(), p.stat().st_mode, p.stat().st_uid,
+                         p.stat().st_gid, p.stat().st_ino, p.stat().st_mtime_ns)
+                for p in self.parts.iterdir()}
+
+    def install(self, fail=False):
+        source = REFRESH.read_text()
+        restore = source[source.index('restore_files() {'):source.index('\ncleanup() {')]
+        start = source.index('if [[ -n $hotfix ]]; then')
+        end = source.index('\nfi\nsed -i', start) + len('\nfi\n')
+        wrapper = '''set -euo pipefail
+root=$1; hotfix=$2; profile_output=fixture; app=tkldev
+policy_changed=false; resolver_changed=false; apt_proxy_override=
+python3() {
+    [[ $2 == install ]]
+    /usr/lib/apt/apt-helper -o Acquire::Retries=0 -o Acquire::http::Timeout=2 \\
+        download-file "$FIXTURE_URL" "$FIXTURE_OUTPUT"
+    apt-config shell proxy Acquire::https::Proxy | grep -qx "proxy='DIRECT'"
+    if [[ $FAIL_INSTALL == 1 ]]; then return 42; fi
+}
+'''
+        self.env['FAIL_INSTALL'] = '1' if fail else '0'
+        return subprocess.run(['bash', '-c', wrapper + restore +
+                               '\ntrap restore_files EXIT\n' + source[start:end],
+                               '--', str(self.root), str(self.hotfix)],
+                              env=self.env, capture_output=True, text=True)
+
+    def test_stopped_guest_proxy_is_bypassed_only_during_install(self):
+        before = self.configs()
+        failed = subprocess.run([
+            '/usr/lib/apt/apt-helper', '-o', 'Acquire::Retries=0',
+            '-o', 'Acquire::http::Timeout=2', 'download-file',
+            self.env['FIXTURE_URL'], self.env['FIXTURE_OUTPUT']],
+            env=self.env, capture_output=True, text=True)
+        self.assertEqual(failed.returncode, 100, failed.stderr)
+        Path(self.env['FIXTURE_OUTPUT']).unlink(missing_ok=True)
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(self.env['FIXTURE_OUTPUT']).read_bytes(), b'fixture-bytes\n')
+        self.assertEqual(self.configs(), before)
+
+    def test_failed_install_removes_only_temporary_proxy_override(self):
+        before = self.configs()
+        result = self.install(fail=True)
+        self.assertEqual(result.returncode, 42, result.stderr)
+        self.assertEqual(Path(self.env['FIXTURE_OUTPUT']).read_bytes(), b'fixture-bytes\n')
+        self.assertEqual(self.configs(), before)
 
 
 if __name__ == "__main__":

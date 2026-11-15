@@ -30,7 +30,12 @@ policy=$root/usr/sbin/policy-rc.d
 resolver=$root/etc/resolv.conf
 policy_changed=false
 resolver_changed=false
+apt_proxy_override=
 restore_files() {
+    if [[ -n $apt_proxy_override ]]; then
+        rm -f "$apt_proxy_override"
+        apt_proxy_override=
+    fi
     if $policy_changed; then
     if [[ -e $root/.refresh-policy-present ]]; then
         mv "$root/.refresh-policy" "$policy"
@@ -106,7 +111,13 @@ fi
 [[ -z $(security_candidates) ]]
 if [[ -n $hotfix ]]; then
     [[ -n $profile_output && -f $hotfix ]]
+    # Guest proxy daemons are stopped; use the outer refresh's direct transport.
+    apt_proxy_override=$(mktemp "$root/etc/apt/apt.conf.d/zz-turnkey-refresh-direct-XXXXXX")
+    printf '%s\n' 'Acquire::http::Proxy "DIRECT";' 'Acquire::https::Proxy "DIRECT";' \
+        > "$apt_proxy_override"
     python3 "$(dirname "$hotfix")/ec2-hotfix.py" install "$root" "$hotfix" "$app"
+    rm -f "$apt_proxy_override"
+    apt_proxy_override=
 fi
 sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
     "$root/usr/lib/inithooks/firstboot.d/29preseed"
