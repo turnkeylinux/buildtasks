@@ -122,6 +122,155 @@ class PublicationTest(unittest.TestCase):
             refresh.instance('i-new')
 
 
+class BootReadinessTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.keys=tempfile.TemporaryDirectory();cls.records=[]
+        for name in ('stock','final'):
+            key=Path(cls.keys.name)/name
+            subprocess.run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)],check=True)
+            cls.records.append(' '.join(key.with_suffix('.pub').read_text().split()[:2]))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.keys.cleanup()
+
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.base=Path(self.temp.name);self.calls=[];self.snapshots=[]
+        self.refresh=module.Refresh.__new__(module.Refresh)
+        self.refresh.state=self.base;self.refresh.key=self.base/'worker-key'
+        self.refresh.host_key_lock=module.threading.Lock();self.refresh.batch='fixture'
+        self.refresh.resources={};self.refresh.hotfix=None;self.refresh.log=Mock()
+        self.refresh.ec2=Mock()
+        self.refresh.instance=Mock(return_value={'State':{'Name':'running'},'PublicIpAddress':'127.0.0.1'})
+        self.item={'app':'core','ami':'ami-test','test_instance':'i-test'}
+        self.real_run=subprocess.run
+
+    def run_boot(self, events, max_polls=None):
+        events=list(events);poll_limit=max_polls or len(events);events=iter(events);self.polls=0
+        def transport(args, **kwargs):
+            if args[0]=='ssh-keygen':
+                self.calls.append(('lookup',args))
+                return self.real_run(args,**kwargs)
+            self.assertEqual(args[0],'ssh')
+            known=Path(next(arg.split('=',1)[1] for arg in args if arg.startswith('UserKnownHostsFile=')))
+            command=args[-1];self.calls.append(('ssh',known,command))
+            if command=='sudo bash -s':
+                self.assertIn(self.records[1],known.read_text())
+                return SimpleNamespace(returncode=0,stdout='BOOT_VERIFIED brotli=fixture\n',stderr='')
+            event=next(events)
+            kind,key=event
+            current=self.real_run(['ssh-keygen','-F','i-test','-f',str(known)],capture_output=True,text=True)
+            entries=[line for line in current.stdout.splitlines() if line and not line.startswith('#')]
+            if entries and not any(key in line for line in entries):
+                return SimpleNamespace(returncode=255,stdout='',stderr='Host key verification failed')
+            if not entries:
+                with known.open('a') as stream:stream.write('i-test '+key+'\n')
+            if kind=='timeout':raise subprocess.TimeoutExpired(args,12)
+            if kind=='denied':return SimpleNamespace(returncode=255,stdout='ActiveState=failed\n',stderr='Permission denied')
+            if kind=='command-error':return SimpleNamespace(returncode=1,stdout='',stderr='not ready')
+            if kind=='failed':return SimpleNamespace(returncode=0,stdout='Result=exit-code\nActiveState=failed\nERR: fixture detail\n',stderr='fixture stderr\n')
+            if kind=='waiting':return SimpleNamespace(returncode=0,stdout='Result=success\nActiveState=activating\n',stderr='')
+            return SimpleNamespace(returncode=0,stdout='Result=success\nActiveState=inactive\nInithooks run completed\n',stderr='')
+        def wait(check,seconds,delay=5):
+            if seconds==180:return check()
+            for _ in range(poll_limit):
+                self.polls+=1
+                if check():return True
+                pins=self.base/'known_hosts'
+                self.snapshots.append(pins.read_bytes() if pins.exists() else b'')
+                self.assertFalse(list(self.base.glob('boot-host-*')))
+            pins=self.base/'known_hosts'
+            stale=pins.exists() and ('i-test '+self.records[0]) in pins.read_text()
+            raise TimeoutError('fixture readiness polls exhausted; stale_instance_stock_pin='+str(stale))
+        with patch.object(module.subprocess,'run',side_effect=transport),patch.object(module,'wait_until',side_effect=wait):
+            self.refresh.boot_test(self.item)
+
+    def test_failed_authentication_never_pins_stock_key_before_rotation(self):
+        known=self.base/'known_hosts';worker='worker-host '+self.records[0]+'\n';known.write_text(worker)
+        self.run_boot([('denied',self.records[0]),('ready',self.records[1])])
+        self.assertEqual(self.snapshots,[worker.encode()])
+        self.assertEqual(known.read_text(),worker+'i-test '+self.records[1]+'\n')
+        self.assertFalse(list(self.base.glob('boot-host-*')))
+        self.assertEqual(len([c for c in self.calls if c[0]=='lookup']),2)
+        self.refresh.ec2.terminate_instances.assert_called_once_with(InstanceIds=['i-test'])
+
+    def test_timeout_and_failed_remote_command_discard_attempt_pins(self):
+        self.run_boot([('timeout',self.records[0]),('command-error',self.records[1]),('ready',self.records[1])])
+        self.assertEqual(self.snapshots,[b'',b''])
+        self.assertEqual((self.base/'known_hosts').read_text(),'i-test '+self.records[1]+'\n')
+        self.assertFalse(list(self.base.glob('boot-host-*')))
+
+    def test_first_authenticated_waiting_probe_pins_once_then_uses_durable_key(self):
+        self.run_boot([('waiting',self.records[1]),('ready',self.records[1])])
+        ssh=[c for c in self.calls if c[0]=='ssh']
+        self.assertNotEqual(ssh[0][1],self.base/'known_hosts')
+        self.assertEqual([c[1] for c in ssh[1:]],[self.base/'known_hosts']*2)
+        self.assertEqual(self.snapshots,[('i-test '+self.records[1]+'\n').encode()])
+
+    def test_existing_pin_is_never_replaced_after_key_mismatch(self):
+        known=self.base/'known_hosts';original='i-test '+self.records[0]+'\n';known.write_text(original)
+        with self.assertRaises(TimeoutError):
+            self.run_boot([('ready',self.records[1])]*2,max_polls=2)
+        self.assertEqual(known.read_text(),original)
+        self.assertEqual(len([c for c in self.calls if c[0]=='lookup']),1)
+        self.assertTrue(all(c[1]==known for c in self.calls if c[0]=='ssh'))
+
+    def test_already_pinned_success_keeps_one_readiness_network_call(self):
+        known=self.base/'known_hosts';known.write_text('i-test '+self.records[1]+'\n')
+        self.run_boot([('ready',self.records[1])])
+        ssh=[c for c in self.calls if c[0]=='ssh']
+        self.assertEqual(len(ssh),2)  # One readiness probe and the unchanged final verification.
+        self.assertEqual(self.polls,1)
+        self.assertTrue(all(c[1]==known for c in ssh))
+        self.assertEqual(len([c for c in self.calls if c[0]=='lookup']),1)
+
+    def test_authenticated_initialization_failure_is_private_and_immediate(self):
+        with self.assertRaisesRegex(RuntimeError,'First-boot initialization failed'):
+            self.run_boot([('failed',self.records[1])])
+        self.assertEqual(self.polls,1)
+        failure=self.base/'core-boot-readiness-failure.log'
+        self.assertIn('Result=exit-code',failure.read_text())
+        self.assertIn('fixture stderr',failure.read_text())
+        self.assertEqual(failure.stat().st_mode&0o777,0o600)
+        self.assertFalse(list(self.base.glob('boot-host-*')))
+        self.refresh.ec2.terminate_instances.assert_called_once_with(InstanceIds=['i-test'])
+
+    def test_normal_ssh_has_no_new_probe_or_global_hostkey_override(self):
+        with patch.object(module.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as run:
+            self.refresh.ssh('127.0.0.1','true',host_alias='worker-host')
+        run.assert_called_once()
+        argv=run.call_args.args[0]
+        self.assertEqual(argv[0],'ssh')
+        self.assertIn('UserKnownHostsFile='+str(self.base/'known_hosts'),argv)
+        self.assertNotIn('GlobalKnownHostsFile=/dev/null',argv)
+
+    def test_concurrent_fresh_guests_append_both_keys_and_preserve_worker_pin(self):
+        known=self.base/'known_hosts';worker='worker-host '+self.records[0]
+        known.write_text(worker+'\n');barrier=module.threading.Barrier(2)
+        keys={'i-one':self.records[0],'i-two':self.records[1]}
+        def transport(args,**kwargs):
+            if args[0]=='ssh-keygen':return self.real_run(args,**kwargs)
+            iid=next(arg.split('=',1)[1] for arg in args if arg.startswith('HostKeyAlias='))
+            record=iid+' '+keys[iid]+'\n'
+            target=Path(next(arg.split('=',1)[1] for arg in args if arg.startswith('UserKnownHostsFile=')))
+            if args[-1]=='sudo bash -s':
+                self.assertIn(record,target.read_text())
+                return SimpleNamespace(returncode=0,stdout='BOOT_VERIFIED\n',stderr='')
+            self.assertNotEqual(target,known)
+            target.write_text(record);barrier.wait(timeout=5)
+            return SimpleNamespace(returncode=0,stdout='ActiveState=inactive\nInithooks run completed\n',stderr='')
+        def wait(check,seconds,delay=5):
+            result=check();self.assertTrue(result);return result
+        with patch.object(module.subprocess,'run',side_effect=transport),patch.object(module,'wait_until',side_effect=wait):
+            with module.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                jobs=[pool.submit(self.refresh.boot_test,dict(app='core-'+iid,ami='ami-test',test_instance=iid)) for iid in keys]
+                for job in jobs:job.result(timeout=10)
+        self.assertEqual(set(known.read_text().splitlines()),{worker}|{iid+' '+key for iid,key in keys.items()})
+        self.assertFalse(list(self.base.glob('boot-host-*')))
+
+
 class ClientTokenTest(unittest.TestCase):
     def test_existing_tokens_keep_their_idempotency_identity(self):
         for token in ['batch-core-r1', 'x' * 64]:
@@ -196,6 +345,24 @@ class HotfixInputTest(unittest.TestCase):
     def test_other_format_profile_identity_is_rejected(self):
         self.data['technical_release'] = '19.0.3.2'; self.write()
         with self.assertRaisesRegex(ValueError, 'EC2 hotfix identity'):
+            module.hotfix.load(self.manifest)
+
+    def test_ec2_technical_ids_allow_fresh_immutable_profiles(self):
+        for technical in ('19.0.3.12','19.0.3.13'):
+            with self.subTest(technical=technical):
+                self.data['technical_release']=technical;self.write()
+                self.assertEqual(module.hotfix.load(self.manifest)['technical_release'],technical)
+
+    def test_ec2_technical_ids_reject_reserved_and_invalid_values(self):
+        for technical in ('19.0.3.0','19.0.3.3','19.0.3.11','19.0.4.13','19.1.0.13',
+                          '19.0.3.013','19.0.3.13x','19.0.3.13.1',None,13,True,[],{}):
+            with self.subTest(technical=technical):
+                self.data['technical_release']=technical;self.write()
+                with self.assertRaisesRegex(ValueError,'EC2 hotfix identity'):
+                    module.hotfix.load(self.manifest)
+        self.data['technical_release']='19.0.3.13'
+        self.data['release']='19.1';self.write()
+        with self.assertRaisesRegex(ValueError,'EC2 hotfix identity'):
             module.hotfix.load(self.manifest)
 
     def factory(self):
@@ -380,6 +547,48 @@ class HotfixInputTest(unittest.TestCase):
                 self.assertEqual((after.st_uid,after.st_gid),(before.st_uid,before.st_gid))
                 self.assertEqual(parent_after.st_mode,parent_before.st_mode)
                 self.assertEqual(after.st_mode&0o777,requested)
+
+    def new_file_overlay(self, target, previous=(None,)):
+        source=self.base/'new-overlay';source.write_bytes(b'[Unit]\nAfter=mariadb.service\n')
+        self.data['apps']['lamp']['overlay']=[{'path':source.name,'sha256':module.hotfix.sha(source),
+            'source_main':self.commit,'target':target,'previous_sha256':list(previous),'mode':0o644}]
+        self.write()
+        return source
+
+    def test_genuine_overlay_creates_only_explicitly_accepted_absent_file(self):
+        if not os.environ.get('TKLPATCH_TEST_BIN'):self.skipTest('Requires hash-verified public0.95 fixture')
+        root=self.factory();target=root/'usr/lib/systemd/system/inithooks.service.d/20-mariadb.conf'
+        source=self.new_file_overlay('/'+str(target.relative_to(root)))
+        self.install(root)
+        self.assertEqual(target.read_bytes(),source.read_bytes())
+        self.assertEqual(target.stat().st_mode&0o777,0o644)
+        self.assertEqual((target.stat().st_uid,target.stat().st_gid),(root.stat().st_uid,root.stat().st_gid))
+
+    def test_absent_overlay_target_requires_explicit_none(self):
+        root=self.factory();target=root/'etc/not-approved.conf'
+        self.new_file_overlay('/etc/not-approved.conf',previous=())
+        with self.assertRaisesRegex(ValueError,'overlay'):
+            self.install(root)
+        self.assertFalse(target.exists())
+
+    def test_new_overlay_refuses_collisions_and_parent_escape(self):
+        root=self.factory();outside=self.base/'outside';outside.mkdir()
+        for kind in ('unknown-file','directory','dangling-link','parent-escape'):
+            with self.subTest(kind=kind):
+                target=root/'etc'/kind
+                if kind=='unknown-file':target.write_bytes(b'keep existing unknown bytes')
+                elif kind=='directory':target.mkdir()
+                elif kind=='dangling-link':target.symlink_to('missing-target')
+                else:
+                    target.symlink_to(outside,target_is_directory=True)
+                    target=target/'20-mariadb.conf'
+                self.new_file_overlay('/'+str(target.relative_to(root)))
+                with self.assertRaisesRegex(ValueError,'overlay'):
+                    self.install(root)
+                if kind=='unknown-file':self.assertEqual(target.read_bytes(),b'keep existing unknown bytes')
+                elif kind=='directory':self.assertTrue(target.is_dir())
+                elif kind=='dangling-link':self.assertTrue(target.is_symlink())
+                else:self.assertFalse((outside/'20-mariadb.conf').exists())
 
     def worker_tool_fixture(self, present):
         tools=self.base/('worker-tools-'+str(len(present))+'-'.join(present));tools.mkdir()

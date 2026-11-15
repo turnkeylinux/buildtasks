@@ -48,7 +48,9 @@ def asset_path(base, item):
 def load(path):
     path = Path(path).resolve()
     data = json.loads(path.read_text())
-    require(data['release'] == '19.0.3' and data['technical_release'] == '19.0.3.12', 'unexpected EC2 hotfix identity')
+    technical = data.get('technical_release')
+    build = re.fullmatch(r'19\.0\.3\.([1-9][0-9]*)', technical) if isinstance(technical, str) else None
+    require(data['release'] == '19.0.3' and build and int(build.group(1)) >= 12, 'unexpected EC2 hotfix identity')
     require(data.get('release_notes', '').strip(), 'release notes are required')
     require(set(data['packages']) == PACKAGES and set(data['minimum_packages']) == FLOORS, 'incomplete package baseline')
     commits = list(data['sources'].values())
@@ -142,7 +144,10 @@ def install(root, manifest, app):
             for item in row['overlay']:
                 target = root / item['target'].lstrip('/')
                 require(target.resolve().is_relative_to(root.resolve()), 'overlay escapes candidate root')
-                require(target.is_file() and sha(target) in item['previous_sha256'], 'overlay would overwrite an unexpected source file')
+                previous = sha(target) if target.is_file() else None
+                require(previous in item['previous_sha256'] and
+                        (previous is not None or not os.path.lexists(target)),
+                        'overlay would overwrite an unexpected source file')
                 staged = Path(temporary) / item['target'].lstrip('/')
                 staged.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(asset_path(manifest.parent, item), staged)

@@ -18,6 +18,7 @@ import re
 import shlex
 import subprocess
 import threading
+import tempfile
 import time
 
 import boto3
@@ -149,6 +150,7 @@ class Refresh:
         self.finish_jobs = []
         self.finish_lock = threading.Lock()
         self.publish_lock = threading.Lock()
+        self.host_key_lock = threading.Lock()
         self.key = self.state / 'worker-key'
 
     def log(self, app, message):
@@ -158,10 +160,12 @@ class Refresh:
         return [{'Key': 'RefreshBatch', 'Value': self.batch}, {'Key': 'Appliance', 'Value': app},
                 {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-hotfix' if getattr(self, 'hotfix', None) else 'marketplace-security-refresh'}]
 
-    def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None):
+    def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None, known_hosts=None):
         identity = ['-o', 'HostKeyAlias=' + host_alias] if host_alias else []
+        host_file = self.state / 'known_hosts' if known_hosts is None else known_hosts
+        identity += ['-o', 'GlobalKnownHostsFile=/dev/null'] if known_hosts is not None else []
         return subprocess.run(['ssh', '-F', '/dev/null'] + identity + ['-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new',
-                               '-o', 'UserKnownHostsFile=' + str(self.state / 'known_hosts'), '-i', str(self.key),
+                               '-o', 'UserKnownHostsFile=' + str(host_file), '-i', str(self.key),
                                'admin@' + ip, command], input=input, text=True, capture_output=True, timeout=timeout)
 
     def cloudtask(self, worker, app, command, job):
@@ -418,10 +422,37 @@ class Refresh:
         iid = item['test_instance']; self.log(app, 'boot test ' + iid)
         try:
             ip = wait_until(lambda: self.instance(iid).get('PublicIpAddress'), 180)
+            known_hosts = self.state / 'known_hosts'
+            def host_is_pinned():
+                return known_hosts.exists() and subprocess.run(['ssh-keygen', '-F', iid, '-f', str(known_hosts)],
+                    text=True, capture_output=True).returncode == 0
+            is_pinned = host_is_pinned()
             command = "sudo sh -c 'systemctl show inithooks.service -p Result -p ActiveState; test -f /var/log/inithooks.log && tail -5 /var/log/inithooks.log'"
             def complete():
+                nonlocal is_pinned
                 try:
-                    r = self.ssh(ip, command, timeout=12, host_alias=iid)
+                    if is_pinned:
+                        r = self.ssh(ip, command, timeout=12, host_alias=iid)
+                    else:
+                        # Stock host keys can rotate before first-boot key import.
+                        with tempfile.NamedTemporaryFile(prefix='boot-host-', dir=self.state) as attempt:
+                            r = self.ssh(ip, command, timeout=12, host_alias=iid, known_hosts=attempt.name)
+                            if r.returncode == 0:
+                                record = Path(attempt.name).read_bytes()
+                                if not record.strip():
+                                    raise RuntimeError('Authenticated boot probe did not record a host key')
+                                with self.host_key_lock:
+                                    if host_is_pinned():
+                                        is_pinned = True
+                                        return False
+                                    with known_hosts.open('ab') as destination:
+                                        destination.write(record)
+                                    is_pinned = True
+                    if r.returncode == 0 and {'ActiveState=failed', 'Result=exit-code'} & set(r.stdout.splitlines()):
+                        failure = self.state / (app + '-boot-readiness-failure.log')
+                        failure.touch(mode=0o600, exist_ok=True); failure.chmod(0o600)
+                        failure.write_text(r.stdout + r.stderr)
+                        raise RuntimeError('First-boot initialization failed; see ' + failure.name)
                     return r.returncode == 0 and 'ActiveState=inactive' in r.stdout and 'Inithooks run completed' in r.stdout
                 except subprocess.TimeoutExpired:
                     return False
