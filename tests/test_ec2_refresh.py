@@ -21,6 +21,11 @@ spec = importlib.util.spec_from_loader(loader.name, loader)
 module = importlib.util.module_from_spec(spec)
 loader.exec_module(module)
 
+patch_loader = importlib.machinery.SourceFileLoader('shared_patch', str(ROOT / 'patches/library-19.0-hotfix/conf/post-overlay'))
+patch_spec = importlib.util.spec_from_loader(patch_loader.name, patch_loader)
+shared_patch = importlib.util.module_from_spec(patch_spec)
+patch_loader.exec_module(shared_patch)
+
 
 class HeadlessPreseedTest(unittest.TestCase):
     def run_preseed(self, ec2=False, existing=None):
@@ -151,15 +156,19 @@ class HotfixInputTest(unittest.TestCase):
         def asset(name, body=b'fixture'):
             path = self.base / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(body)
             return {'path': name, 'sha256': module.hotfix.sha(path), 'source_main': self.commit}
-        self.data = {'release': '19.0.3', 'technical_release': '19.0.3.3', 'release_notes': 'Current maintenance fixes.',
+        self.data = {'release': '19.0.3', 'technical_release': '19.0.3.12', 'release_notes': 'Current maintenance fixes.',
                      'sources': {name: self.commit for name in ['buildtasks_main', 'common_main', 'release_main', 'controller_main']},
-                     'packages': {name: {'version': '1.0', 'sha256': 'b'*64, 'source_main': self.commit} for name in module.hotfix.PACKAGES},
+                     'packages': {name: {**{key: shared_patch.PINS[name][key] for key in ('version', 'sha256')}, 'source_main': self.commit} for name in module.hotfix.PACKAGES},
                      'minimum_packages': {'hubdns': '1.5.0', 'hubclient': '0.3.0', 'webmin': '2.660.turnkey0'},
                      'profile_generator': asset('generator'), 'aptconf_tag': asset('apt-tag'),
                      'apps': {'lamp': {'source_ami': 'ami-123', 'source_snapshot': 'snap-123', 'source_main': self.commit,
                                       'identity_package': asset('identity.deb'), 'superseded_delivery_ids': ['old'],
                                       'profile_conf': {'core': asset('conf/core'), 'lamp': asset('conf/lamp'),
                                                        'hooks/lamp/50-export': {**asset('conf/hook'), 'mode': 0o755}}}}}
+        bundle = self.base / 'library-19.0-hotfix.tar.gz'
+        with tarfile.open(bundle, 'w:gz') as archive:
+            archive.add(ROOT / 'patches/library-19.0-hotfix', arcname='library-19.0-hotfix')
+        self.data['shared_patch'] = {'path': bundle.name, 'sha256': module.hotfix.sha(bundle), 'source_main': self.commit}
         self.manifest = self.base / 'input.json'; self.write()
 
     def write(self):
@@ -191,11 +200,12 @@ class HotfixInputTest(unittest.TestCase):
 
     def factory(self):
         root = self.base / 'root'
-        for name in ['etc/default', 'etc/webmin', 'run', 'var/lib/turnkey-info']:
+        for name in ['etc/default', 'etc/webmin', 'run', 'var/lib/turnkey-info', 'root', 'home']:
             (root / name).mkdir(parents=True, exist_ok=True)
+        (root / 'etc/os-release').write_text('ID=debian\nVERSION_ID="13"\n')
         (root / 'etc/default/inithooks').write_text('RUN_FIRSTBOOT=true\n')
         (root / 'etc/webmin/miniserv.conf').write_text('port=12321\ncustom=value\n')
-        (root / 'etc/turnkey_version').write_text('turnkey-lamp-19.0.3.3-trixie-amd64\n')
+        (root / 'etc/turnkey_version').write_text('turnkey-lamp-19.0.3.12-trixie-amd64\n')
         (root / 'var/lib/turnkey-info/hotfix.json').write_text('{}')
         return root
 
@@ -206,25 +216,42 @@ class HotfixInputTest(unittest.TestCase):
             module.hotfix.factory(root)
 
     def test_package_install_checks_signed_candidate_before_installing(self):
-        root = self.factory()
-        def command(args):
-            if 'apt-cache' in args:
-                return 'SHA256: ' + 'c'*64
-            raise AssertionError(args)
-        with patch.object(module.hotfix, 'run', side_effect=command) as runner:
-            with self.assertRaisesRegex(ValueError, 'signed APT candidate hash'):
-                module.hotfix.install(root, self.manifest, 'lamp')
-        self.assertFalse(any('apt-get' in c.args[0] for c in runner.call_args_list))
+        root = self.factory(); self.bad_candidate = True
+        with self.assertRaisesRegex(ValueError, 'signed APT candidate hash'):
+            self.install(root)
+        self.assertFalse(any('apt-get' in c for c in self.calls))
 
     def install(self, root):
-        calls=[]
+        self.calls = calls = []
+        installed = dict(getattr(self, 'installed', {name: pin['version'] for name, pin in shared_patch.PINS.items()}))
+        refreshed = False
+        real_run = subprocess.run
+        def process(args, **kwargs):
+            nonlocal refreshed
+            args = list(map(str, args)); calls.append(args)
+            result = SimpleNamespace(returncode=0, stdout='')
+            if args[:2] == ['dpkg', '--print-architecture']:
+                result.stdout = getattr(self, 'architecture', 'amd64')
+            elif args[0] == '/usr/sbin/policy-rc.d':result.returncode = 101
+            elif args[0] == 'dpkg-query':result.stdout = installed[args[-1]]
+            elif args[0] == 'apt-cache':
+                name = args[-1].split('=')[0]
+                if not getattr(self, 'missing_candidate', False) or refreshed:
+                    result.stdout = 'SHA256: ' + ('c'*64 if getattr(self, 'bad_candidate', False) else shared_patch.PINS[name]['sha256'])
+            elif args[0] == 'apt-get' and args[-1] == 'update':refreshed = True
+            elif args[0] == 'apt-get' and 'install' in args:
+                installed.update(target.split('=', 1) for target in args[args.index('install')+1:])
+            elif args[:2] == ['dpkg', '--compare-versions']:return real_run(args, **kwargs)
+            else:raise AssertionError(args)
+            return result
         def command(args):
             args=list(map(str,args)); calls.append(args)
-            if 'apt-cache' in args:return 'SHA256: '+'b'*64
-            if 'dpkg-query' in args:
-                if args[-1]=='-f=${Package}\n':return 'turnkey-lamp-19.0'
-                return self.data['minimum_packages'].get(args[-1],'1.0')
-            if args[0]=='dpkg-deb':return 'turnkey-lamp-19.0.3.3' if args[-1]=='Package' else '1'
+            if args[0] == 'tklpatch-apply':
+                with patch.object(shared_patch, 'ROOT', root), patch.object(shared_patch.subprocess, 'run', side_effect=process):shared_patch.apply()
+            if args[0] == 'tklpatch-apply-overlay':
+                real_run([str(Path(os.environ['TKLPATCH_TEST_BIN'])/'tklpatch-apply-overlay'), *args[1:]], check=True, capture_output=True, text=True)
+            if 'dpkg-query' in args:return 'turnkey-lamp-19.0' if args[-1]=='-f=${Package}\n' else self.data['minimum_packages'].get(args[-1], self.data['packages'].get(args[-1],{}).get('version','1'))
+            if args[0]=='dpkg-deb':return 'turnkey-lamp-19.0.3.12' if args[-1]=='Package' else '1'
             return ''
         with patch.object(module.hotfix,'run',side_effect=command):
             module.hotfix.install(root,self.manifest,'lamp')
@@ -235,10 +262,11 @@ class HotfixInputTest(unittest.TestCase):
         config=(root/'etc/webmin/miniserv.conf').read_text()
         self.assertIn('custom=value\n',config)
         self.assertIn('extracas=/etc/ssl/private/cert.pem\n',config)
-        self.assertEqual((root/'etc/turnkey_version').read_text(),'turnkey-lamp-19.0.3.3-trixie-amd64\n')
+        self.assertEqual((root/'etc/turnkey_version').read_text(),'turnkey-lamp-19.0.3.12-trixie-amd64\n')
         apt=next(args for args in calls if 'apt-get' in args)
-        self.assertEqual(set(apt[apt.index('install')+1:]),{name+'=1.0' for name in module.hotfix.PACKAGES})
+        self.assertEqual(set(apt[apt.index('install')+1:]),{name+'='+self.data['packages'][name]['version'] for name in module.hotfix.PACKAGES})
         self.assertIn('APT::Get::AllowUnauthenticated=false',apt)
+        self.assertIn('--no-remove',apt);self.assertIn('DPkg::Options::=--force-confold',apt)
         self.assertTrue(any('--purge' in args and 'turnkey-lamp-19.0' in args for args in calls))
 
     def test_install_normalizes_single_stock_empty_webmin_chain(self):
@@ -271,6 +299,120 @@ class HotfixInputTest(unittest.TestCase):
                     self.install(root)
                 self.assertEqual(config.read_text(), original)
 
+    def test_standard_patch_delegation_and_cached_metadata_avoid_update(self):
+        root=self.factory(); calls=self.install(root)
+        self.assertIn(['tklpatch-apply',str(root),str(self.base/'library-19.0-hotfix.tar.gz')], calls)
+        self.assertFalse(any(args[-1:] == ['update'] for args in calls))
+
+    def test_absent_candidate_refreshes_once_and_newer_floor_is_preserved(self):
+        root=self.factory(); self.missing_candidate=True
+        self.installed={name: pin['version'] for name,pin in shared_patch.PINS.items()}
+        self.installed['hubdns']='9.0'
+        calls=self.install(root)
+        self.assertEqual(1, len([args for args in calls if args[-1:] == ['update']]))
+        apt=next(args for args in calls if 'apt-get' in args and 'install' in args)
+        self.assertFalse(any(x.startswith('hubdns=') for x in apt))
+
+    def test_common_conf_refuses_wrong_os_arch_or_authorized_keys(self):
+        root=self.factory(); before=(root/'etc/webmin/miniserv.conf').read_bytes()
+        for kind in ('os', 'arch', 'keys', 'release'):
+            with self.subTest(kind=kind):
+                (root/'etc/os-release').write_text('ID=debian\nVERSION_ID="12"\n' if kind=='os' else 'ID=debian\nVERSION_ID="13"\n')
+                self.architecture='arm64' if kind=='arch' else 'amd64'
+                (root/'etc/turnkey_version').write_text('turnkey-lamp-19.1-trixie-amd64\n' if kind=='release' else 'turnkey-lamp-19.0-trixie-amd64\n')
+                key=root/'root/authorized_keys'
+                if kind=='keys':key.write_text('synthetic public fixture')
+                with self.assertRaisesRegex(ValueError, 'Debian 13|amd64|authorized keys|TurnKey 19.0'):self.install(root)
+                self.assertFalse(any('apt-get' in args for args in self.calls))
+                self.assertEqual(before,(root/'etc/webmin/miniserv.conf').read_bytes())
+                if key.exists():key.unlink()
+
+    def test_manifest_cannot_substitute_shared_pins_or_tamper_archive(self):
+        self.data['packages']['tklbam']['sha256']='c'*64;self.write()
+        with self.assertRaisesRegex(ValueError,'shared patch package differs'):module.hotfix.load(self.manifest)
+        self.data['packages']['tklbam']['sha256']=shared_patch.PINS['tklbam']['sha256'];self.write()
+        (self.base/'library-19.0-hotfix.tar.gz').write_bytes(b'tampered')
+        with self.assertRaisesRegex(ValueError,'hash differs'):module.hotfix.load(self.manifest)
+
+    def test_older_floor_uses_pinned_signed_package(self):
+        root=self.factory();self.installed={name:pin['version'] for name,pin in shared_patch.PINS.items()};self.installed['hubdns']='1.4.0'
+        calls=self.install(root);apt=next(args for args in calls if 'apt-get' in args and 'install' in args)
+        self.assertIn('hubdns=1.5.0',apt)
+
+    def test_shared_archive_source_guard_uses_frozen_commit_timestamp(self):
+        import gzip
+        canonical=gzip.decompress((self.base/'library-19.0-hotfix.tar.gz').read_bytes())
+        def git(args):
+            if 'archive' in args:
+                self.assertIn('--mtime=@1794620000',args);return canonical
+            if '--format=%ct' in args:return b'1794620000\n'
+            member=args[-1].split(':',1)[1]
+            if member=='bin/generate-tklbam-profile':return (self.base/'generator').read_bytes()
+            if member=='bin/aptconf-tag':return (self.base/'apt-tag').read_bytes()
+            return (ROOT/member).read_bytes()
+        with patch.object(module.subprocess,'run'),patch.object(module.subprocess,'check_output',side_effect=git):
+            module.verify_controller_source(self.data,self.manifest)
+            bundle=self.base/'library-19.0-hotfix.tar.gz';bundle.write_bytes(gzip.compress(b'changed source'))
+            self.data['shared_patch']['sha256']=module.hotfix.sha(bundle)
+            with self.assertRaisesRegex(ValueError,'TKLPatch differs'):module.verify_controller_source(self.data,self.manifest)
+
+    def test_packaged_tklpatch_advanced_hook_transports_pins_and_cleans_script(self):
+        tool=os.environ.get('TKLPATCH_TEST_BIN')
+        if not tool:self.skipTest('Set TKLPATCH_TEST_BIN to the hash-verified public0.95 fixture')
+        root=self.factory();tools=self.base/'tool-shims';tools.mkdir()
+        shim=tools/'tklpatch-chroot'
+        shim.write_text('#!/bin/sh\nset -eu\nif [ "$2" = /tmp/tklpatch/post-overlay ]; then\n test -x "$1/tmp/tklpatch/post-overlay"\n cmp "$1/tmp/tklpatch/packages.json" "$EXPECTED_PINS"\n touch "$1/conf-transported"\nfi\n')
+        shim.chmod(0o755);env=dict(os.environ,PATH=str(tools)+':'+tool+':'+os.environ['PATH'],EXPECTED_PINS=str(ROOT/'patches/library-19.0-hotfix/conf/packages.json'))
+        result=subprocess.run([str(Path(tool)/'tklpatch-apply'),str(root),str(self.base/'library-19.0-hotfix.tar.gz')],env=env,capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr);self.assertTrue((root/'conf-transported').exists());self.assertFalse((root/'tmp/tklpatch').exists())
+
+    def test_genuine_overlay_enforces_requested_target_modes_and_preserves_ownership(self):
+        if not os.environ.get('TKLPATCH_TEST_BIN'):self.skipTest('Requires hash-verified public0.95 fixture')
+        root=self.factory();source=self.base/'mode-overlay';source.write_bytes(b'new mode-contract payload')
+        for requested in (0o755,0o600):
+            with self.subTest(requested=oct(requested)):
+                target=root/'etc/mode-contract';target.write_bytes(b'old payload');target.chmod(0o644)
+                before=target.stat();parent_before=target.parent.stat()
+                self.data['apps']['lamp']['overlay']=[{'path':source.name,'sha256':module.hotfix.sha(source),
+                    'source_main':self.commit,'target':'/etc/mode-contract','previous_sha256':[module.hotfix.sha(target)],'mode':requested}]
+                self.write();self.install(root);after=target.stat();parent_after=target.parent.stat()
+                self.assertEqual(target.read_bytes(),source.read_bytes())
+                self.assertEqual((after.st_uid,after.st_gid),(before.st_uid,before.st_gid))
+                self.assertEqual(parent_after.st_mode,parent_before.st_mode)
+                self.assertEqual(after.st_mode&0o777,requested)
+
+    def worker_tool_fixture(self, present):
+        tools=self.base/('worker-tools-'+str(len(present))+'-'.join(present));tools.mkdir()
+        for name in present:
+            target=tools/name;target.write_text('#!/bin/sh\nexit 0\n');target.chmod(0o755)
+        refresh=module.Refresh.__new__(module.Refresh);refresh.hotfix=self.data;refresh.hotfix_path=self.manifest;refresh.batch='fixture'
+        calls=[]
+        def ssh(ip,command,**kwargs):
+            calls.append(command)
+            if command.startswith('command -v'):
+                return subprocess.run(['/bin/bash','-c',command],env=dict(os.environ,PATH=str(tools)),capture_output=True,text=True)
+            return SimpleNamespace(returncode=0,stderr='')
+        refresh.ssh=ssh
+        return refresh,calls
+
+    def test_missing_either_worker_tool_blocks_asset_mutation(self):
+        for present in (('tklpatch-apply',),('tklpatch-apply-overlay',)):
+            with self.subTest(present=present):
+                refresh,calls=self.worker_tool_fixture(present)
+                with self.assertRaisesRegex(RuntimeError,'requires qualified TKLPatch'):refresh.prepare_worker({'ip':'fixture'})
+                self.assertFalse(any(command.startswith(('cat >','mkdir -p')) for command in calls))
+
+    def test_both_worker_tools_allow_normal_asset_staging(self):
+        refresh,calls=self.worker_tool_fixture(('tklpatch-apply','tklpatch-apply-overlay'))
+        refresh.prepare_worker({'ip':'fixture'})
+        self.assertTrue(any(command.startswith('cat >') for command in calls))
+        self.assertTrue(any(command.startswith('mkdir -p') for command in calls))
+
+    def test_profile_refuses_pending_patch_transport_or_resolver_fixture(self):
+        root=self.factory();(root/'tmp/tklpatch').mkdir(parents=True)
+        with self.assertRaisesRegex(ValueError,'cleanup is incomplete'):
+            module.hotfix.profile(root,self.manifest,'lamp',self.base/'profile')
+
     def test_profile_uses_final_readonly_root_and_retains_hook_mode(self):
         root = self.factory(); output = self.base / 'output'; calls = []
         def command(args):
@@ -278,7 +420,7 @@ class HotfixInputTest(unittest.TestCase):
             if '/usr/lib/tklbam-pypy2/bin/pypy' in args:
                 work = next((root / 'run').glob('ec2-profile-*')) / 'work'
                 self.assertEqual((work/'profile-conf/hooks/lamp/50-export').stat().st_mode & 0o777, 0o755)
-                (output / 'turnkey-lamp-19.0.3.3-trixie-amd64.tar.gz').write_bytes(b'generated profile')
+                (output / 'turnkey-lamp-19.0.3.12-trixie-amd64.tar.gz').write_bytes(b'generated profile')
             if 'dpkg-query' in args:
                 return 'tklbam\t1.5.5\tinstall ok installed'
             return ''
@@ -481,7 +623,7 @@ class HotfixInputTest(unittest.TestCase):
     def test_invalid_export_never_poison_retained_profile_and_retry_is_immutable(self):
         refresh=module.Refresh.__new__(module.Refresh)
         refresh.hotfix=self.data;refresh.hotfix_path=self.manifest;refresh.state=self.base;refresh.batch='test'
-        identity='turnkey-lamp-19.0.3.3-trixie-amd64'
+        identity='turnkey-lamp-19.0.3.12-trixie-amd64'
         profile=b'sealed profile';packages=b'package baseline'
         receipt={'identity':identity,'pristine':True,'manifest_sha256':module.hotfix.sha(self.manifest),
                  'source_ami':'ami-123','profile_sha256':hashlib.sha256(profile).hexdigest(),

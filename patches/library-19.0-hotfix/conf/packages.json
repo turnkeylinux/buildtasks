@@ -1,0 +1,10 @@
+{
+  "inithooks": {"version": "2.3.9", "sha256": "aa5221b1bf357a7b44ecc9bfa6652489cf5478806af4c875865a358bafeb600a", "minimum": false},
+  "turnkey-hub": {"version": "2.3.9", "sha256": "d0a9b72f4999693fe66b55346e83c4b57741812811069156fe222d6a1a32c11c", "minimum": false},
+  "tklbam": {"version": "1.5.6", "sha256": "75a5d293b1e3d927ace1ec6a8eed81693a07f3e6eab095bec451962672297b88", "minimum": false},
+  "confconsole": {"version": "2.2.6", "sha256": "a4e4f761e2b3340b6b1f141cfdae69ff46cb61f0ff5dc94da5e4b4a237ee563e", "minimum": false},
+  "webmin-tklbam": {"version": "1.2.4", "sha256": "0ddca2a788ede5f1db2b8a9af8fe5a0698151495bc41466b25bb1b0d401158fa", "minimum": false},
+  "hubdns": {"version": "1.5.0", "sha256": "531cf580538f86e00f2ed32e9b66b4a3c54e86838142ae1aaea772a4b3ae043b", "minimum": true},
+  "hubclient": {"version": "0.3.0", "sha256": "3cd2f5efe4648b1dd137e45b6f1e2162c78f78ea49748fe6114e7f86f3e938a5", "minimum": true},
+  "webmin": {"version": "2.660.turnkey0", "sha256": "67bc362c0d3396aa0e62b49d914e8b0cdae6fb864bb53e784f6428f3f0f266ad", "minimum": true}
+}

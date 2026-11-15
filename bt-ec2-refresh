@@ -4,6 +4,7 @@ import argparse
 import base64
 import importlib.util
 import io
+import gzip
 import tarfile
 import concurrent.futures as futures
 import datetime
@@ -53,6 +54,13 @@ def verify_controller_source(manifest, path):
         committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
         if committed != hotfix.asset_path(Path(path).resolve().parent, manifest[name]).read_bytes():
             raise ValueError('Canonical generator differs from committed buildtasks source')
+    patch = hotfix.asset_path(Path(path).resolve().parent, manifest['shared_patch'])
+    revision = manifest['sources']['controller_main']
+    epoch = subprocess.check_output(['git', '-C', str(HERE), 'show', '-s', '--format=%ct', revision]).decode().strip()
+    committed = subprocess.check_output(['git', '-C', str(HERE), 'archive', '--format=tar', '--mtime=@' + epoch,
+        '--prefix=library-19.0-hotfix/', revision + ':patches/library-19.0-hotfix'])
+    if gzip.decompress(patch.read_bytes()) != committed:
+        raise ValueError('Shared TKLPatch differs from committed main')
 
 
 def qa_receipt(path, item, *, customer=False):
@@ -198,6 +206,10 @@ class Refresh:
             except subprocess.TimeoutExpired:
                 return False
         wait_until(ready, 300)
+        if self.hotfix:
+            result = self.ssh(worker['ip'], 'command -v tklpatch-apply >/dev/null && command -v tklpatch-apply-overlay >/dev/null')
+            if result.returncode:
+                raise RuntimeError('Worker requires qualified TKLPatch commands')
         script = (HERE / 'bin/refresh-ec2-rootfs').read_text()
         r = self.ssh(worker['ip'], 'cat > /home/admin/refresh-ec2-rootfs && chmod 755 /home/admin/refresh-ec2-rootfs', input=script)
         if r.returncode:

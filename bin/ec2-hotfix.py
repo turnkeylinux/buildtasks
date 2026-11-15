@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tarfile
 
 PACKAGES = {'inithooks', 'turnkey-hub', 'tklbam', 'confconsole', 'webmin-tklbam'}
 FLOORS = {'hubdns', 'hubclient', 'webmin'}
@@ -25,6 +26,7 @@ def require(ok, message):
 
 
 def assets(data):
+    yield data['shared_patch']
     yield data['profile_generator']
     yield data['aptconf_tag']
     for row in data['apps'].values():
@@ -46,7 +48,7 @@ def asset_path(base, item):
 def load(path):
     path = Path(path).resolve()
     data = json.loads(path.read_text())
-    require(data['release'] == '19.0.3' and data['technical_release'] == '19.0.3.3', 'unexpected EC2 hotfix identity')
+    require(data['release'] == '19.0.3' and data['technical_release'] == '19.0.3.12', 'unexpected EC2 hotfix identity')
     require(data.get('release_notes', '').strip(), 'release notes are required')
     require(set(data['packages']) == PACKAGES and set(data['minimum_packages']) == FLOORS, 'incomplete package baseline')
     commits = list(data['sources'].values())
@@ -69,6 +71,15 @@ def load(path):
             require(overlay['target'].startswith('/') and '..' not in Path(overlay['target']).parts, 'unsafe overlay target')
             require(isinstance(overlay['previous_sha256'], list), 'overlay requires accepted previous hashes')
     require(all(re.fullmatch('[0-9a-f]{40}', commit) for commit in commits), 'invalid committed main identity')
+    require(data['shared_patch']['source_main'] == data['sources']['controller_main'], 'shared patch must match controller main')
+    require(Path(data['shared_patch']['path']).name == 'library-19.0-hotfix.tar.gz', 'unexpected shared patch name')
+    patch = asset_path(path.parent, data['shared_patch'])
+    with tarfile.open(patch) as archive:
+        pins = json.load(archive.extractfile('library-19.0-hotfix/conf/packages.json'))
+    require(set(pins) == PACKAGES | FLOORS, 'incomplete shared patch pins')
+    for name in PACKAGES:
+        require(all(data['packages'][name][key] == pins[name][key] for key in ('version', 'sha256')), 'shared patch package differs: ' + name)
+    require(all(data['minimum_packages'][name] == pins[name]['version'] for name in FLOORS), 'shared patch floor differs')
     for item in assets(data):
         require(item['source_main'] in commits, 'asset is outside frozen source revisions')
         asset_path(path.parent, item)
@@ -113,24 +124,7 @@ def install(root, manifest, app):
     data = load(manifest)
     row = data['apps'][app]
     factory(root)
-    targets = []
-    for name, item in data['packages'].items():
-        records = run(['chroot', root, 'apt-cache', 'show', name + '=' + item['version']])
-        hashes = re.findall(r'^SHA256: ([0-9a-f]{64})$', records, re.M)
-        require(hashes and set(hashes) == {item['sha256']}, 'signed APT candidate hash differs: ' + name)
-        targets.append(name + '=' + item['version'])
-    for name, floor in data['minimum_packages'].items():
-        installed = package_version(root, name, optional=True)
-        result = subprocess.run(['dpkg', '--compare-versions', installed, 'ge', floor]) if installed else None
-        if result is None or result.returncode:
-            targets.append(name + '=' + floor)
-    run(['chroot', root, 'apt-get', '-y', '--no-remove', '--no-install-recommends',
-         '-o', 'APT::Get::AllowUnauthenticated=false', '-o', 'Acquire::AllowInsecureRepositories=false',
-         '-o', 'DPkg::Options::=--force-confdef', '-o', 'DPkg::Options::=--force-confold', 'install'] + targets)
-    for name, item in data['packages'].items():
-        require(package_version(root, name) == item['version'], 'installed version differs: ' + name)
-    for name, floor in data['minimum_packages'].items():
-        run(['dpkg', '--compare-versions', package_version(root, name), 'ge', floor])
+    run(['tklpatch-apply', root, asset_path(manifest.parent, data['shared_patch'])])
     package = asset_path(manifest.parent, row['identity_package'])
     identity = 'turnkey-' + app + '-' + data['technical_release']
     require(run(['dpkg-deb', '-f', package, 'Package']) == identity, 'identity DEB package name differs')
@@ -143,22 +137,19 @@ def install(root, manifest, app):
         if old:
             run(['chroot', root, 'dpkg', '--purge'] + old)
         run(['chroot', root, 'dpkg', '--install', '/' + str(destination.relative_to(root))])
-    for item in row.get('overlay', []):
-        target = root / item['target'].lstrip('/')
-        require(target.resolve().is_relative_to(root.resolve()), 'overlay escapes candidate root')
-        require(target.is_file() and sha(target) in item['previous_sha256'], 'overlay would overwrite an unexpected source file')
-        shutil.copyfile(asset_path(manifest.parent, item), target)
-        target.chmod(item.get('mode', 0o644))
-    config = root / 'etc/webmin/miniserv.conf'
-    lines = config.read_text().splitlines()
-    chain = [line for line in lines if line.startswith('extracas=')]
-    canonical_chain = 'extracas=/etc/ssl/private/cert.pem'
-    require(chain in ([], ['extracas='], [canonical_chain]), 'source has a different Webmin chain configuration')
-    if chain == ['extracas=']:
-        lines[lines.index('extracas=')] = canonical_chain
-        config.write_text('\n'.join(lines) + '\n')
-    elif not chain:
-        config.write_text('\n'.join(lines + [canonical_chain]) + '\n')
+    if row.get('overlay'):
+        with tempfile.TemporaryDirectory(prefix='ec2-overlay-') as temporary:
+            for item in row['overlay']:
+                target = root / item['target'].lstrip('/')
+                require(target.resolve().is_relative_to(root.resolve()), 'overlay escapes candidate root')
+                require(target.is_file() and sha(target) in item['previous_sha256'], 'overlay would overwrite an unexpected source file')
+                staged = Path(temporary) / item['target'].lstrip('/')
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(asset_path(manifest.parent, item), staged)
+                staged.chmod(item.get('mode', 0o644))
+            run(['tklpatch-apply-overlay', root, temporary])
+            for item in row['overlay']:
+                os.chmod(root / item['target'].lstrip('/'), item.get('mode', 0o644))
     technical = identity + '-trixie-amd64'
     (root / 'etc/turnkey_version').write_text(technical + '\n')
     run(['bash', asset_path(manifest.parent, data['aptconf_tag']), root, 'ec2'])
@@ -174,6 +165,9 @@ def profile(root, manifest, app, output):
     root, manifest, output = Path(root), Path(manifest).resolve(), Path(output)
     data = load(manifest)
     factory(root)
+    require(not any((root / name).exists() or (root / name).is_symlink() for name in
+        ('tmp/tklpatch', 'etc/resolv.conf.bak', '.refresh-policy', '.refresh-policy-present',
+         '.refresh-resolver', '.refresh-resolver-present')), 'patch cleanup is incomplete before profile')
     identity = 'turnkey-' + app + '-' + data['technical_release'] + '-trixie-amd64'
     require((root / 'etc/turnkey_version').read_text().strip() == identity, 'wrong profile identity')
     output.mkdir(parents=True, exist_ok=True)

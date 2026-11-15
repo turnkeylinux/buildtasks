@@ -1,0 +1,85 @@
+#!/usr/bin/python3
+"""Shared signed-package/configuration maintenance for pristine 19.0 roots."""
+import json
+from pathlib import Path
+import re
+import subprocess
+
+ROOT = Path('/')
+PINS = json.loads(Path(__file__).with_name('packages.json').read_text())
+
+
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
+
+def run(argv):
+    return subprocess.run(argv, check=True, text=True, capture_output=True).stdout.strip()
+
+
+def version(name):
+    result = subprocess.run(['dpkg-query', '-W', '-f=${Version}', name], text=True, capture_output=True)
+    require(result.returncode in (0, 1), 'could not query package: ' + name)
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+def pristine():
+    release = (ROOT / 'etc/os-release').read_text()
+    require(re.search(r'^ID="?debian"?$', release, re.M) and
+            re.search(r'^VERSION_ID="?13"?$', release, re.M), 'requires Debian 13')
+    require(run(['dpkg', '--print-architecture']) == 'amd64', 'requires amd64')
+    require(re.fullmatch(r'turnkey-[a-z0-9-]+-19\.0(?:[.-][0-9]+)*-trixie-amd64',
+                         (ROOT / 'etc/turnkey_version').read_text().strip()), 'requires TurnKey 19.0')
+    require('RUN_FIRSTBOOT=true' in (ROOT / 'etc/default/inithooks').read_text().splitlines(), 'root has completed setup')
+    for name in ('turnkey-mail/state.json', 'hubdns/sub_apikey', 'tklbam/key', 'turnkey-onboarding/state.json'):
+        require(not (ROOT / 'var/lib' / name).exists(), 'initialized service state: ' + name)
+    for home in (ROOT / 'root', ROOT / 'home'):
+        require(not any(p.is_file() and p.stat().st_size for p in home.rglob('authorized_keys')), 'source has authorized keys')
+
+
+def candidate(name, pin):
+    result = subprocess.run(['apt-cache', 'show', name + '=' + pin['version']], text=True, capture_output=True)
+    hashes = re.findall(r'^SHA256: ([0-9a-f]{64})$', result.stdout, re.M)
+    require(not hashes or set(hashes) == {pin['sha256']}, 'signed APT candidate hash differs: ' + name)
+    return bool(hashes)
+
+
+def apply():
+    pristine()
+    require(subprocess.run(['/usr/sbin/policy-rc.d']).returncode == 101, 'caller must suppress service startup')
+    targets = {}
+    for name, pin in PINS.items():
+        installed = version(name)
+        if not pin['minimum'] or not installed or subprocess.run(
+                ['dpkg', '--compare-versions', installed, 'ge', pin['version']]).returncode:
+            targets[name] = pin
+    missing = [name for name, pin in targets.items() if not candidate(name, pin)]
+    if missing:
+        run(['apt-get', '-o', 'APT::Update::Error-Mode=any', '-o', 'Acquire::AllowInsecureRepositories=false', 'update'])
+        require(all(candidate(name, pin) for name, pin in targets.items()), 'required signed APT candidate absent')
+    run(['apt-get', '-y', '--no-remove', '--no-install-recommends',
+         '-o', 'APT::Get::AllowUnauthenticated=false', '-o', 'Acquire::AllowInsecureRepositories=false',
+         '-o', 'DPkg::Options::=--force-confdef', '-o', 'DPkg::Options::=--force-confold', 'install'] +
+        [name + '=' + pin['version'] for name, pin in targets.items()])
+    for name, pin in PINS.items():
+        installed = version(name)
+        if pin['minimum']:
+            run(['dpkg', '--compare-versions', installed, 'ge', pin['version']])
+        else:
+            require(installed == pin['version'], 'installed version differs: ' + name)
+    config = ROOT / 'etc/webmin/miniserv.conf'
+    lines = config.read_text().splitlines()
+    chain = [line for line in lines if line.startswith('extracas=')]
+    canonical = 'extracas=/etc/ssl/private/cert.pem'
+    require(chain in ([], ['extracas='], [canonical]), 'source has a different Webmin chain configuration')
+    if chain == ['extracas=']:
+        lines[lines.index('extracas=')] = canonical
+        config.write_text('\n'.join(lines) + '\n')
+    elif not chain:
+        config.write_text('\n'.join(lines + [canonical]) + '\n')
+    pristine()
+
+
+if __name__ == '__main__':
+    apply()
