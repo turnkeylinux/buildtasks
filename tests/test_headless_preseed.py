@@ -35,6 +35,23 @@ printf 'APP_PASS=%s\nAUTO_RUN=%s\n' "$APP_PASS" "${AUTO_RUN:-}"
   self.assertEqual(self.credential_hook(),'PROMPT_APP_PASS\nAPP_PASS=chosen-interactive-value\nAUTO_RUN=\n')
  def test_generated_credentials_and_marker_are_private(self):
   self.run_hook();self.assertEqual(self.conf.stat().st_mode&0o777,0o600);self.assertEqual(self.marker.stat().st_mode&0o777,0o600)
+ def test_generated_credentials_meet_strong_policy_and_are_shell_safe(self):
+  self.run_hook()
+  result=subprocess.run(['bash','-e','-c','source "$1"; test "$ROOT_PASS" = "$APP_PASS" && test "$DB_PASS" = "$APP_PASS"; printf %s "$APP_PASS"','read-generated',str(self.conf)],env=self.env,capture_output=True,text=True,check=True)
+  password=result.stdout
+  self.assertEqual(len(password),32)
+  import re
+  self.assertTrue(re.fullmatch(r'[A-Za-z0-9+/]{32}',password) is not None)
+  for category in (r'[A-Z]',r'[a-z]',r'[0-9]',r'[+/]'):
+   self.assertTrue(re.search(category,password) is not None,category)
+ def test_random_candidate_missing_a_class_retries_without_sleep(self):
+  tools=self.root/'tools';tools.mkdir()
+  openssl=tools/'openssl';calls=self.root/'calls'
+  openssl.write_text('#!/bin/bash\nif [[ ! -f "'+str(calls)+'" ]]; then touch "'+str(calls)+'"; printf "%s\\n" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; else printf "%s\\n" Ab1+Cd2/Ef3+Gh4/Ij5+Kl6/Mn7+Op8/; fi\n');openssl.chmod(0o755)
+  sleep=tools/'sleep';sleep.write_text('#!/bin/bash\nexit 99\n');sleep.chmod(0o755)
+  self.env['PATH']=str(tools)+os.pathsep+self.env['PATH']
+  self.run_hook();self.assertTrue(calls.exists())
+  self.assertIn('export APP_PASS=Ab1+Cd2/Ef3+Gh4/Ij5+Kl6/Mn7+Op8/',self.conf.read_text())
  def test_supplied_hub_or_user_preseeds_preserved(self):
   for payload in ['export APP_PASS=hub-supplied\nexport AUTO_RUN=TRUE\n','export APP_PASS=operator-supplied\n']:
    with self.subTest(payload=payload):

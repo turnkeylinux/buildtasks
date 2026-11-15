@@ -29,16 +29,18 @@ if ! which openssl > /dev/null; then
     exit 1
 fi
 
-# generate (pseudo) random 12 char base64 password string
+# Generate shell-safe fallback credentials that satisfy application policies.
+# Rejection sampling keeps all 32 characters random while requiring each class.
 unset check response
 while [ -z "$check" ]; do
-    response="$(openssl rand -base64 9 2>/dev/null || true)"
-    if [[ "${#response}" -ge 12 ]]; then
-        MASTERPASS=${response#\'}
-        check=good
-    else
+    response="$(openssl rand -base64 24 2>/dev/null || true)"
+    if [[ "${#response}" -ne 32 || ! "$response" =~ ^[A-Za-z0-9+/]+$ ]]; then
         echo "openssl responded with something unexpected, so sleeping 1 sec, then retrying"
         sleep 1
+    elif [[ "$response" =~ [A-Z] && "$response" =~ [a-z] &&
+            "$response" =~ [0-9] && "$response" =~ [+/] ]]; then
+        MASTERPASS=$response
+        check=good
     fi
 done
 
