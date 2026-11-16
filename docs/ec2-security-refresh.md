@@ -10,7 +10,9 @@ installs those dependencies too and requires zero pending security upgrades.
 Before snapshotting, the refresh purges superseded kernel packages and verifies
 the retained kernel and initramfs boot links. It then unmounts the filesystem
 and uses `zerofree` to clear unused ext4 blocks so deleted files do not inflate
-the snapshot. Workers install `zerofree` when needed.
+the snapshot. The controller streams only nonzero blocks to the EBS Direct API;
+workers receive no AWS credentials. A normal EBS snapshot after zeroing would
+record the zero writes as allocated blocks. Workers install `zerofree` when needed.
 
 The retained batch directory contains the product/source mapping, resource IDs,
 per-image update and boot logs, publication requests, and cleanup evidence. Use

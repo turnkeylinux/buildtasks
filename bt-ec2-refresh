@@ -31,6 +31,10 @@ _spec = importlib.util.spec_from_file_location('ec2_hotfix', HERE / 'bin/ec2-hot
 hotfix = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hotfix)
 
+_sparse_spec = importlib.util.spec_from_file_location('ec2_sparse_snapshot', HERE / 'bin/ec2-sparse-snapshot.py')
+sparse = importlib.util.module_from_spec(_sparse_spec)
+_sparse_spec.loader.exec_module(sparse)
+
 
 def selected_rows(rows, apps=None):
     if not apps:
@@ -46,7 +50,7 @@ def verify_controller_source(manifest, path):
     """Bind the executing adapter and canonical generators to retained main."""
     revision = manifest['sources']['controller_main']
     subprocess.run(['git', '-C', str(HERE), 'merge-base', '--is-ancestor', revision, 'refs/heads/main'], check=True)
-    for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py', 'patches/clean-old-kernels/conf']:
+    for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py', 'patches/clean-old-kernels/conf', 'bin/ec2-sparse-snapshot.py']:
         committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
         if committed != (HERE / relative).read_bytes():
             raise ValueError('Executing adapter differs from committed main: ' + relative)
@@ -145,6 +149,7 @@ class Refresh:
         session = boto3.Session(region_name=self.region)
         assert session.client('sts').get_caller_identity()['Account'] == self.resources['account']
         self.ec2 = session.client('ec2', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=64))
+        self.ebs = session.client('ebs', config=Config(retries={'max_attempts': 5}, max_pool_connections=16))
         self.catalog = session.client('marketplace-catalog', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=32))
         self.finish_pool = futures.ThreadPoolExecutor(max_workers=args.workers)
         self.finish_jobs = []
@@ -160,13 +165,17 @@ class Refresh:
         return [{'Key': 'RefreshBatch', 'Value': self.batch}, {'Key': 'Appliance', 'Value': app},
                 {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-hotfix' if getattr(self, 'hotfix', None) else 'marketplace-security-refresh'}]
 
-    def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None, known_hosts=None):
+    def ssh_arguments(self, ip, *, host_alias=None, known_hosts=None):
         identity = ['-o', 'HostKeyAlias=' + host_alias] if host_alias else []
         host_file = self.state / 'known_hosts' if known_hosts is None else known_hosts
         identity += ['-o', 'GlobalKnownHostsFile=/dev/null'] if known_hosts is not None else []
-        return subprocess.run(['ssh', '-F', '/dev/null'] + identity + ['-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new',
+        return ['ssh', '-F', '/dev/null'] + identity + ['-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new',
                                '-o', 'UserKnownHostsFile=' + str(host_file), '-i', str(self.key),
-                               'admin@' + ip, command], input=input, text=True, capture_output=True, timeout=timeout)
+                               'admin@' + ip]
+
+    def ssh(self, ip, command, *, timeout=30, input=None, host_alias=None, known_hosts=None):
+        return subprocess.run(self.ssh_arguments(ip, host_alias=host_alias, known_hosts=known_hosts) + [command],
+                              input=input, text=True, capture_output=True, timeout=timeout)
 
     def cloudtask(self, worker, app, command, job):
         # Run existing CloudTask in the retained LibreSBX controller. Package code
@@ -363,8 +372,16 @@ class Refresh:
             item['profile'] = self.collect_profile(row, worker)
             item['root_marker_sha256'] = item['profile']['root_marker_sha256']
             save(path, item)
-        snap = self.ec2.create_snapshot(VolumeId=vid, Description=self.batch + ' ' + app,
-                                        TagSpecifications=[{'ResourceType': 'snapshot', 'Tags': self.tags(app, 'release')}])
+        attached = self.volume(vid)['Attachments']
+        if not attached:
+            self.ec2.attach_volume(VolumeId=vid, InstanceId=worker['id'], Device='/dev/sdf')
+            wait_until(lambda: any(a['State'] == 'attached' for a in self.volume(vid)['Attachments']), 120)
+        elif any(a['InstanceId'] != worker['id'] for a in attached):
+            raise RuntimeError('Snapshot source volume is attached to another worker')
+        snapshot = sparse.create_snapshot(self.ebs, self.ssh_arguments(worker['ip']), vid,
+            self.volume(vid)['Size'], self.batch + ' ' + app, self.tags(app, 'release'),
+            self.state / (app + '-sparse-snapshot.json'))
+        snap = {'SnapshotId': snapshot['snapshot']}
         item['snapshot'] = snap['SnapshotId']; item['status'] = 'SNAPSHOTTING'; save(path, item)
         for attachment in self.volume(vid)['Attachments']:
             self.ec2.detach_volume(VolumeId=vid, InstanceId=attachment['InstanceId'])
@@ -479,6 +496,10 @@ sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|pubkeyauthentic
 test -z "$(dpkg --audit)"
 v=$(dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
 [ -z "$v" ] || dpkg --compare-versions "$v" ge 1.1.0-2+deb13u1
+test "$(sudo -n -- id -u)" = 0
+mapfile -t kernels < <(dpkg-query -W -f='${Package} ${db:Status-Status}\\n' 'linux-image-[0-9]*' | awk '$2=="installed" {print $1}')
+test "${#kernels[@]}" = 1
+test "${kernels[0]}" = "linux-image-$(uname -r)"
 printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
 '''
             if getattr(self, 'hotfix', None):

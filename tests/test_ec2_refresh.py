@@ -778,18 +778,20 @@ class HotfixInputTest(unittest.TestCase):
         self.assertIsNone(refresh.hotfix)
         self.assertEqual(refresh.rows,[{'app':'lamp'}])
 
-    def test_failed_export_resumes_same_verified_patch_without_reinstalling(self):
+    @patch.object(module.sparse, 'create_snapshot', return_value={'snapshot':'snap-new'})
+    def test_failed_export_resumes_same_verified_patch_without_reinstalling(self, snapshot):
         refresh=module.Refresh.__new__(module.Refresh)
         first={'id':'i-first','ip':'192.0.2.1','az':'us-east-1a'}
         second={'id':'i-second','ip':'192.0.2.2','az':'us-east-1a'}
         refresh.hotfix=self.data;refresh.hotfix_path=self.manifest;refresh.state=self.base;refresh.batch='test'
-        refresh.resources={'account':'account','workers':[first,second]};refresh.log=Mock();refresh.ec2=Mock()
+        refresh.resources={'account':'account','workers':[first,second]};refresh.log=Mock();refresh.ec2=Mock();refresh.ebs=Mock();refresh.ssh_arguments=Mock(return_value=['ssh','worker'])
         refresh.ec2.describe_images.return_value={'Images':[{'OwnerId':'account','State':'available','RootDeviceName':'/dev/sda1','BlockDeviceMappings':[{'DeviceName':'/dev/sda1','Ebs':{'SnapshotId':'snap-123'}}]}]}
         refresh.ec2.create_volume.return_value={'VolumeId':'vol-123'}
         refresh.ec2.create_snapshot.return_value={'SnapshotId':'snap-new'}
         attached=[False]
         refresh.ec2.attach_volume.side_effect=lambda **kwargs:attached.__setitem__(0,True)
-        refresh.volume=lambda vid:{'State':'in-use' if attached[0] else 'available','Attachments':[{'State':'attached','InstanceId':first['id']}] if attached[0] else []}
+        refresh.ec2.detach_volume.side_effect=lambda **kwargs:attached.__setitem__(0,False)
+        refresh.volume=lambda vid:{'Size':10,'State':'in-use' if attached[0] else 'available','Attachments':[{'State':'attached','InstanceId':first['id']}] if attached[0] else []}
         def cloudtask(*args):(self.base/'lamp.log').write_text('REFRESH_VERIFIED app=lamp')
         refresh.cloudtask=Mock(side_effect=cloudtask)
         refresh.collect_profile=Mock(side_effect=[OSError('interrupted export'),{'root_marker_sha256':'marker','profile_sha256':'profile'}])
@@ -798,15 +800,16 @@ class HotfixInputTest(unittest.TestCase):
             refresh.patch(row,first)
         saved=json.loads((self.base/'lamp-state.json').read_text())
         self.assertTrue(saved['patch_complete'])
-        refresh.ec2.create_snapshot.assert_not_called()
+        snapshot.assert_not_called()
         saved['status']='ERROR';(self.base/'lamp-state.json').write_text(json.dumps(saved));attached[0]=False
         result=refresh.patch(row,second)
         self.assertEqual(result['snapshot'],'snap-new')
         self.assertEqual(refresh.cloudtask.call_count,1)
         self.assertEqual(refresh.ec2.create_volume.call_count,1)
-        self.assertEqual(refresh.ec2.attach_volume.call_count,1)
+        self.assertEqual(refresh.ec2.attach_volume.call_count,2)
         self.assertEqual(refresh.collect_profile.call_args.args[1],first)
-        refresh.ec2.detach_volume.assert_not_called()
+        refresh.ec2.detach_volume.assert_called_once()
+        snapshot.assert_called_once()
 
     def test_unverified_partial_patch_requires_explicit_restart(self):
         refresh=module.Refresh.__new__(module.Refresh)
