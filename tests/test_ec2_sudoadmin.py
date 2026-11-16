@@ -73,7 +73,8 @@ class EC2SSHPolicyTest(unittest.TestCase):
         self.dropins = self.root / 'etc/ssh/sshd_config.d'
         self.dropins.mkdir(parents=True)
         self.config = self.root / 'etc/ssh/sshd_config'
-        self.policy = self.dropins / '00-turnkey-aws-marketplace.conf'
+        self.policy = self.dropins / '00-turnkey-ec2.conf'
+        self.legacy = self.dropins / '00-turnkey-aws-marketplace.conf'
         self.key = self.root / 'host_key'
         subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '',
                         '-f', str(self.key)], check=True, capture_output=True)
@@ -110,6 +111,34 @@ chroot() {
     def canonical(self):
         return ('PasswordAuthentication no\nKbdInteractiveAuthentication no\n'
                 'PermitRootLogin no\nPubkeyAuthentication yes\n')
+
+    def test_legacy_name_is_migrated_without_losing_custom_hardening(self):
+        self.legacy.write_text(self.canonical() + 'AuthenticationMethods publickey\n')
+        original = self.legacy.stat()
+        result = self.apply_policy()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.legacy.exists())
+        self.assertEqual(self.policy.stat().st_ino, original.st_ino)
+        self.assertEqual(self.effective('admin')['authenticationmethods'], 'publickey')
+
+    def test_identical_duplicate_is_removed(self):
+        self.policy.write_text(self.canonical())
+        self.legacy.write_text(self.canonical())
+        result = self.apply_policy()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.legacy.exists())
+        self.assertEqual(self.policy.read_text(), self.canonical())
+        self.assertEqual(self.apply_policy().returncode, 0)
+
+    def test_divergent_duplicate_is_rejected_without_discarding_settings(self):
+        self.policy.write_text(self.canonical())
+        content = self.canonical() + 'AuthenticationMethods publickey\n'
+        self.legacy.write_text(content)
+        result = self.apply_policy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Conflicting', result.stderr)
+        self.assertEqual(self.legacy.read_text(), content)
+        self.assertEqual(self.policy.read_text(), self.canonical())
 
     def test_legacy_conversion_gets_effective_key_only_policy(self):
         self.assertEqual(self.effective('admin')['passwordauthentication'], 'yes')

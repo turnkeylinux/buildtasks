@@ -127,7 +127,21 @@ fi
 grep -qx 'export SEC_UPDATES=FORCE' "$root/usr/lib/inithooks/firstboot.d/29preseed"
 grep -qx 'RUN_FIRSTBOOT=true' "$root/etc/default/inithooks"
 # Older EC2 conversions lack the canonical key-only SSH drop-in.
-ssh_policy=$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf
+ssh_policy=$root/etc/ssh/sshd_config.d/00-turnkey-ec2.conf
+legacy_ssh_policy=$root/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf
+if [[ -e $legacy_ssh_policy || -L $legacy_ssh_policy ]]; then
+    [[ -f $legacy_ssh_policy && ! -L $legacy_ssh_policy ]]
+    if [[ -e $ssh_policy || -L $ssh_policy ]]; then
+        [[ -f $ssh_policy && ! -L $ssh_policy ]]
+        if ! cmp -s "$legacy_ssh_policy" "$ssh_policy"; then
+            echo 'Conflicting legacy and current EC2 SSH policies; refresh stopped without discarding either file.' >&2
+            exit 1
+        fi
+        rm "$legacy_ssh_policy"
+    else
+        mv "$legacy_ssh_policy" "$ssh_policy"
+    fi
+fi
 if [[ ! -e $ssh_policy && ! -L $ssh_policy ]]; then
     printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' \
         'PermitRootLogin no' 'PubkeyAuthentication yes' |

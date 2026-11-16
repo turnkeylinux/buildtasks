@@ -10,6 +10,19 @@ install() {
 
 install hubclient sudo parted gdisk #ebsmount
 
+# The EC2 policy is shared by Hub and Marketplace launches.
+legacy_ssh_policy=/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf
+ssh_policy=/etc/ssh/sshd_config.d/00-turnkey-ec2.conf
+if [ -e "$legacy_ssh_policy" ] || [ -L "$legacy_ssh_policy" ]; then
+    [ -f "$legacy_ssh_policy" ] && [ ! -L "$legacy_ssh_policy" ]
+    [ -f "$ssh_policy" ] && [ ! -L "$ssh_policy" ]
+    cmp -s "$legacy_ssh_policy" "$ssh_policy" || {
+        echo 'Conflicting EC2 SSH policies; conversion stopped without discarding either file.' >&2
+        exit 1
+    }
+    rm "$legacy_ssh_policy"
+fi
+
 # EC2 instances install security updates at launch, including Marketplace launches
 # without Hub preseeding. Keep the interactive initialization fence in place.
 sed -i 's/^export SEC_UPDATES=SKIP$/export SEC_UPDATES=FORCE/' \
