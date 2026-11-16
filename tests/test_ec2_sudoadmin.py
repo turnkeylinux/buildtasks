@@ -112,6 +112,33 @@ chroot() {
         return ('PasswordAuthentication no\nKbdInteractiveAuthentication no\n'
                 'PermitRootLogin no\nPubkeyAuthentication yes\n')
 
+    def convert_policy(self, release):
+        (self.root / 'etc/turnkey_version').write_text('turnkey-core-' + release + '-amd64\n')
+        source = (ROOT / 'patches/ec2/conf').read_text()
+        source = source[source.index('# The EC2 policy'):source.index('# EC2 instances install')]
+        source = source.replace('/etc/ssh/', str(self.root / 'etc/ssh') + '/')
+        source = source.replace('/etc/turnkey_version', str(self.root / 'etc/turnkey_version'))
+        return subprocess.run(['bash', '-e'], input=source, text=True, capture_output=True)
+
+    def test_fresh_trixie_conversion_uses_canonical_admin_policy(self):
+        result = self.convert_policy('19.0.3-trixie')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.policy.read_text(), self.canonical())
+        self.assertFalse(self.legacy.exists())
+
+    def test_fresh_bookworm_conversion_preserves_root_login_contract(self):
+        result = self.convert_policy('18.0-bookworm')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.policy.exists())
+
+    def test_conversion_migrates_existing_policy_without_discarding_hardening(self):
+        content = self.canonical() + 'AuthenticationMethods publickey\n'
+        self.legacy.write_text(content)
+        result = self.convert_policy('19.0.3-trixie')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.legacy.exists())
+        self.assertEqual(self.policy.read_text(), content)
+
     def test_legacy_name_is_migrated_without_losing_custom_hardening(self):
         self.legacy.write_text(self.canonical() + 'AuthenticationMethods publickey\n')
         original = self.legacy.stat()
