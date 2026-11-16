@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-install() {
+install_packages() {
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get -y \
         -o DPkg::Options::=--force-confdef \
@@ -8,7 +8,7 @@ install() {
         install $@
 }
 
-install hubclient sudo parted gdisk #ebsmount
+install_packages hubclient sudo parted gdisk #ebsmount
 
 # The EC2 policy is shared by Hub and Marketplace launches.
 legacy_ssh_policy=/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf

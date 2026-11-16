@@ -115,10 +115,20 @@ chroot() {
     def convert_policy(self, release):
         (self.root / 'etc/turnkey_version').write_text('turnkey-core-' + release + '-amd64\n')
         source = (ROOT / 'patches/ec2/conf').read_text()
-        source = source[source.index('# The EC2 policy'):source.index('# EC2 instances install')]
+        # Include the real package helper and its call so shell functions can
+        # affect policy commands exactly as they do during conversion.
+        source = source[:source.index('# EC2 instances install')]
         source = source.replace('/etc/ssh/', str(self.root / 'etc/ssh') + '/')
         source = source.replace('/etc/turnkey_version', str(self.root / 'etc/turnkey_version'))
-        return subprocess.run(['bash', '-e'], input=source, text=True, capture_output=True)
+        wrapper = '''apt-get() {
+    case "$*" in
+        update|*'install hubclient sudo parted gdisk') return 0 ;;
+        *) echo "Unexpected package operation: $*" >&2; return 99 ;;
+    esac
+}
+'''
+        return subprocess.run(['bash', '-e'], input=wrapper + source,
+                              text=True, capture_output=True)
 
     def test_fresh_trixie_conversion_uses_canonical_admin_policy(self):
         result = self.convert_policy('19.0.3-trixie')
