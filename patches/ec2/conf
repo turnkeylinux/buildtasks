@@ -15,12 +15,23 @@ legacy_ssh_policy=/etc/ssh/sshd_config.d/00-turnkey-aws-marketplace.conf
 ssh_policy=/etc/ssh/sshd_config.d/00-turnkey-ec2.conf
 if [ -e "$legacy_ssh_policy" ] || [ -L "$legacy_ssh_policy" ]; then
     [ -f "$legacy_ssh_policy" ] && [ ! -L "$legacy_ssh_policy" ]
-    [ -f "$ssh_policy" ] && [ ! -L "$ssh_policy" ]
-    cmp -s "$legacy_ssh_policy" "$ssh_policy" || {
-        echo 'Conflicting EC2 SSH policies; conversion stopped without discarding either file.' >&2
-        exit 1
-    }
-    rm "$legacy_ssh_policy"
+    if [ -e "$ssh_policy" ] || [ -L "$ssh_policy" ]; then
+        [ -f "$ssh_policy" ] && [ ! -L "$ssh_policy" ]
+        cmp -s "$legacy_ssh_policy" "$ssh_policy" || {
+            echo 'Conflicting EC2 SSH policies; conversion stopped without discarding either file.' >&2
+            exit 1
+        }
+        rm "$legacy_ssh_policy"
+    else
+        mv "$legacy_ssh_policy" "$ssh_policy"
+    fi
+fi
+# Current 19.x images use admin. Older Hub releases retain their root contract.
+if grep -Eq -- '-19[.].*-trixie-' /etc/turnkey_version && [ ! -e "$ssh_policy" ] && [ ! -L "$ssh_policy" ]; then
+    install -d -m 755 /etc/ssh/sshd_config.d
+    printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' \
+        'PermitRootLogin no' 'PubkeyAuthentication yes' |
+        install -o 0 -g 0 -m 644 /dev/stdin "$ssh_policy"
 fi
 
 # EC2 instances install security updates at launch, including Marketplace launches
