@@ -68,6 +68,8 @@ def apply():
             run(['dpkg', '--compare-versions', installed, 'ge', pin['version']])
         else:
             require(installed == pin['version'], 'installed version differs: ' + name)
+    # Package upgrades can replace the native Webmin module. Repair it last.
+    run(['sh', str(Path(__file__).with_name('ssh-access'))])
     run(['visudo', '-c'])
     require(run(['sudo', '-n', '--', 'id', '-u']) == '0', 'root sudo compatibility failed')
     config = ROOT / 'etc/webmin/miniserv.conf'

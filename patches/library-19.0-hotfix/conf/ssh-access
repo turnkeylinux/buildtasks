@@ -1,0 +1,45 @@
+#!/bin/sh -e
+python3 - <<'TURNKEY_MIGRATE'
+import os, re
+path = '/etc/ssh/sshd_config'
+directory = os.path.join(os.path.dirname(path), 'sshd_config.d')
+legacy = os.path.join(directory, '00-turnkey-aws-marketplace.conf')
+current = os.path.join(directory, '00-turnkey-ec2.conf')
+if os.path.lexists(legacy):
+    if os.path.islink(legacy) or not os.path.isfile(legacy):
+        raise RuntimeError('Legacy EC2 SSH policy must be a regular file')
+    if os.path.lexists(current):
+        if os.path.islink(current) or not os.path.isfile(current):
+            raise RuntimeError('EC2 SSH policy must be a regular file')
+        with open(legacy, 'rb') as old, open(current, 'rb') as new:
+            previous, present = old.read(), new.read()
+        factory = b'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nPubkeyAuthentication yes\n'
+        if previous == present:
+            os.unlink(legacy)
+        elif present == factory:
+            # A restored legacy policy preceded the factory defaults. Retain
+            # that order while keeping fallback directives outside Match scope.
+            lines = previous.splitlines(keepends=True)
+            position = next((i for i, line in enumerate(lines)
+                             if re.match(br'^\s*Match\s', line, re.I)), len(lines))
+            before = b''.join(lines[:position])
+            if before and not before.endswith(b'\n'):
+                before += b'\n'
+            merged = before + present + b''.join(lines[position:])
+            with open(legacy, 'wb') as stream:
+                stream.write(merged)
+            os.replace(legacy, current)
+        else:
+            raise RuntimeError('Conflicting EC2 SSH policies; neither file was discarded')
+    else:
+        os.rename(legacy, current)
+TURNKEY_MIGRATE
+cd /usr/share/webmin/sshd
+patch=/usr/local/src/webmin-sshd-includes.patch
+if git apply --reverse --check "$patch" 2>/dev/null; then
+    rm "$patch"
+    exit 0
+fi
+git apply --check "$patch"
+git apply "$patch"
+rm "$patch"

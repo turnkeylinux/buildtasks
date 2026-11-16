@@ -400,6 +400,7 @@ class HotfixInputTest(unittest.TestCase):
             if args[:2] == ['dpkg', '--print-architecture']:
                 result.stdout = getattr(self, 'architecture', 'amd64')
             elif args[0] == 'sudo':result.stdout = getattr(self, 'sudo_uid', '0')
+            elif args[0] == 'sh' and Path(args[1]).name == 'ssh-access':pass
             elif args[0] == 'visudo':pass
             elif args[0] == '/usr/sbin/policy-rc.d':result.returncode = 101
             elif args[0] == 'dpkg-query':result.stdout = installed[args[-1]]
@@ -425,6 +426,13 @@ class HotfixInputTest(unittest.TestCase):
         with patch.object(module.hotfix,'run',side_effect=command):
             module.hotfix.install(root,self.manifest,'lamp')
         return calls
+
+    def test_ssh_module_repair_runs_after_package_updates(self):
+        root = self.factory()
+        calls = self.install(root)
+        package_update = next(i for i, args in enumerate(calls) if args[0] == 'apt-get' and 'install' in args)
+        repair = next(i for i, args in enumerate(calls) if args[0] == 'sh' and Path(args[1]).name == 'ssh-access')
+        self.assertLess(package_update, repair)
 
     def test_install_preserves_settings_and_uses_only_frozen_package_targets(self):
         root=self.factory(); calls=self.install(root)
