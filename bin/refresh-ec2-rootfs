@@ -165,12 +165,18 @@ if [[ $app == gitlab ]]; then
     chroot "$root" dpkg --compare-versions "$(chroot "$root" dpkg-query -W -f='${Version}' gitlab-ce)" ge '19.3.7-ce.0'
 fi
 printf 'batch=%s\nupdated_at=%s\nfirstboot_security_updates=FORCE\n' "$batch" "$(date -u +%FT%TZ)" > "$root/var/lib/turnkey-info/security-refresh"
+chroot "$root" bash < "$(dirname "$0")/clean-old-kernels"
 chroot "$root" apt-get clean
 rm -f "$root"/var/log/apt/* "$root/var/log/dpkg.log"
 find "$root/var/lib/apt/lists" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+restore_files
 if [[ -n $hotfix ]]; then
-    restore_files
     python3 "$(dirname "$hotfix")/ec2-hotfix.py" profile "$root" "$hotfix" "$app" --output "$profile_output"
 fi
+sync
+umount -R "$root"
+trap - EXIT
+# EBS does not expose discard; clear unallocated ext4 blocks before snapshotting.
+zerofree "$part"
 printf 'REFRESH_VERIFIED app=%s brotli=%s firstboot=FORCE\n' "$app" "${version:-absent}"
 sync

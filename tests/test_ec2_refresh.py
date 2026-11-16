@@ -308,7 +308,7 @@ class HotfixInputTest(unittest.TestCase):
         self.data = {'release': '19.0.3', 'technical_release': '19.0.3.12', 'release_notes': 'Current maintenance fixes.',
                      'sources': {name: self.commit for name in ['buildtasks_main', 'common_main', 'release_main', 'controller_main']},
                      'packages': {name: {**{key: shared_patch.PINS[name][key] for key in ('version', 'sha256')}, 'source_main': self.commit} for name in module.hotfix.PACKAGES},
-                     'minimum_packages': {'hubdns': '1.5.0', 'hubclient': '0.3.0', 'webmin': '2.660.turnkey0'},
+                     'minimum_packages': {'hubdns': '1.5.0', 'hubclient': '0.3.0', 'webmin': '2.660.turnkey0', 'sudo': '1.9.16p2-3+deb13u2'},
                      'profile_generator': asset('generator'), 'aptconf_tag': asset('apt-tag'),
                      'apps': {'lamp': {'source_ami': 'ami-123', 'source_snapshot': 'snap-123', 'source_main': self.commit,
                                       'identity_package': asset('identity.deb'), 'superseded_delivery_ids': ['old'],
@@ -399,6 +399,8 @@ class HotfixInputTest(unittest.TestCase):
             result = SimpleNamespace(returncode=0, stdout='')
             if args[:2] == ['dpkg', '--print-architecture']:
                 result.stdout = getattr(self, 'architecture', 'amd64')
+            elif args[0] == 'sudo':result.stdout = getattr(self, 'sudo_uid', '0')
+            elif args[0] == 'visudo':pass
             elif args[0] == '/usr/sbin/policy-rc.d':result.returncode = 101
             elif args[0] == 'dpkg-query':result.stdout = installed[args[-1]]
             elif args[0] == 'apt-cache':
@@ -435,6 +437,12 @@ class HotfixInputTest(unittest.TestCase):
         self.assertIn('APT::Get::AllowUnauthenticated=false',apt)
         self.assertIn('--no-remove',apt);self.assertIn('DPkg::Options::=--force-confold',apt)
         self.assertTrue(any('--purge' in args and 'turnkey-lamp-19.0' in args for args in calls))
+
+    def test_root_sudo_compatibility_is_required(self):
+        root = self.factory()
+        self.sudo_uid = '1000'
+        with self.assertRaisesRegex(ValueError, 'root sudo compatibility failed'):
+            self.install(root)
 
     def test_install_normalizes_single_stock_empty_webmin_chain(self):
         root = self.factory(); config = root / 'etc/webmin/miniserv.conf'
@@ -612,7 +620,7 @@ class HotfixInputTest(unittest.TestCase):
                 self.assertFalse(any(command.startswith(('cat >','mkdir -p')) for command in calls))
 
     def test_both_worker_tools_allow_normal_asset_staging(self):
-        refresh,calls=self.worker_tool_fixture(('tklpatch-apply','tklpatch-apply-overlay'))
+        refresh,calls=self.worker_tool_fixture(('tklpatch-apply','tklpatch-apply-overlay','zerofree'))
         refresh.prepare_worker({'ip':'fixture'})
         self.assertTrue(any(command.startswith('cat >') for command in calls))
         self.assertTrue(any(command.startswith('mkdir -p') for command in calls))

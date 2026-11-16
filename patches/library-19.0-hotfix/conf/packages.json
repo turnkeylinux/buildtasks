@@ -6,5 +6,6 @@
   "webmin-tklbam": {"version": "1.2.7", "sha256": "673d40a15ee162e3e2f019169b1177457ba5f69867662607ef47c01e9a07d144", "minimum": false},
   "hubdns": {"version": "1.5.0", "sha256": "531cf580538f86e00f2ed32e9b66b4a3c54e86838142ae1aaea772a4b3ae043b", "minimum": true},
   "hubclient": {"version": "0.3.0", "sha256": "3cd2f5efe4648b1dd137e45b6f1e2162c78f78ea49748fe6114e7f86f3e938a5", "minimum": true},
-  "webmin": {"version": "2.660.turnkey0", "sha256": "67bc362c0d3396aa0e62b49d914e8b0cdae6fb864bb53e784f6428f3f0f266ad", "minimum": true}
+  "webmin": {"version": "2.660.turnkey0", "sha256": "67bc362c0d3396aa0e62b49d914e8b0cdae6fb864bb53e784f6428f3f0f266ad", "minimum": true},
+  "sudo": {"version": "1.9.16p2-3+deb13u2", "sha256": "4f926f8f0704575158a90135713977f98f7d50d185969d9a8a405cdce5e3e50c", "minimum": true}
 }

@@ -68,6 +68,8 @@ def apply():
             run(['dpkg', '--compare-versions', installed, 'ge', pin['version']])
         else:
             require(installed == pin['version'], 'installed version differs: ' + name)
+    run(['visudo', '-c'])
+    require(run(['sudo', '-n', '--', 'id', '-u']) == '0', 'root sudo compatibility failed')
     config = ROOT / 'etc/webmin/miniserv.conf'
     lines = config.read_text().splitlines()
     chain = [line for line in lines if line.startswith('extracas=')]

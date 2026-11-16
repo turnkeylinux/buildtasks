@@ -7,6 +7,11 @@ listing. First boot checks for fixes released after the image was built.
 If a security update requires stable-repository dependencies, the refresh
 installs those dependencies too and requires zero pending security upgrades.
 
+Before snapshotting, the refresh purges superseded kernel packages and verifies
+the retained kernel and initramfs boot links. It then unmounts the filesystem
+and uses `zerofree` to clear unused ext4 blocks so deleted files do not inflate
+the snapshot. Workers install `zerofree` when needed.
+
 The retained batch directory contains the product/source mapping, resource IDs,
 per-image update and boot logs, publication requests, and cleanup evidence. Use
 the most recent verified batch as the input to the next refresh:

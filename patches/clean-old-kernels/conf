@@ -1,17 +1,29 @@
-#!/bin/bash -ex
-
+#!/bin/bash
+set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-old_kernels=()
-installed_kernels=$(dpkg -l | grep '^ii *linux-image-[0-9]' | awk '{print $2}')
-current_vmlinuz=$(find / -maxdepth 1 -name 'vmlinuz' -exec readlink {} \;)
-current_kernel="linux-image-${current_vmlinuz#boot/vmlinuz-}"
-for kernel in $installed_kernels; do
-    if [[ "$kernel" == "$current_kernel" ]]; then
-        continue
-    else
-        old_kernels+=("$kernel")
-    fi
-done
+# The image kernel is selected by its own boot links, not the build host.
+selected=$(readlink -f /vmlinuz)
+[[ $selected == /boot/vmlinuz-* && -s $selected ]]
+version=${selected#/boot/vmlinuz-}
+[[ $(readlink -f /initrd.img) == /boot/initrd.img-"$version" ]]
+[[ -s /boot/initrd.img-$version && -d /lib/modules/$version ]]
+package=linux-image-$version
+[[ $(dpkg-query -W -f='${db:Status-Status}' "$package") == installed ]]
 
-apt-get -y purge "${old_kernels[@]}" || true
+old_kernels=()
+while IFS=$'\t' read -r name status; do
+    [[ $status == installed && $name == linux-image-[0-9]* && $name != "$package" ]] || continue
+    old_kernels+=("$name")
+done < <(dpkg-query -W -f='${Package}\t${db:Status-Status}\n' 'linux-image-*')
+if ((${#old_kernels[@]})); then
+    apt-get -y purge "${old_kernels[@]}"
+fi
+[[ $(readlink -f /vmlinuz) == "$selected" ]]
+[[ -s $selected && -s /boot/initrd.img-$version && -d /lib/modules/$version ]]
+for obsolete in "${old_kernels[@]}"; do
+    old_version=${obsolete#linux-image-}
+    [[ ! -e /boot/vmlinuz-$old_version && ! -e /boot/initrd.img-$old_version ]]
+    [[ ! -d /lib/modules/$old_version ]]
+done
+printf 'KERNEL_CLEANUP_VERIFIED retained=%s removed=%s\n' "$version" "${old_kernels[*]:-none}"

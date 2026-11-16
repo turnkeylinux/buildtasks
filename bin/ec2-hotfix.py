@@ -12,7 +12,7 @@ import tempfile
 import tarfile
 
 PACKAGES = {'inithooks', 'turnkey-hub', 'tklbam', 'confconsole', 'webmin-tklbam'}
-FLOORS = {'hubdns', 'hubclient', 'webmin'}
+FLOORS = {'hubdns', 'hubclient', 'webmin', 'sudo'}
 
 
 def sha(path):

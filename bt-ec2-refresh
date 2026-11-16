@@ -46,7 +46,7 @@ def verify_controller_source(manifest, path):
     """Bind the executing adapter and canonical generators to retained main."""
     revision = manifest['sources']['controller_main']
     subprocess.run(['git', '-C', str(HERE), 'merge-base', '--is-ancestor', revision, 'refs/heads/main'], check=True)
-    for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py']:
+    for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py', 'patches/clean-old-kernels/conf']:
         committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
         if committed != (HERE / relative).read_bytes():
             raise ValueError('Executing adapter differs from committed main: ' + relative)
@@ -214,10 +214,17 @@ class Refresh:
             result = self.ssh(worker['ip'], 'command -v tklpatch-apply >/dev/null && command -v tklpatch-apply-overlay >/dev/null')
             if result.returncode:
                 raise RuntimeError('Worker requires qualified TKLPatch commands')
+        result = self.ssh(worker['ip'], 'command -v zerofree >/dev/null || sudo apt-get -y install zerofree')
+        if result.returncode:
+            raise RuntimeError(result.stderr)
         script = (HERE / 'bin/refresh-ec2-rootfs').read_text()
         r = self.ssh(worker['ip'], 'cat > /home/admin/refresh-ec2-rootfs && chmod 755 /home/admin/refresh-ec2-rootfs', input=script)
         if r.returncode:
             raise RuntimeError(r.stderr)
+        cleanup = (HERE / 'patches/clean-old-kernels/conf').read_text()
+        result = self.ssh(worker['ip'], 'cat > /home/admin/clean-old-kernels', input=cleanup)
+        if result.returncode:
+            raise RuntimeError(result.stderr)
         if self.hotfix:
             stream = io.BytesIO()
             with tarfile.open(fileobj=stream, mode='w') as archive:
