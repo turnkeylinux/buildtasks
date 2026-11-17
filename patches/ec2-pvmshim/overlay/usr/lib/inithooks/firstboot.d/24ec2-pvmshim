@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: EC2 Boot Configuration
+# reconfigure-description: Select bootloader settings for the EC2 virtualization mode.
 
 [ -n "$_TURNKEY_INIT" ] && exit 0
 

@@ -1,4 +1,7 @@
 #!/usr/bin/python
+# reconfigure: no
+# reconfigure-title: Root Filesystem Expansion
+# reconfigure-description: Expand the root filesystem during first boot.
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os

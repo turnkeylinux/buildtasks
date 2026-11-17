@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Launch Account Selection
+# reconfigure-description: Apply the launch-specific system administrator account selection.
 
 [ -n "$_TURNKEY_INIT" ] && exit 0
 

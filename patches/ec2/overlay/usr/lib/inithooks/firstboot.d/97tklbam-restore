@@ -1,4 +1,7 @@
 #!/bin/bash
+# reconfigure: no
+# reconfigure-title: Launch Backup Restore
+# reconfigure-description: Restore the backup selected at launch.
 
 [ -n "$_TURNKEY_INIT" ] && exit 0
 

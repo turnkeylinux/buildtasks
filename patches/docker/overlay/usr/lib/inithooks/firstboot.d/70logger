@@ -1,4 +1,7 @@
 #!/bin/sh
+# reconfigure: no
+# reconfigure-title: Initial Login Details
+# reconfigure-description: Display the initial root password and SSH host fingerprints.
 
 [ -e $INITHOOKS_CONF ] && . $INITHOOKS_CONF
 

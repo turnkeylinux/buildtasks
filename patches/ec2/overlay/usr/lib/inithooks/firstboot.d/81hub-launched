@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Launch Identification
+# reconfigure-description: Record Hub and Marketplace launch tags.
 
 aptconf_tag() {
     grep -q $1 /etc/apt/apt.conf.d/01turnkey && return

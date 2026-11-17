@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# reconfigure: no
+# reconfigure-title: Launch SSH Keys
+# reconfigure-description: Install the launch-provided SSH public keys for root.
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os

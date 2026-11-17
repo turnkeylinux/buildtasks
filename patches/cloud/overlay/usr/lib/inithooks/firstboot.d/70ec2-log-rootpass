@@ -1,4 +1,7 @@
 #!/bin/bash
+# reconfigure: no
+# reconfigure-title: Initial Login Details
+# reconfigure-description: Display initial login details and SSH host fingerprints.
 
 [ -n "$_TURNKEY_INIT" ] && exit 0
 

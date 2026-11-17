@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Headless Setup Defaults
+# reconfigure-description: Prepare temporary credentials and defaults for unattended first boot.
 # generic preseeding of inithooks.conf if it doesn't exist
 
 # The preseed file is absent on fresh images; read its path independently.

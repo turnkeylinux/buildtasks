@@ -1,4 +1,7 @@
 #!/bin/bash
+# reconfigure: no
+# reconfigure-title: Container Mail Setup
+# reconfigure-description: Adapt Postfix random-device paths for an unprivileged container.
 # remove read/write access to /var/spool/postfix/dev/{u,random}
 # as well as prevents it from being recreated
 

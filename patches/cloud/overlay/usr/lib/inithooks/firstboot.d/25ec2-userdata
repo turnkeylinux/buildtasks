@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# reconfigure: no
+# reconfigure-title: Launch User Data
+# reconfigure-description: Execute the launch user-data script during first boot.
 # Author: Alon Swartz <alon@turnkeylinux.org>
 
 import os

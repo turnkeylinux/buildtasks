@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: QEMU Setup Defaults
+# reconfigure-description: Prepare unattended first-boot configuration for QEMU images.
 # generic preseeding of inithooks.conf if it doesn't exist
 
 [[ -n "$_TURNKEY_INIT" ]] && exit 0

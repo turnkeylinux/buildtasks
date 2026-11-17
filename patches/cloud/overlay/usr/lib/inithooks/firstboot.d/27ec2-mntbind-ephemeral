@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Ephemeral Storage
+# reconfigure-description: Bind temporary and backup-cache directories to ephemeral storage.
 # mount bind various directories to ephemeral storage
 
 DIRS="/tmp /var/cache/tklbam"

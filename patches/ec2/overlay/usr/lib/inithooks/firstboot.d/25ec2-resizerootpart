@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Root Partition Expansion
+# reconfigure-description: Expand the root partition and filesystem during first boot.
 # grow root partition and filesystem
 
 [[ -n "$_TURNKEY_INIT" ]] && exit 0

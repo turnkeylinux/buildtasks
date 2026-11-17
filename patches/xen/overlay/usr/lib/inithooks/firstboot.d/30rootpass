@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# reconfigure: no
+# reconfigure-title: Initial System Password
+# reconfigure-description: Set the initial root password when no external password was supplied.
 # set root password (unless already set OOB)
 
 . /etc/default/inithooks
