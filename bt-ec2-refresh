@@ -61,10 +61,13 @@ def verify_controller_source(manifest, path):
             raise ValueError('Canonical generator differs from committed buildtasks source')
     patch = hotfix.asset_path(Path(path).resolve().parent, manifest['shared_patch'])
     revision = manifest['sources']['controller_main']
-    epoch = subprocess.check_output(['git', '-C', str(HERE), 'show', '-s', '--format=%ct', revision]).decode().strip()
-    committed = subprocess.check_output(['git', '-C', str(HERE), 'archive', '--format=tar', '--mtime=@' + epoch,
-        '--prefix=library-19.0-hotfix/', revision + ':patches/library-19.0-hotfix'])
-    if gzip.decompress(patch.read_bytes()) != committed:
+    committed = hotfix.committed_patch(HERE, revision)
+    actual = gzip.decompress(patch.read_bytes())
+    if manifest['release'] == '19.0.4':
+        with tarfile.open(fileobj=io.BytesIO(actual)) as archive:
+            pins = json.load(archive.extractfile(hotfix.PIN_PATH))
+        committed = hotfix.patch_with_resolved_packages(committed, pins)
+    if actual != committed:
         raise ValueError('Shared TKLPatch differs from committed main')
 
 

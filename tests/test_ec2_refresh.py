@@ -539,6 +539,38 @@ class HotfixInputTest(unittest.TestCase):
             self.data['shared_patch']['sha256']=module.hotfix.sha(bundle)
             with self.assertRaisesRegex(ValueError,'TKLPatch differs'):module.verify_controller_source(self.data,self.manifest)
 
+    def test_1904_accepts_resolved_package_manifest_but_rejects_changed_patch_code(self):
+        bundle = self.base / 'library-19.0-hotfix.tar.gz'
+        revision = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'main'], text=True).strip()
+        canonical = module.hotfix.committed_patch(ROOT, revision)
+        pins = {name: dict(pin, minimum=False) for name, pin in shared_patch.PINS.items()}
+        pins['tklbam'].update(version='1.5.7', sha256='a' * 64)
+        self.data['release'] = '19.0.4'
+        self.data['sources']['controller_main'] = revision
+
+        def verify(payload):
+            bundle.write_bytes(module.gzip.compress(payload))
+            self.data['shared_patch']['sha256'] = module.hotfix.sha(bundle)
+            module.verify_controller_source(self.data, self.manifest)
+
+        def git(args):
+            if args[-1].endswith(':bin/generate-tklbam-profile'):
+                return (self.base / 'generator').read_bytes()
+            if args[-1].endswith(':bin/aptconf-tag'):
+                return (self.base / 'apt-tag').read_bytes()
+            if args[-2] == 'show' and ':' in args[-1]:
+                return (ROOT / args[-1].split(':', 1)[1]).read_bytes()
+            return original(args)
+
+        original = subprocess.check_output
+        resolved = module.hotfix.patch_with_resolved_packages(canonical, pins)
+        with patch.object(module.subprocess, 'check_output', side_effect=git):
+            verify(resolved)
+            before = b'root sudo compatibility failed'
+            assert before in resolved
+            with self.assertRaisesRegex(ValueError, 'TKLPatch differs'):
+                verify(resolved.replace(before, b'root sudo compatibility false', 1))
+
     def test_packaged_tklpatch_advanced_hook_transports_pins_and_cleans_script(self):
         tool=os.environ.get('TKLPATCH_TEST_BIN')
         if not tool:self.skipTest('Set TKLPATCH_TEST_BIN to the hash-verified public0.95 fixture')

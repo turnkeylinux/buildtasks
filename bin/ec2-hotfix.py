@@ -2,6 +2,7 @@
 """Apply frozen signed-package inputs and generate a pristine EC2 profile."""
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,35 @@ import tarfile
 
 PACKAGES = {'inithooks', 'turnkey-hub', 'tklbam', 'confconsole', 'webmin-tklbam'}
 FLOORS = {'hubdns', 'hubclient', 'webmin', 'sudo'}
+PIN_PATH = 'library-19.0-hotfix/conf/packages.json'
+
+
+def committed_patch(repo, revision):
+    git = ['git', '-C', str(repo)]
+    epoch = subprocess.check_output([*git, 'show', '-s', '--format=%ct', revision]).decode().strip()
+    return subprocess.check_output([*git, 'archive', '--format=tar', '--mtime=@' + epoch,
+        '--prefix=library-19.0-hotfix/', revision + ':patches/library-19.0-hotfix'])
+
+
+def patch_with_resolved_packages(raw, pins):
+    """Keep the committed payload and replace only its package manifest."""
+    require(set(pins) == PACKAGES | FLOORS, 'incomplete resolved package set')
+    for pin in pins.values():
+        require(set(pin) == {'version', 'sha256', 'minimum'} and pin['minimum'] is False
+                and re.fullmatch(r'[0-9][a-zA-Z0-9.+:~\-]*', pin['version'])
+                and not re.search(r'(?i)(?:\+|[.-])qa', pin['version'])
+                and re.fullmatch(r'[0-9a-f]{64}', pin['sha256']), 'invalid resolved package')
+    require(pins['inithooks']['version'] == pins['turnkey-hub']['version'], 'mismatched Inithooks packages')
+    body = (json.dumps(pins, sort_keys=True, indent=2) + '\n').encode()
+    output = io.BytesIO()
+    with tarfile.open(fileobj=io.BytesIO(raw)) as source, tarfile.open(fileobj=output, mode='w') as target:
+        for member in source:
+            if member.name == PIN_PATH:
+                member.size = len(body)
+                target.addfile(member, io.BytesIO(body))
+            else:
+                target.addfile(member, source.extractfile(member) if member.isfile() else None)
+    return output.getvalue()
 
 
 def sha(path):
@@ -49,8 +79,10 @@ def load(path):
     path = Path(path).resolve()
     data = json.loads(path.read_text())
     technical = data.get('technical_release')
-    build = re.fullmatch(r'19\.0\.3\.([1-9][0-9]*)', technical) if isinstance(technical, str) else None
-    require(data['release'] == '19.0.3' and build and int(build.group(1)) >= 12, 'unexpected EC2 hotfix identity')
+    release = data['release']
+    build = re.fullmatch(re.escape(release) + r'\.([1-9][0-9]*)', technical) if isinstance(technical, str) else None
+    require(build and (release == '19.0.4' or (release == '19.0.3' and int(build.group(1)) >= 12)),
+            'unexpected EC2 hotfix identity')
     require(data.get('release_notes', '').strip(), 'release notes are required')
     require(set(data['packages']) == PACKAGES and set(data['minimum_packages']) == FLOORS, 'incomplete package baseline')
     commits = list(data['sources'].values())
@@ -77,8 +109,10 @@ def load(path):
     require(Path(data['shared_patch']['path']).name == 'library-19.0-hotfix.tar.gz', 'unexpected shared patch name')
     patch = asset_path(path.parent, data['shared_patch'])
     with tarfile.open(patch) as archive:
-        pins = json.load(archive.extractfile('library-19.0-hotfix/conf/packages.json'))
+        pins = json.load(archive.extractfile(PIN_PATH))
     require(set(pins) == PACKAGES | FLOORS, 'incomplete shared patch pins')
+    if release == '19.0.4':
+        require(all(pin['minimum'] is False for pin in pins.values()), '19.0.4 requires a resolved package set')
     for name in PACKAGES:
         require(all(data['packages'][name][key] == pins[name][key] for key in ('version', 'sha256')), 'shared patch package differs: ' + name)
     require(all(data['minimum_packages'][name] == pins[name]['version'] for name in FLOORS), 'shared patch floor differs')

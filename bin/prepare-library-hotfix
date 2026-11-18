@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Resolve shared packages through signed APT and assemble one reusable patch."""
+import argparse
+import gzip
+import importlib.util
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('ec2_hotfix', ROOT / 'bin/ec2-hotfix.py')
+hotfix = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hotfix)
+
+
+def resolve(sources, preferences):
+    with tempfile.TemporaryDirectory(prefix='turnkey-hotfix-apt-') as state:
+        options = [
+            '-o', 'Dir::Etc::sourcelist=/dev/null',
+            '-o', f'Dir::Etc::sourceparts={sources}',
+            '-o', 'Dir::Etc::preferences=/dev/null',
+            '-o', f'Dir::Etc::preferencesparts={preferences}',
+            '-o', f'Dir::State::lists={state}',
+            '-o', 'Dir::State::status=/dev/null',
+            '-o', 'APT::Architecture=amd64',
+            '-o', 'APT::Architectures::=amd64',
+            '-o', 'Acquire::AllowInsecureRepositories=false',
+            '-o', 'Acquire::AllowDowngradeToInsecureRepositories=false',
+            '-o', 'APT::Get::AllowUnauthenticated=false',
+        ]
+        # A trusted=yes source bypasses APT's signature requirement.
+        for file in sources.iterdir():
+            if file.suffix in ('.sources', '.list') and re.search(
+                    r'(?i)\b(?:trusted|allow-insecure|allow-weak|allow-downgrade-to-insecure)\s*[:=]\s*(?:yes|true|1|on)\b',
+                    file.read_text()):
+                raise ValueError(f'APT signature override in {file}')
+        subprocess.run(['apt-get', *options, '-o', 'APT::Update::Error-Mode=any', 'update'],
+                       check=True, stdout=sys.stderr)
+        pins = {}
+        for name in sorted(hotfix.PACKAGES | hotfix.FLOORS):
+            policy = subprocess.check_output(['apt-cache', *options, 'policy', name], text=True)
+            match = re.search(r'^\s*Candidate: (\S+)$', policy, re.M)
+            if not match or match[1] == '(none)' or re.search(r'(?i)(?:\+|[.-])qa', match[1]):
+                raise ValueError(f'No public APT candidate for {name}')
+            version = match[1]
+            records = subprocess.check_output(['apt-cache', *options, 'show', f'{name}={version}'], text=True)
+            hashes = set(re.findall(r'^SHA256: ([0-9a-f]{64})$', records, re.M))
+            if len(hashes) != 1:
+                raise ValueError(f'Expected one authenticated SHA256 for {name}={version}')
+            pins[name] = {'version': version, 'sha256': hashes.pop(), 'minimum': False}
+        if pins['inithooks']['version'] != pins['turnkey-hub']['version']:
+            raise ValueError('Inithooks and turnkey-hub candidates must be from the same package release')
+        return pins
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--revision', default='main')
+    parser.add_argument('--sources', required=True, type=Path)
+    parser.add_argument('--preferences', required=True, type=Path)
+    parser.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    if not args.sources.is_dir() or not args.preferences.is_dir():
+        parser.error('Supply the Debian 13 image sources and preferences directories')
+    if args.output.exists():
+        parser.error('Output already exists. Reuse it for retries of the same batch.')
+    revision = subprocess.check_output(
+        ['git', '-C', str(ROOT), 'rev-parse', '--verify', args.revision + '^{commit}'], text=True).strip()
+    subprocess.run(['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', revision, 'refs/heads/main'], check=True)
+    raw = hotfix.committed_patch(ROOT, revision)
+    pins = resolve(args.sources.resolve(), args.preferences.resolve())
+    patch = hotfix.patch_with_resolved_packages(raw, pins)
+    with args.output.open('xb') as out:
+        out.write(gzip.compress(patch, mtime=0))
+    print(json.dumps({'source_main': revision, 'archive': str(args.output), 'sha256': hotfix.sha(args.output),
+                      'packages': pins}, indent=2))
+
+
+if __name__ == '__main__':
+    main()
