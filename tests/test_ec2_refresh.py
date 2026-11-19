@@ -335,6 +335,136 @@ class CloudTaskTimeoutTest(unittest.TestCase):
         self.assertEqual(cleanup_call.kwargs['timeout'], 1000)
 
 
+class BootSecurityTest(unittest.TestCase):
+    def test_post_boot_apt_requires_a_clean_result_with_trusted_security_indexes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log, sources, index = (root / name for name in ('boot.log', 'security.sources', 'index'))
+            sources.write_text('fixture security sources\n')
+            index.write_text('fixture package index\n')
+            log.write_text('9 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n')
+            apt = root / 'apt-get'
+            apt.write_text('''#!/bin/bash -eu
+test "$LC_ALL" = C
+case " $* " in
+    *' indextargets '*) printf '%s %s\\n' "$INDEX" "$TRUSTED" ;;
+    *' -s check '*) exit "$CHECK_RC" ;;
+    *' -s dist-upgrade '*)
+        test "$1 $2" = '-o Dir::Etc::sourceparts=/dev/null'
+        printf '%s\\n' "$PENDING"
+        exit "$APT_RC" ;;
+    *) exit 99 ;;
+esac
+''')
+            apt.chmod(0o755)
+            script = module.BOOT_SECURITY_CHECK.replace('/var/log/inithooks/secupdates.log', str(log)).replace(
+                '/etc/apt/sources.list.d/security.sources.sources', str(sources))
+            env = {**os.environ, 'PATH': str(root) + ':' + os.environ['PATH'], 'INDEX': str(index),
+                   'TRUSTED': 'yes', 'CHECK_RC': '0', 'APT_RC': '0',
+                   'PENDING': '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.'}
+            cases = ({}, {'INDEX': str(root / 'missing')}, {'TRUSTED': 'no'}, {'CHECK_RC': '100'}, {'APT_RC': '100'},
+                     {'PENDING': '1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.'},
+                     {'PENDING': '0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.'})
+            for override in cases:
+                with self.subTest(override=override):
+                    result = subprocess.run(['bash', '-eu', '-c', script], env={**env, **override}, capture_output=True)
+                    self.assertEqual(result.returncode == 0, not override, result.stderr)
+            log.write_text('Reading state information...\n')
+            result = subprocess.run(['bash', '-eu', '-c', script], env=env, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+
+
+class RetainedBootTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.refresh = refresh = module.Refresh.__new__(module.Refresh)
+        refresh.state = Path(directory.name)
+        refresh.hotfix_path = refresh.state / 'hotfix.json'
+        refresh.hotfix_path.write_text('retained manifest\n')
+        refresh.resources = {'channel': 'hub', 'account': 'owned'}
+        refresh.batch = 'original-batch'
+        refresh.boot_controller_main = 'b' * 40
+        frozen = {'source_ami': 'ami-source', 'source_snapshot': 'snap-source', 'source_main': 'a' * 40}
+        refresh.hotfix = {'apps': {'openldap': frozen}, 'technical_release': '19.0.4.3',
+                          'release': '19.0.4', 'sources': {'controller_main': 'a' * 40}}
+        self.row = {'app': 'openldap', 'source_ami': frozen['source_ami'], 'source_main': frozen['source_main'],
+                    'version': '19.0.4', 'technical_release': '19.0.4.3'}
+        refresh.rows = [self.row]
+        identity = 'turnkey-openldap-19.0.4.3-trixie-amd64'
+        name = identity + '.tar.gz'
+        profile_dir = refresh.state / 'profiles/openldap'
+        profile_dir.mkdir(parents=True)
+        (profile_dir / 'packages.tsv').write_text('package inventory\n')
+        self.profile_path = profile_dir / name
+        self.profile_path.write_bytes(b'profile')
+        receipt = dict(identity=identity, profile=name, pristine=True, source_ami=frozen['source_ami'],
+                       source_main=frozen['source_main'], sources=refresh.hotfix['sources'],
+                       manifest_sha256=module.hotfix.sha(refresh.hotfix_path), root_marker_sha256='c' * 64,
+                       profile_sha256=module.hotfix.sha(self.profile_path),
+                       packages_sha256=module.hotfix.sha(profile_dir / 'packages.tsv'))
+        (profile_dir / 'profile-receipt.json').write_text(json.dumps(receipt))
+        published = dict(identity=identity, profile_sha256=receipt['profile_sha256'],
+                         public_readback_sha256=receipt['profile_sha256'], url='https://profiles.example.test/')
+        publications = refresh.state / 'publications.json'
+        publications.write_text(json.dumps({'openldap': published}))
+        refresh.args = SimpleNamespace(profile_publications=str(publications))
+        self.item = dict(self.row, status='ERROR', error='prior boot verifier failed', patch_complete=True,
+                         volume_deleted=True, ami='ami-candidate', snapshot='snap-candidate', volume='vol-staged',
+                         root_marker_sha256=receipt['root_marker_sha256'], hotfix_manifest_sha256=receipt['manifest_sha256'],
+                         profile={**receipt, 'local_path': 'profiles/openldap/' + name},
+                         profile_publication_sha256=hashlib.sha256(json.dumps(published, sort_keys=True).encode()).hexdigest())
+        self.state_path = refresh.state / 'openldap-state.json'
+        self.state_path.write_text(json.dumps(self.item))
+        (refresh.state / 'openldap-sparse-snapshot.json').write_text(json.dumps({
+            'snapshot': 'snap-candidate', 'source_volume': 'vol-staged', 'status': 'COMPLETION_REQUESTED'}))
+        refresh.ec2 = Mock()
+        self.release_tags = refresh.tags('openldap', 'release')
+        self.images = [{'ImageId': 'ami-' + suffix, 'OwnerId': 'owned', 'State': 'available',
+                        'RootDeviceName': '/dev/xvda', 'BlockDeviceMappings': [
+                            {'DeviceName': '/dev/xvda', 'Ebs': {'SnapshotId': 'snap-' + suffix}}]}
+                       for suffix in ('source', 'candidate')]
+        self.images[1].update(Name='turnkey-openldap-19.0.4.3-hotfix-r1', Public=False, Architecture='x86_64',
+                              Tags=self.release_tags + [{'Key': 'TurnKeyHubCatalog', 'Value': 'v19'}])
+        refresh.ec2.describe_images.return_value = {'Images': self.images}
+        self.snapshots = [{'SnapshotId': 'snap-' + suffix, 'OwnerId': 'owned', 'State': 'completed',
+                           'Tags': self.release_tags if suffix == 'candidate' else []}
+                          for suffix in ('source', 'candidate')]
+        refresh.ec2.describe_snapshots.return_value = {'Snapshots': self.snapshots}
+        refresh.boot_test = Mock()
+
+    def test_reuses_the_exact_candidate_and_only_records_a_verified_boot(self):
+        self.refresh.reverify_boot()
+        recorded = json.loads(self.state_path.read_text())
+        self.assertTrue(recorded['boot_verified'])
+        self.assertEqual(recorded['boot_controller_main'], self.refresh.boot_controller_main)
+        self.assertEqual(recorded['ami'], self.item['ami'])
+        self.assertEqual(recorded['profile'], self.item['profile'])
+        self.refresh.boot_test.assert_called_once()
+        self.assertEqual([operation[0] for operation in self.refresh.ec2.mock_calls],
+                         ['describe_images', 'describe_snapshots'])
+
+    def test_refuses_profile_tampering_before_aws_or_boot(self):
+        self.profile_path.write_bytes(b'different profile')
+        with self.assertRaisesRegex(ValueError, 'Retained profile'):
+            self.refresh.reverify_boot()
+        self.assertFalse(self.refresh.ec2.mock_calls)
+        self.refresh.boot_test.assert_not_called()
+        self.assertEqual(json.loads(self.state_path.read_text()), self.item)
+
+    def test_refuses_foreign_candidate_tags_snapshot_and_boot_instance(self):
+        for invalid, key, wrong in ((self.images[1], 'Tags', []), (self.snapshots[0], 'OwnerId', 'foreign'),
+                                    (self.snapshots[1], 'Tags', [])):
+            with self.subTest(key=key, wrong=wrong), patch.dict(invalid, {key: wrong}):
+                with self.assertRaisesRegex(ValueError, 'ownership|does not belong'):
+                    self.refresh.reverify_boot()
+        self.state_path.write_text(json.dumps({**self.item, 'test_instance': 'i-other'}))
+        self.refresh.instance = Mock(return_value={'InstanceId': 'i-other', 'ImageId': 'ami-other'})
+        with self.assertRaisesRegex(ValueError, 'Existing boot test instance'):
+            self.refresh.reverify_boot()
+        self.refresh.boot_test.assert_not_called()
+
+
 class HotfixInputTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -577,6 +707,32 @@ class HotfixInputTest(unittest.TestCase):
             bundle=self.base/'library-19.0-hotfix.tar.gz';bundle.write_bytes(gzip.compress(b'changed source'))
             self.data['shared_patch']['sha256']=module.hotfix.sha(bundle)
             with self.assertRaisesRegex(ValueError,'TKLPatch differs'):module.verify_controller_source(self.data,self.manifest)
+
+    def test_boot_only_requires_current_main_while_rechecking_the_old_archive(self):
+        current = 'b' * 40
+        canonical = module.gzip.decompress((self.base / 'library-19.0-hotfix.tar.gz').read_bytes())
+
+        def git(args, text=False):
+            if 'rev-parse' in args:
+                return current + '\n'
+            if 'archive' in args:
+                self.assertEqual(args[-1].split(':', 1)[0], self.commit)
+                return canonical
+            if '--format=%ct' in args:
+                return b'1794620000\n'
+            revision, member = args[-1].split(':', 1)
+            if member in ('bin/generate-tklbam-profile', 'bin/aptconf-tag'):
+                self.assertEqual(revision, self.commit)
+                return (self.base / ('generator' if member.endswith('profile') else 'apt-tag')).read_bytes()
+            if revision == self.commit and member == 'bt-ec2-refresh':
+                return b'older boot verifier'
+            self.assertEqual(revision, current)
+            return (ROOT / member).read_bytes()
+
+        with patch.object(module.subprocess, 'run'), patch.object(module.subprocess, 'check_output', side_effect=git):
+            self.assertEqual(module.verify_controller_source(self.data, self.manifest, boot_only=True), current)
+            with self.assertRaisesRegex(ValueError, 'Executing adapter differs'):
+                module.verify_controller_source(self.data, self.manifest)
 
     def test_1904_accepts_resolved_package_manifest_but_rejects_changed_patch_code(self):
         bundle = self.base / 'library-19.0-hotfix.tar.gz'

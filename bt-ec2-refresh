@@ -29,6 +29,24 @@ HERE = Path(__file__).resolve().parent
 CLOUDTASK_TIMEOUT_SECONDS = 900
 CLOUDTASK_LOCAL_GRACE_SECONDS = 100
 
+BOOT_SECURITY_CHECK = r'''
+grep -Eq '^[0-9]+ upgraded, [0-9]+ newly installed, [0-9]+ to remove and [0-9]+ not upgraded[.]$' /var/log/inithooks/secupdates.log
+security_sources=/etc/apt/sources.list.d/security.sources.sources
+test -s "$security_sources"
+security_apt=(-o Dir::Etc::sourceparts=/dev/null -o "Dir::Etc::sourcelist=$security_sources"
+              -o APT::Get::AllowUnauthenticated=false -o Acquire::AllowInsecureRepositories=false)
+indexes=$(LC_ALL=C apt-get "${security_apt[@]}" indextargets --format '$(FILENAME) $(TRUSTED)' 'Created-By: Packages')
+test -n "$indexes"
+while read -r index trusted; do
+    test "$trusted" = yes
+    test -s "$index"
+done <<< "$indexes"
+LC_ALL=C apt-get -s check
+pending=$(LC_ALL=C apt-get "${security_apt[@]}" -s dist-upgrade 2>&1) || { printf '%s\n' "$pending"; exit 1; }
+printf '%s\n' "$pending"
+grep -Fxq '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.' <<< "$pending"
+'''
+
 _spec = importlib.util.spec_from_file_location('ec2_hotfix', HERE / 'bin/ec2-hotfix.py')
 hotfix = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hotfix)
@@ -48,12 +66,14 @@ def selected_rows(rows, apps=None):
     return [row for row in rows if row['app'] in names]
 
 
-def verify_controller_source(manifest, path):
+def verify_controller_source(manifest, path, *, boot_only=False):
     """Bind the executing adapter and canonical generators to retained main."""
     revision = manifest['sources']['controller_main']
     subprocess.run(['git', '-C', str(HERE), 'merge-base', '--is-ancestor', revision, 'refs/heads/main'], check=True)
+    executing = (subprocess.check_output(['git', '-C', str(HERE), 'rev-parse', 'refs/heads/main'], text=True).strip()
+                 if boot_only else revision)
     for relative in ['bt-ec2-refresh', 'bin/refresh-ec2-rootfs', 'bin/ec2-hotfix.py', 'patches/clean-old-kernels/conf', 'bin/ec2-sparse-snapshot.py']:
-        committed = subprocess.check_output(['git', '-C', str(HERE), 'show', revision + ':' + relative])
+        committed = subprocess.check_output(['git', '-C', str(HERE), 'show', executing + ':' + relative])
         if committed != (HERE / relative).read_bytes():
             raise ValueError('Executing adapter differs from committed main: ' + relative)
     for name, relative in [('profile_generator', 'bin/generate-tklbam-profile'), ('aptconf_tag', 'bin/aptconf-tag')]:
@@ -71,6 +91,7 @@ def verify_controller_source(manifest, path):
         committed = hotfix.patch_with_resolved_packages(committed, pins)
     if actual != committed:
         raise ValueError('Shared TKLPatch differs from committed main')
+    return executing
 
 
 def qa_receipt(path, item, *, customer=False):
@@ -148,6 +169,8 @@ class Refresh:
         manifest = self.resources.get('hotfix_manifest')
         self.hotfix_path = self.state / manifest if manifest else None
         self.hotfix = hotfix.load(self.hotfix_path) if manifest and not cleanup else None
+        if args.action == 'boot-verify' and (self.channel != 'hub' or not self.hotfix or len(self.rows) != 1):
+            raise ValueError('Boot verification requires one frozen Hub hotfix candidate')
         if args.workers is None:
             args.workers = min(4, max(1, len(self.resources['workers']))) if manifest else 12
         if manifest and not cleanup and not 1 <= args.workers <= 4:
@@ -156,6 +179,8 @@ class Refresh:
             raise ValueError('Frozen hotfix manifest changed')
         if manifest and args.action in ('run', 'publish', 'watch'):
             verify_controller_source(self.hotfix, self.hotfix_path)
+        if args.action == 'boot-verify':
+            self.boot_controller_main = verify_controller_source(self.hotfix, self.hotfix_path, boot_only=True)
         session = boto3.Session(region_name=self.region)
         assert session.client('sts').get_caller_identity()['Account'] == self.resources['account']
         self.ec2 = session.client('ec2', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=64))
@@ -466,6 +491,98 @@ test "$(dpkg-query -W -f='${Version}' tklpatch)" = 0.95
             item['error'] = str(exc); item['status'] = 'ERROR'; save(path, item)
             self.log(app, 'ERROR ' + str(exc))
 
+    def verify_retained_boot_candidate(self, row, item):
+        app = row['app']
+        manifest_sha = hotfix.sha(self.hotfix_path)
+        frozen = self.hotfix['apps'][app]
+        source, source_snapshot = frozen['source_ami'], frozen['source_snapshot']
+        technical = self.hotfix['technical_release']
+        if (item.get('patch_complete') is not True or item.get('volume_deleted') is not True or item.get('boot_verified')
+                or item.get('status') != 'ERROR' or item.get('hotfix_manifest_sha256') != manifest_sha
+                or item.get('source_ami') != source or item.get('source_main') != frozen['source_main']
+                or item.get('app') != app or item.get('technical_release') != technical
+                or item.get('version') != self.hotfix['release']
+                or any(item.get(key) != row.get(key) for key in ('source_ami', 'source_main', 'version', 'technical_release'))):
+            raise ValueError('Retained candidate does not match the frozen patch state')
+
+        identity = 'turnkey-' + app + '-' + technical + '-trixie-amd64'
+        profile = dict(item['profile'])
+        filename = identity + '.tar.gz'
+        relative = Path('profiles') / app
+        profile_dir = self.state / relative
+        if (not profile_dir.resolve().is_relative_to(self.state) or
+                profile.pop('local_path', None) != str(relative / filename)
+                or profile != json.loads((profile_dir / 'profile-receipt.json').read_text())
+                or profile.get('identity') != identity or profile.get('profile') != filename
+                or profile.get('pristine') is not True or profile.get('source_ami') != source
+                or profile.get('source_main') != frozen['source_main'] or profile.get('sources') != self.hotfix['sources']
+                or profile.get('manifest_sha256') != manifest_sha
+                or not re.fullmatch('[0-9a-f]{64}', item.get('root_marker_sha256', ''))
+                or profile.get('root_marker_sha256') != item['root_marker_sha256']
+                or profile.get('profile_sha256') != hotfix.sha(profile_dir / filename)
+                or profile.get('packages_sha256') != hotfix.sha(profile_dir / 'packages.tsv')):
+            raise ValueError('Retained profile or pristine root marker differs')
+        publication = item.get('profile_publication_sha256')
+        if not publication or not self.profile_published(item) or item['profile_publication_sha256'] != publication:
+            raise ValueError('Retained candidate requires the same verified public profile')
+
+        ami, snapshot = item['ami'], item['snapshot']
+        sparse_state = json.loads((self.state / (app + '-sparse-snapshot.json')).read_text())
+        if (ami == source or snapshot == source_snapshot or sparse_state['snapshot'] != snapshot
+                or sparse_state['source_volume'] != item['volume'] or sparse_state['status'] != 'COMPLETION_REQUESTED'):
+            raise ValueError('Retained sparse snapshot does not match the staged candidate')
+
+        images = {value['ImageId']: value for value in
+                  self.ec2.describe_images(ImageIds=[source, ami], Owners=['self'])['Images']}
+        snapshots = {value['SnapshotId']: value for value in self.ec2.describe_snapshots(
+            SnapshotIds=[source_snapshot, snapshot], OwnerIds=['self'])['Snapshots']}
+        account = self.resources['account']
+        tags = {tag['Key']: tag['Value'] for tag in self.tags(app, 'release')}
+        for image_id, snapshot_id in ((source, source_snapshot), (ami, snapshot)):
+            image, root = images[image_id], snapshots[snapshot_id]
+            mappings = [value for value in image['BlockDeviceMappings'] if 'Ebs' in value]
+            if (image['OwnerId'] != account or image['State'] != 'available' or root['OwnerId'] != account
+                    or root['State'] != 'completed' or len(mappings) != 1
+                    or mappings[0]['DeviceName'] != image['RootDeviceName']
+                    or mappings[0]['Ebs']['SnapshotId'] != snapshot_id):
+                raise ValueError('AMI or snapshot ownership, state, or root mapping differs')
+        candidate = images[ami]
+        candidate_tags = {tag['Key']: tag['Value'] for tag in candidate.get('Tags', [])}
+        snapshot_tags = {tag['Key']: tag['Value'] for tag in snapshots[snapshot].get('Tags', [])}
+        name = 'turnkey-' + app + '-' + technical + '-hotfix-r' + str(self.resources.get('generation', 1))
+        if (candidate['Name'] != name or candidate['Public'] is not False or candidate['Architecture'] != 'x86_64'
+                or candidate['RootDeviceName'] != images[source]['RootDeviceName']
+                or not (tags | {'TurnKeyHubCatalog': 'v19'}).items() <= candidate_tags.items()
+                or not tags.items() <= snapshot_tags.items()):
+            raise ValueError('AMI or snapshot does not belong to this Hub candidate')
+
+        if item.get('test_instance'):
+            instance = self.instance(item['test_instance'])
+            if not instance.get('InstanceId'):
+                # Already-terminated instances may disappear from DescribeInstances.
+                item.setdefault('previous_test_instances', []).append(item.pop('test_instance'))
+            else:
+                instance_tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
+                expected = {tag['Key']: tag['Value'] for tag in self.tags(app)}
+                if instance['ImageId'] != ami or not expected.items() <= instance_tags.items():
+                    raise ValueError('Existing boot test instance does not belong to this candidate')
+
+    def reverify_boot(self):
+        row = self.rows[0]
+        path = self.state / (row['app'] + '-state.json')
+        item = json.loads(path.read_text())
+        self.verify_retained_boot_candidate(row, item)
+        try:
+            self.boot_test(item)
+        except Exception as exc:
+            item.update(status='ERROR', error=str(exc))
+            save(path, item)
+            raise
+        item.update(boot_verified=True, boot_controller_main=self.boot_controller_main, status='VERIFIED')
+        item.pop('error', None)
+        save(path, item)
+        self.log(row['app'], 'VERIFIED')
+
     def boot_test(self, item):
         app = item['app']; path = self.state / (app + '-state.json')
         if item.get('test_instance') and self.instance(item['test_instance'])['State']['Name'] in ['terminated', 'shutting-down']:
@@ -523,21 +640,22 @@ systemctl show inithooks.service -p Result -p ActiveState
 cat /var/log/inithooks.log
 uname -r
 cat /var/log/inithooks/secupdates.log
-grep -q '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.' /var/log/inithooks/secupdates.log
-! grep -q '^ERR:' /var/log/inithooks.log
-journalctl -b -t inithooks --no-pager | grep '\\[95secupdates\\] security updates being installed'
-! journalctl -b -t inithooks --no-pager | grep -q '\\[95secupdates\\] security updates skipped'
+if grep -q '^ERR:' /var/log/inithooks.log; then exit 1; fi
+hook_log=$(journalctl -b -t inithooks --no-pager)
+grep '\\[95secupdates\\] security updates being installed' <<< "$hook_log"
+if grep -q '\\[95secupdates\\] security updates skipped' <<< "$hook_log"; then exit 1; fi
 grep -qx 'export SEC_UPDATES=FORCE' /usr/lib/inithooks/firstboot.d/29preseed
+''' + BOOT_SECURITY_CHECK + '''
 systemctl is-active cron turnkey-init-fence
 sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|pubkeyauthentication) '
-test -z "$(dpkg --audit)"
+audit=$(dpkg --audit)
+test -z "$audit"
 v=$(dpkg-query -W -f='${Version}' libbrotli1 2>/dev/null || true)
 [ -z "$v" ] || dpkg --compare-versions "$v" ge 1.1.0-2+deb13u1
 test "$(sudo -n -- id -u)" = 0
 mapfile -t kernels < <(dpkg-query -W -f='${Package} ${db:Status-Status}\\n' 'linux-image-[0-9]*' | awk '$2=="installed" {print $1}')
 test "${#kernels[@]}" = 1
 test "${kernels[0]}" = "linux-image-$(uname -r)"
-printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
 '''
             if getattr(self, 'channel', 'marketplace') == 'hub':
                 script += '''
@@ -556,6 +674,7 @@ grep -qx 'permitrootlogin no' <<< "$root_ssh"
                 for name, version in versions.items():
                     script += 'test "$(dpkg-query -W -f=\'${Version}\' ' + shlex.quote(name) + ')" = ' + shlex.quote(version) + '\n'
                 script += 'test "$(sha256sum /var/lib/turnkey-info/hotfix.json | cut -d\' \' -f1)" = ' + shlex.quote(item['root_marker_sha256']) + '\n' if item.get('root_marker_sha256') else ''
+            script += '''printf 'BOOT_VERIFIED brotli=%s\\n' "$v"\n'''
             r = self.ssh(ip, 'sudo bash -s', input=script, timeout=45, host_alias=iid)
             (self.state / (app + '-boot.log')).write_text(r.stdout + r.stderr)
             if r.returncode or 'BOOT_VERIFIED' not in r.stdout:
@@ -894,7 +1013,7 @@ def prepare(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action', choices=['prepare', 'run', 'publish', 'watch', 'status', 'cleanup'])
+    p.add_argument('action', choices=['prepare', 'run', 'boot-verify', 'publish', 'watch', 'status', 'cleanup'])
     p.add_argument('--state', required=True)
     p.add_argument('--workers', type=int, help='hotfix defaults to the prepared pool (one during prepare); legacy defaults to12')
     p.add_argument('--worker-offset', type=int, default=0)
@@ -925,6 +1044,9 @@ def main():
         p.error('--patch-timeout must be a positive number of seconds')
     if args.hub and (args.action != 'prepare' or args.publish):
         p.error('--hub belongs to prepare and cannot be combined with --publish')
+    if args.action == 'boot-verify' and (not args.apps or ',' in args.apps or not args.profile_publications
+                                         or args.publish or args.cleanup):
+        p.error('boot-verify requires one --apps value and --profile-publications')
     if args.action == 'prepare':
         if not args.from_batch: p.error('prepare requires --from-batch')
         prepare(args); return
@@ -935,6 +1057,11 @@ def main():
         finally:
             r.finish_pool.shutdown(wait=True)
             if args.cleanup: r.cleanup()
+    elif args.action == 'boot-verify':
+        try:
+            r.reverify_boot()
+        finally:
+            r.finish_pool.shutdown(wait=True)
     elif args.action == 'cleanup': r.cleanup()
     elif args.action == 'watch': r.watch_publication()
     else:
