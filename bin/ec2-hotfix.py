@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import tarfile
@@ -155,11 +156,28 @@ def factory(root):
         require(not (root / name).exists(), 'initialized service state in source: ' + name)
 
 
+def fix_stock_admins_permissions(root):
+    """Repair only the identified stock sudo rule from older released roots."""
+    directory = root / 'etc/sudoers.d'
+    rule = directory / 'admins'
+    if directory.is_symlink():
+        return
+    try:
+        info = rule.lstat()
+    except FileNotFoundError:
+        return
+    if (stat.S_ISREG(info.st_mode) and (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) == (0, 0, 0o644)
+            and sha(rule) == 'ad34c1d3d0307bec752fd7777741e3c17509f909114e3db50028d892c4e2bad1'):
+        rule.chmod(0o440)
+        print('Corrected permissions on the stock sudo admins rule', flush=True)
+
+
 def install(root, manifest, app):
     root, manifest = Path(root), Path(manifest).resolve()
     data = load(manifest)
     row = data['apps'][app]
     factory(root)
+    fix_stock_admins_permissions(root)
     run(['tklpatch-apply', root, asset_path(manifest.parent, data['shared_patch'])])
     package = asset_path(manifest.parent, row['identity_package'])
     identity = 'turnkey-' + app + '-' + data['technical_release']
