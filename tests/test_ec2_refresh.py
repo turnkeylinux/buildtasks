@@ -791,6 +791,77 @@ class HotfixInputTest(unittest.TestCase):
         self.assertEqual(report['pending'],['lamp'])
         self.assertEqual(refresh.publish.call_count,1)
 
+    def test_hub_prepare_requires_no_marketplace_fields_or_client(self):
+        previous = self.base / 'previous'
+        previous.mkdir()
+        (previous / 'resources.json').write_text(json.dumps({
+            'region': 'us-east-1', 'account': 'account', 'subnet': 'subnet-test', 'worker_ami': 'ami-worker',
+        }))
+        plan = self.base / 'hub-plan.json'
+        plan.write_text(json.dumps([{'app': 'lamp', 'source_ami': 'ami-123'}]))
+        state = self.base / 'prepared'
+        args = SimpleNamespace(from_batch=str(previous), state=str(state), batch='test', apps='lamp',
+                               hotfix_manifest=str(self.manifest), plan_file=str(plan), hub=True,
+                               cloudtask_root=None, workers=1, sandbox='existing', python2='/fixture/python2',
+                               cloudtask='/fixture/cloudtask', pylib='/fixture/pylib')
+        sts, ec2 = Mock(), Mock()
+        sts.get_caller_identity.return_value = {'Account': 'account'}
+        image = {'OwnerId': 'account', 'State': 'available', 'RootDeviceName': '/dev/sda1',
+                 'BlockDeviceMappings': [{'DeviceName': '/dev/sda1', 'Ebs': {'SnapshotId': 'snap-123'}}],
+                 'Tags': [{'Key': 'TurnKeyHubCatalog', 'Value': 'v19'}, {'Key': 'Appliance', 'Value': 'lamp'}]}
+        ec2.describe_images.return_value = {'Images': [image]}
+        session = Mock()
+        session.client.side_effect = lambda name: {'sts': sts, 'ec2': ec2}[name]
+        ec2.import_key_pair.side_effect = RuntimeError('stop before allocation')
+
+        def keygen(command, **kwargs):
+            if command[0] == 'sbx':
+                return
+            self.assertEqual(command[0], 'ssh-keygen')
+            target = Path(command[-1])
+            target.write_text('test key')
+            target.with_suffix('.pub').write_text('test public key')
+
+        with patch.object(module.boto3, 'Session', return_value=session), \
+                patch.object(module.subprocess, 'run', side_effect=keygen), \
+                patch.object(module, 'verify_controller_source'):
+            with self.assertRaisesRegex(RuntimeError, 'stop before allocation'):
+                module.prepare(args)
+            image['Tags'] = []
+            args.state = str(self.base / 'untagged')
+            with self.assertRaisesRegex(ValueError, 'not the expected Hub v19 app'):
+                module.prepare(args)
+        row, = json.loads((state / 'plan.json').read_text())
+        self.assertEqual(row['source_ami'], 'ami-123')
+        self.assertEqual(row['technical_release'], self.data['technical_release'])
+        self.assertNotIn('product_id', row)
+        self.assertEqual(json.loads((state / 'resources.json').read_text())['channel'], 'hub')
+        ec2.import_key_pair.assert_called_once()
+        ec2.run_instances.assert_not_called()
+
+    def test_hub_run_has_no_marketplace_client_and_rejects_marketplace_actions(self):
+        args = self.refresh_state('run')
+        resources_path = self.base / 'resources.json'
+        resources = json.loads(resources_path.read_text())
+        resources['channel'] = 'hub'
+        resources_path.write_text(json.dumps(resources))
+        session = Mock()
+        session.client.return_value.get_caller_identity.return_value = {'Account': 'account'}
+        with patch.object(module, 'verify_controller_source'), \
+                patch.object(module.boto3, 'Session', return_value=session) as aws:
+            refresh = module.Refresh(args)
+            refresh.finish_pool.shutdown()
+            self.assertIsNone(refresh.catalog)
+            self.assertNotIn('marketplace-catalog', [call.args[0] for call in session.client.call_args_list])
+            aws.reset_mock()
+            for action, publish in [('run', True), ('publish', False), ('watch', False)]:
+                with self.subTest(action=action):
+                    args.action = action
+                    args.publish = publish
+                    with self.assertRaisesRegex(ValueError, 'Marketplace publication is disabled'):
+                        module.Refresh(args)
+            aws.assert_not_called()
+
     def refresh_state(self, action):
         resources={'batch':'test','region':'us-east-1','account':'account','workers':[{'id':'i-worker'}],
                    'hotfix_manifest':self.manifest.name,'hotfix_manifest_sha256':module.hotfix.sha(self.manifest)}

@@ -120,6 +120,31 @@ other 19.0 versions, after matching customer QA. Public v18 and unselected
 delivery options remain available. Root owns AMI/snapshot retirement after
 catalog, customer and reference checks.
 
+## Hub batches
+
+Use `prepare --hub` with a frozen hotfix manifest and an explicit plan of
+`{"app":"lamp","source_ami":"ami-…" }` rows. Prepare verifies the publisher
+account, source AMI, root snapshot and Hub v19 tags before creating workers.
+The worker seed supplies the same operational inputs as a Marketplace batch.
+On a fresh stock Core worker, the controller installs the qualified signed
+TKLPatch package if the required commands are absent.
+
+```sh
+./bt-ec2-refresh prepare --hub --from-batch "$WORKER_SEED" \
+    --state "$BATCH" --plan-file "$PLAN" --hotfix-manifest "$MANIFEST" \
+    --workers 1 --apps lamp
+./bt-ec2-refresh run --state "$BATCH" --workers 1
+./bt-ec2-refresh status --state "$BATCH"
+```
+
+The first run exits nonzero when it reaches `PROFILE_PENDING_PUBLICATION`.
+Publish and verify the exact exported profile, then resume the same batch with
+`run --profile-publications "$PROFILE_RECEIPTS"`. Keep the batch workers until
+this phase completes. Run `cleanup --state "$BATCH"` after acceptance or if
+abandoning the batch. Cleanup preserves registered output AMIs and their
+snapshots. Hub candidate results are inputs to separate regional copy and
+catalog steps. The Hub mode rejects Marketplace publication actions.
+
 ## Cleanup
 
 `run --cleanup` waits for its image tasks, runs a separate CloudTask cleanup

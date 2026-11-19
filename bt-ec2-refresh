@@ -135,6 +135,11 @@ class Refresh:
         self.resources = json.loads((self.state / 'resources.json').read_text())
         self.batch = self.resources['batch']
         self.region = self.resources['region']
+        self.channel = self.resources.get('channel', 'marketplace')
+        if self.channel not in ('hub', 'marketplace'):
+            raise ValueError('Unknown refresh channel')
+        if self.channel == 'hub' and (args.action in ('publish', 'watch') or getattr(args, 'publish', False)):
+            raise ValueError('Hub batches use a separate catalog cutover; Marketplace publication is disabled')
         cleanup = args.action == 'cleanup'
         plan = json.loads((self.state / 'plan.json').read_text())
         self.rows = plan if cleanup else selected_rows(plan, args.apps)
@@ -153,7 +158,9 @@ class Refresh:
         assert session.client('sts').get_caller_identity()['Account'] == self.resources['account']
         self.ec2 = session.client('ec2', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=64))
         self.ebs = session.client('ebs', config=Config(retries={'max_attempts': 5}, max_pool_connections=16))
-        self.catalog = session.client('marketplace-catalog', config=Config(retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=32))
+        self.catalog = (session.client('marketplace-catalog', config=Config(
+            retries={'mode': 'adaptive', 'max_attempts': 10}, max_pool_connections=32))
+            if self.channel == 'marketplace' else None)
         self.finish_pool = futures.ThreadPoolExecutor(max_workers=args.workers)
         self.finish_jobs = []
         self.finish_lock = threading.Lock()
@@ -165,8 +172,11 @@ class Refresh:
         print(datetime.datetime.now(datetime.timezone.utc).isoformat(), app, message, flush=True)
 
     def tags(self, app, lifecycle='disposable'):
+        purpose = 'marketplace-hotfix' if getattr(self, 'hotfix', None) else 'marketplace-security-refresh'
+        if self.resources.get('channel') == 'hub':
+            purpose = 'hub-hotfix'
         return [{'Key': 'RefreshBatch', 'Value': self.batch}, {'Key': 'Appliance', 'Value': app},
-                {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': 'marketplace-hotfix' if getattr(self, 'hotfix', None) else 'marketplace-security-refresh'}]
+                {'Key': 'TurnKeyLifecycle', 'Value': lifecycle}, {'Key': 'Purpose', 'Value': purpose}]
 
     def ssh_arguments(self, ip, *, host_alias=None, known_hosts=None):
         identity = ['-o', 'HostKeyAlias=' + host_alias] if host_alias else []
@@ -223,7 +233,27 @@ class Refresh:
                 return False
         wait_until(ready, 300)
         if self.hotfix:
-            result = self.ssh(worker['ip'], 'command -v tklpatch-apply >/dev/null && command -v tklpatch-apply-overlay >/dev/null')
+            qualified = 'command -v tklpatch-apply >/dev/null && command -v tklpatch-apply-overlay >/dev/null'
+            result = self.ssh(worker['ip'], qualified)
+            if result.returncode and getattr(self, 'channel', 'marketplace') == 'hub':
+                # The retained Core worker base does not ship the build tool.
+                # Use the already-qualified public TKLPatch package on fresh workers.
+                bootstrap = """set -eu
+test ! -d /home/admin/src/tklpatch
+sudo -n test ! -d /root/src/tklpatch
+sudo -n apt-get -o APT::Update::Error-Mode=any -o Acquire::AllowInsecureRepositories=false update
+apt-cache show tklpatch=0.95 | grep -Fx 'SHA256: 099a37b761c4741ffaa4681c6ade12f2bc9b796660e2d547c09db14cdfe6aab2'
+work=$(mktemp -d)
+trap 'rm -r "$work"' EXIT
+cd "$work"
+apt-get -o APT::Get::AllowUnauthenticated=false download tklpatch=0.95
+echo '099a37b761c4741ffaa4681c6ade12f2bc9b796660e2d547c09db14cdfe6aab2  tklpatch_0.95_all.deb' | sha256sum -c
+sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y --no-remove -o APT::Get::AllowUnauthenticated=false install ./tklpatch_0.95_all.deb
+test "$(dpkg-query -W -f='${Version}' tklpatch)" = 0.95
+"""
+                result = self.ssh(worker['ip'], 'bash -s', input=bootstrap + qualified + '\n', timeout=240)
+                if result.returncode:
+                    raise RuntimeError('Could not install qualified TKLPatch on Hub worker: ' + result.stderr)
             if result.returncode:
                 raise RuntimeError('Worker requires qualified TKLPatch commands')
         result = self.ssh(worker['ip'], 'command -v zerofree >/dev/null || sudo apt-get -y install zerofree')
@@ -505,10 +535,22 @@ test "${#kernels[@]}" = 1
 test "${kernels[0]}" = "linux-image-$(uname -r)"
 printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
 '''
+            if getattr(self, 'channel', 'marketplace') == 'hub':
+                script += '''
+admin_ssh=$(sshd -T -C user=admin,host=localhost,addr=127.0.0.1)
+grep -qx 'passwordauthentication no' <<< "$admin_ssh"
+grep -qx 'kbdinteractiveauthentication no' <<< "$admin_ssh"
+grep -qx 'pubkeyauthentication yes' <<< "$admin_ssh"
+root_ssh=$(sshd -T -C user=root,host=localhost,addr=127.0.0.1)
+grep -qx 'permitrootlogin no' <<< "$root_ssh"
+'''
             if getattr(self, 'hotfix', None):
                 script += '\ntest "$(cat /etc/turnkey_version)" = ' + shlex.quote(item['profile']['identity']) + '\n'
-                for name, package in self.hotfix['packages'].items():
-                    script += 'test "$(dpkg-query -W -f=\'${Version}\' ' + shlex.quote(name) + ')" = ' + shlex.quote(package['version']) + '\n'
+                versions = {name: package['version'] for name, package in self.hotfix['packages'].items()}
+                if self.hotfix['release'] == '19.0.4':
+                    versions.update(self.hotfix['minimum_packages'])
+                for name, version in versions.items():
+                    script += 'test "$(dpkg-query -W -f=\'${Version}\' ' + shlex.quote(name) + ')" = ' + shlex.quote(version) + '\n'
                 script += 'test "$(sha256sum /var/lib/turnkey-info/hotfix.json | cut -d\' \' -f1)" = ' + shlex.quote(item['root_marker_sha256']) + '\n' if item.get('root_marker_sha256') else ''
             r = self.ssh(ip, 'sudo bash -s', input=script, timeout=45, host_alias=iid)
             (self.state / (app + '-boot.log')).write_text(r.stdout + r.stderr)
@@ -702,11 +744,12 @@ printf 'BOOT_VERIFIED brotli=%s\\n' "$v"
             if not references:
                 self.ec2.delete_snapshot(SnapshotId=snapshot['SnapshotId'])
         self.ec2.delete_key_pair(KeyName=self.resources['key_name'])
-        try:
-            self.ec2.delete_security_group(GroupId=self.resources['security_group'])
-        except ClientError as exc:
-            if exc.response['Error']['Code'] != 'InvalidGroup.NotFound':
-                raise
+        if self.resources.get('security_group'):
+            try:
+                self.ec2.delete_security_group(GroupId=self.resources['security_group'])
+            except ClientError as exc:
+                if exc.response['Error']['Code'] != 'InvalidGroup.NotFound':
+                    raise
         self.key.unlink(missing_ok=True)
         base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
         subprocess.run(['sbx', 'exec', self.args.sandbox, '--', 'rm', '-f', base + '/worker-key'], check=True)
@@ -728,10 +771,13 @@ def prepare(args):
     state.mkdir(parents=True, exist_ok=True); state.chmod(0o700)
     old = json.loads((previous / 'resources.json').read_text())
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    batch = args.batch or 'tkl-mp-refresh-' + stamp
+    hub = getattr(args, 'hub', False)
+    batch = args.batch or ('tkl-hub-refresh-' if hub else 'tkl-mp-refresh-') + stamp
     assert re.fullmatch(r'[A-Za-z0-9-]{1,60}', batch)
     manifest_path = getattr(args, 'hotfix_manifest', None)
     manifest = hotfix.load(manifest_path) if manifest_path else None
+    if hub and not manifest:
+        raise ValueError('Hub prepare requires a frozen --hotfix-manifest')
     if getattr(args, 'workers', None) is None:
         args.workers = 1 if manifest else 12
     input_plan = Path(args.plan_file) if getattr(args, 'plan_file', None) else previous / 'plan.json'
@@ -747,14 +793,17 @@ def prepare(args):
     if manifest:
         for row in inputs:
             frozen = manifest['apps'][row['app']]
-            if row['source_ami'] != frozen['source_ami'] or not row.get('marketplace_regions') or not row.get('delivery') or not row.get('old_version'):
+            if row['source_ami'] != frozen['source_ami']:
+                raise ValueError('Plan source differs from frozen hotfix source')
+            if not hub and (not row.get('marketplace_regions') or not row.get('delivery') or not row.get('old_version')):
                 raise ValueError('Frozen source, delivery or Marketplace regions missing')
     if manifest:
         subprocess.run(['sbx', 'exec', args.sandbox, '--', 'bash', '-ec',
                         'test -x "$1"; test -f "$2"; test -d "$3"', '_', args.python2, args.cloudtask, args.pylib], check=True)
     session = boto3.Session(region_name=old['region'])
     assert session.client('sts').get_caller_identity()['Account'] == old['account']
-    ec2 = session.client('ec2'); catalog = session.client('marketplace-catalog')
+    ec2 = session.client('ec2')
+    catalog = None if hub else session.client('marketplace-catalog')
     rows = []
     for row in inputs:
         path = previous / (row['app'] + '-state.json')
@@ -770,6 +819,15 @@ def prepare(args):
             root = [entry['Ebs']['SnapshotId'] for entry in image['BlockDeviceMappings'] if entry['DeviceName'] == image['RootDeviceName'] and 'Ebs' in entry]
             if root != [frozen['source_snapshot']]:
                 raise ValueError('Frozen source snapshot differs')
+        if hub:
+            tags = {tag['Key']: tag['Value'] for tag in image.get('Tags', [])}
+            if tags.get('TurnKeyHubCatalog') != 'v19' or tags.get('Appliance') != row['app']:
+                raise ValueError('Frozen source is not the expected Hub v19 app')
+            rows.append(dict(app=row['app'], source_ami=source, source_main=frozen['source_main'],
+                             version=manifest['release'], technical_release=manifest['technical_release'],
+                             release_notes=manifest['release_notes'],
+                             ami_description='TurnKey ' + row['app'] + ' ' + manifest['release'] + ' maintenance release'))
+            continue
         ent = catalog.describe_entity(Catalog='AWSMarketplace', EntityId=row['product_id'])
         data = ent.get('DetailsDocument') or json.loads(ent['Details'])
         if manifest:
@@ -796,6 +854,8 @@ def prepare(args):
     resources = {k: old[k] for k in ['region', 'account', 'subnet', 'worker_ami']}
     resources.update(batch=batch, workers=[], key_name=batch,
                      cloudtask_root=args.cloudtask_root or '/home/agent/' + state.name)
+    if hub:
+        resources['channel'] = 'hub'
     if manifest:
         hotfix.freeze(manifest_path, state / 'hotfix-inputs')
         resources['hotfix_manifest'] = 'hotfix-inputs/hotfix.json'
@@ -836,8 +896,9 @@ def main():
     p.add_argument('--worker-offset', type=int, default=0)
     p.add_argument('--apps')
     p.add_argument('--from-batch')
-    p.add_argument('--plan-file', help='explicit frozen app/product/source rows for prepare')
+    p.add_argument('--plan-file', help='explicit frozen app/source rows for prepare, with product data for Marketplace')
     p.add_argument('--hotfix-manifest', help='frozen signed-package/source/profile inputs for prepare')
+    p.add_argument('--hub', action='store_true', help='prepare a Hub-only build batch without Marketplace operations')
     p.add_argument('--profile-publications', help='matching additive public profile readback receipts, required before hotfix boot')
     p.add_argument('--source-acceptance', help='actual source-AMI app/native QA receipts before hotfix submission')
     p.add_argument('--customer-acceptance', help='actual Marketplace customer-image QA receipts before retirement')
@@ -854,6 +915,8 @@ def main():
     p.add_argument('--cloudtask', default='/home/agent/cloudtask/cmd_cloudtask.py')
     p.add_argument('--ingestion-role', default='arn:aws:iam::096457495696:role/awsmp-ami-ingestion')
     args = p.parse_args()
+    if args.hub and (args.action != 'prepare' or args.publish):
+        p.error('--hub belongs to prepare and cannot be combined with --publish')
     if args.action == 'prepare':
         if not args.from_batch: p.error('prepare requires --from-batch')
         prepare(args); return
@@ -875,7 +938,7 @@ def main():
             if args.action == 'publish' and item.get('boot_verified'):
                 r.publish(item)
                 r.reconcile(item)
-            if args.action == 'status' and item.get('change_set_id'):
+            if args.action == 'status' and r.catalog is not None and item.get('change_set_id'):
                 review = r.catalog.describe_change_set(Catalog='AWSMarketplace', ChangeSetId=item['change_set_id'])
                 item['publication_status'] = review['Status']; save(path, item)
                 save(r.state / (item['app'] + '-publication-status.json'), review)
