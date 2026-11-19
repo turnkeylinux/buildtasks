@@ -9,6 +9,7 @@ import tarfile
 from types import SimpleNamespace
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -294,6 +295,44 @@ class ClientTokenTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'request captured'):
                 refresh.boot_test(dict(app='lighttpd-php-fastcgi', ami='ami-test'))
         self.assertLessEqual(len(refresh.ec2.run_instances.call_args.kwargs['ClientToken']), 64)
+
+
+class CloudTaskTimeoutTest(unittest.TestCase):
+    def test_patch_timeout_defaults_to_900_and_accepts_a_longer_budget(self):
+        for options, seconds in (([], 900), (['--patch-timeout', '3600'], 3600)):
+            with self.subTest(options=options):
+                argv = ['bt-ec2-refresh', 'run', '--state', 'fixture'] + options
+                with patch.object(sys, 'argv', argv), patch.object(module, 'Refresh') as refresh:
+                    module.main()
+                self.assertEqual(refresh.call_args.args[0].patch_timeout, seconds)
+
+    def test_invalid_patch_timeout_is_rejected_before_opening_the_batch(self):
+        for value in ('0', '-1', '1.5'):
+            with self.subTest(value=value):
+                argv = ['bt-ec2-refresh', 'run', '--state', 'fixture', '--patch-timeout', value]
+                with patch.object(sys, 'argv', argv), patch.object(sys, 'stderr', io.StringIO()) as stderr, \
+                        patch.object(module, 'Refresh') as refresh, self.assertRaises(SystemExit) as error:
+                    module.main()
+                self.assertEqual(error.exception.code, 2)
+                self.assertNotIn('unrecognized arguments', stderr.getvalue())
+                refresh.assert_not_called()
+
+    def test_cloudtask_gives_the_local_supervisor_slack_and_keeps_cleanup_bounded(self):
+        refresh = module.Refresh.__new__(module.Refresh)
+        refresh.args = SimpleNamespace(cloudtask_root='/batch', sandbox='fixture', pylib='/pylib',
+                                       cloudtask='/cloudtask/cmd.py', python2='/pypy2')
+        refresh.resources = {}
+        worker = {'ip': '192.0.2.1'}
+        with tempfile.TemporaryDirectory() as directory:
+            refresh.state = Path(directory)
+            with patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as run:
+                refresh.cloudtask(worker, 'gitlab', 'patch-command', 'patch-job', timeout=3600)
+                refresh.cloudtask(worker, 'cleanup-worker', 'cleanup-command', 'cleanup-job')
+        patch_call, cleanup_call = run.call_args_list
+        self.assertIn('--timeout=3600', patch_call.args[0])
+        self.assertEqual(patch_call.kwargs['timeout'], 3700)
+        self.assertIn('--timeout=900', cleanup_call.args[0])
+        self.assertEqual(cleanup_call.kwargs['timeout'], 1000)
 
 
 class HotfixInputTest(unittest.TestCase):
@@ -892,6 +931,7 @@ class HotfixInputTest(unittest.TestCase):
     @patch.object(module.sparse, 'create_snapshot', return_value={'snapshot':'snap-new'})
     def test_failed_export_resumes_same_verified_patch_without_reinstalling(self, snapshot):
         refresh=module.Refresh.__new__(module.Refresh)
+        refresh.args = SimpleNamespace(patch_timeout=3600)
         first={'id':'i-first','ip':'192.0.2.1','az':'us-east-1a'}
         second={'id':'i-second','ip':'192.0.2.2','az':'us-east-1a'}
         refresh.hotfix=self.data;refresh.hotfix_path=self.manifest;refresh.state=self.base;refresh.batch='test'
@@ -903,7 +943,7 @@ class HotfixInputTest(unittest.TestCase):
         refresh.ec2.attach_volume.side_effect=lambda **kwargs:attached.__setitem__(0,True)
         refresh.ec2.detach_volume.side_effect=lambda **kwargs:attached.__setitem__(0,False)
         refresh.volume=lambda vid:{'Size':10,'State':'in-use' if attached[0] else 'available','Attachments':[{'State':'attached','InstanceId':first['id']}] if attached[0] else []}
-        def cloudtask(*args):(self.base/'lamp.log').write_text('REFRESH_VERIFIED app=lamp')
+        def cloudtask(*args, **kwargs):(self.base/'lamp.log').write_text('REFRESH_VERIFIED app=lamp')
         refresh.cloudtask=Mock(side_effect=cloudtask)
         refresh.collect_profile=Mock(side_effect=[OSError('interrupted export'),{'root_marker_sha256':'marker','profile_sha256':'profile'}])
         row={'app':'lamp','source_ami':'ami-123','version':'19.0.3'}
@@ -916,6 +956,7 @@ class HotfixInputTest(unittest.TestCase):
         result=refresh.patch(row,second)
         self.assertEqual(result['snapshot'],'snap-new')
         self.assertEqual(refresh.cloudtask.call_count,1)
+        self.assertEqual(refresh.cloudtask.call_args.kwargs['timeout'], 3600)
         self.assertEqual(refresh.ec2.create_volume.call_count,1)
         self.assertEqual(refresh.ec2.attach_volume.call_count,2)
         self.assertEqual(refresh.collect_profile.call_args.args[1],first)

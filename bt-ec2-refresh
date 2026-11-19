@@ -26,6 +26,8 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 HERE = Path(__file__).resolve().parent
+CLOUDTASK_TIMEOUT_SECONDS = 900
+CLOUDTASK_LOCAL_GRACE_SECONDS = 100
 
 _spec = importlib.util.spec_from_file_location('ec2_hotfix', HERE / 'bin/ec2-hotfix.py')
 hotfix = importlib.util.module_from_spec(_spec)
@@ -190,7 +192,7 @@ class Refresh:
         return subprocess.run(self.ssh_arguments(ip, host_alias=host_alias, known_hosts=known_hosts) + [command],
                               input=input, text=True, capture_output=True, timeout=timeout)
 
-    def cloudtask(self, worker, app, command, job):
+    def cloudtask(self, worker, app, command, job, *, timeout=CLOUDTASK_TIMEOUT_SECONDS):
         # Run existing CloudTask in the retained LibreSBX controller. Package code
         # runs on credential-free workers; AWS lifecycle calls remain here.
         base = self.args.cloudtask_root or self.resources.get('cloudtask_root', '/home/agent/' + self.state.name)
@@ -200,10 +202,11 @@ class Refresh:
                 self.args.python2, base + '/cloudtask-existing-workers',
                 '--force', '--workers=' + worker['ip'], '--split=1', '--user=admin',
                 '--ssh-identity=' + base + '/worker-key',
-                '--sessions=' + base + '/sessions/' + app, '--timeout=900', command]
+                '--sessions=' + base + '/sessions/' + app, '--timeout=' + str(timeout), command]
         for attempt in range(3):
             with (self.state / (app + '.log')).open('w') as log:
-                result = subprocess.run(argv, input=job + '\n', text=True, stdout=log, stderr=subprocess.STDOUT, timeout=1000)
+                result = subprocess.run(argv, input=job + '\n', text=True, stdout=log, stderr=subprocess.STDOUT,
+                                        timeout=timeout + CLOUDTASK_LOCAL_GRACE_SECONDS)
             if result.returncode == 0:
                 return
             output = (self.state / (app + '.log')).read_text()
@@ -388,7 +391,8 @@ test "$(dpkg-query -W -f='${Version}' tklpatch)" = 0.95
         arguments = [vid, app, self.batch]
         if self.hotfix:
             arguments += [self.hotfix_remote() + '/hotfix.json', self.hotfix_remote() + '/profiles/' + app]
-        self.cloudtask(worker, app, 'sudo /home/admin/refresh-ec2-rootfs', shlex.join(arguments))
+        self.cloudtask(worker, app, 'sudo /home/admin/refresh-ec2-rootfs', shlex.join(arguments),
+                       timeout=self.args.patch_timeout)
         if 'REFRESH_VERIFIED app=' + app not in (self.state / (app + '.log')).read_text():
             raise RuntimeError('Guest verification marker absent')
         if self.hotfix:
@@ -910,11 +914,15 @@ def main():
     p.add_argument('--sandbox', default='sbx-turnkey-410fd764949b')
     p.add_argument('--project', default='/home/z/projects/turnkey')
     p.add_argument('--cloudtask-root')
+    p.add_argument('--patch-timeout', type=int, default=CLOUDTASK_TIMEOUT_SECONDS, metavar='SECONDS',
+                   help='CloudTask time limit for each root filesystem patch (default: %(default)s seconds)')
     p.add_argument('--python2', default='/home/agent/turnkey-pypy2-runtime-root/usr/lib/tklbam-pypy2/bin/pypy')
     p.add_argument('--pylib', default='/home/agent/v19-release-work/turnkey-pylib/pylib')
     p.add_argument('--cloudtask', default='/home/agent/cloudtask/cmd_cloudtask.py')
     p.add_argument('--ingestion-role', default='arn:aws:iam::096457495696:role/awsmp-ami-ingestion')
     args = p.parse_args()
+    if args.patch_timeout < 1:
+        p.error('--patch-timeout must be a positive number of seconds')
     if args.hub and (args.action != 'prepare' or args.publish):
         p.error('--hub belongs to prepare and cannot be combined with --publish')
     if args.action == 'prepare':
