@@ -1,12 +1,21 @@
 #!/usr/bin/python3
 """Shared signed-package/configuration maintenance for pristine 19.0 roots."""
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 
 ROOT = Path('/')
 PINS = json.loads(Path(__file__).with_name('packages.json').read_text())
+APT_AUTH = ['-o', 'APT::Get::AllowUnauthenticated=false',
+            '-o', 'Acquire::AllowInsecureRepositories=false',
+            '-o', 'Acquire::AllowDowngradeToInsecureRepositories=false']
+SECURITY_SOURCES = '/etc/apt/sources.list.d/security.sources.sources'
+SECURITY_APT = [*APT_AUTH, '-o', 'Dir::Etc::sourceparts=/dev/null',
+                '-o', 'Dir::Etc::sourcelist=' + SECURITY_SOURCES]
+APT_INSTALL = ['apt-get', '-y', '--no-remove', '--no-install-recommends', *APT_AUTH,
+               '-o', 'DPkg::Options::=--force-confdef', '-o', 'DPkg::Options::=--force-confold', 'install']
 
 
 def require(ok, message):
@@ -15,7 +24,8 @@ def require(ok, message):
 
 
 def run(argv):
-    return subprocess.run(argv, check=True, text=True, capture_output=True).stdout.strip()
+    env = dict(os.environ, LC_ALL='C', DEBIAN_FRONTEND='noninteractive')
+    return subprocess.run(argv, check=True, text=True, capture_output=True, env=env).stdout.strip()
 
 
 def version(name):
@@ -45,23 +55,55 @@ def candidate(name, pin):
     return bool(hashes)
 
 
+def security_candidates():
+    listing = run(['apt', *SECURITY_APT, 'list', '--upgradable'])
+    targets = []
+    for line in listing.splitlines():
+        if line == 'Listing...':
+            continue
+        match = re.fullmatch(r'([a-z0-9.+-]+)/\S+ (\S+) (\S+) \[upgradable from: \S+\]', line)
+        require(match, 'unexpected APT security candidate: ' + line)
+        name, revision, architecture = match.groups()
+        if architecture != 'all':
+            name += ':' + architecture
+        targets.append(name + '=' + revision)
+    return targets
+
+
+def install_security_updates():
+    indexes = run(['apt-get', *SECURITY_APT, 'indextargets', '--format',
+                   '$(FILENAME) $(TRUSTED)', 'Created-By: Packages'])
+    require(indexes, 'no security package indexes')
+    for entry in indexes.splitlines():
+        filename, trusted = entry.rsplit(' ', 1)
+        index = ROOT / filename.lstrip('/')
+        require(trusted == 'yes' and index.is_file() and index.stat().st_size > 0,
+                'missing or unauthenticated security index: ' + filename)
+    targets = security_candidates()
+    if targets:
+        # Use the full signed sources here, so stable can supply dependencies.
+        run(APT_INSTALL + targets)
+    pending = security_candidates()
+    require(not pending, 'security upgrades still pending: ' + ', '.join(pending))
+    print(f'SECURITY_UPDATES_VERIFIED installed={len(targets)} pending=0')
+
+
 def apply():
     pristine()
     require(subprocess.run(['/usr/sbin/policy-rc.d']).returncode == 101, 'caller must suppress service startup')
+    sources = (ROOT / SECURITY_SOURCES.lstrip('/')).read_text()
+    require(not re.search(r'(?im)^(?:Trusted|Allow-Insecure|Allow-Weak|Allow-Downgrade-To-Insecure)'
+                          r'\s*:\s*(?:yes|true|1|on)\s*$', sources), 'APT security signature override')
+    run(['apt-get', *APT_AUTH, '-o', 'APT::Update::Error-Mode=any', 'update'])
     targets = {}
     for name, pin in PINS.items():
         installed = version(name)
         if not pin['minimum'] or not installed or subprocess.run(
                 ['dpkg', '--compare-versions', installed, 'ge', pin['version']]).returncode:
             targets[name] = pin
-    missing = [name for name, pin in targets.items() if not candidate(name, pin)]
-    if missing:
-        run(['apt-get', '-o', 'APT::Update::Error-Mode=any', '-o', 'Acquire::AllowInsecureRepositories=false', 'update'])
-        require(all(candidate(name, pin) for name, pin in targets.items()), 'required signed APT candidate absent')
-    run(['apt-get', '-y', '--no-remove', '--no-install-recommends',
-         '-o', 'APT::Get::AllowUnauthenticated=false', '-o', 'Acquire::AllowInsecureRepositories=false',
-         '-o', 'DPkg::Options::=--force-confdef', '-o', 'DPkg::Options::=--force-confold', 'install'] +
-        [name + '=' + pin['version'] for name, pin in targets.items()])
+    require(all(candidate(name, pin) for name, pin in targets.items()), 'required signed APT candidate absent')
+    run(APT_INSTALL + [name + '=' + pin['version'] for name, pin in targets.items()])
+    install_security_updates()
     for name, pin in PINS.items():
         installed = version(name)
         if pin['minimum']:

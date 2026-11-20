@@ -536,11 +536,14 @@ class HotfixInputTest(unittest.TestCase):
 
     def factory(self):
         root = self.base / 'root'
-        for name in ['etc/default', 'etc/webmin', 'run', 'var/lib/turnkey-info', 'root', 'home']:
+        for name in ['etc/default', 'etc/webmin', 'etc/apt/sources.list.d', 'run',
+                     'var/lib/apt/lists', 'var/lib/turnkey-info', 'root', 'home']:
             (root / name).mkdir(parents=True, exist_ok=True)
         (root / 'etc/os-release').write_text('ID=debian\nVERSION_ID="13"\n')
         (root / 'etc/default/inithooks').write_text('RUN_FIRSTBOOT=true\n')
         (root / 'etc/webmin/miniserv.conf').write_text('port=12321\ncustom=value\n')
+        (root / shared_patch.SECURITY_SOURCES.lstrip('/')).write_text('Suites: trixie-security\n')
+        (root / 'var/lib/apt/lists/security_Packages').write_text('synthetic package index\n')
         (root / 'etc/turnkey_version').write_text('turnkey-lamp-19.0.3.12-trixie-amd64\n')
         (root / 'var/lib/turnkey-info/hotfix.json').write_text('{}')
         return root
@@ -555,15 +558,15 @@ class HotfixInputTest(unittest.TestCase):
         root = self.factory(); self.bad_candidate = True
         with self.assertRaisesRegex(ValueError, 'signed APT candidate hash'):
             self.install(root)
-        self.assertFalse(any('apt-get' in c for c in self.calls))
+        self.assertFalse(any(c[0] == 'apt-get' and 'install' in c for c in self.calls))
 
     def install(self, root):
         self.calls = calls = []
         installed = dict(getattr(self, 'installed', {name: pin['version'] for name, pin in shared_patch.PINS.items()}))
-        refreshed = False
+        security_installed = False
         real_run = subprocess.run
         def process(args, **kwargs):
-            nonlocal refreshed
+            nonlocal security_installed
             args = list(map(str, args)); calls.append(args)
             result = SimpleNamespace(returncode=0, stdout='')
             if args[:2] == ['dpkg', '--print-architecture']:
@@ -575,11 +578,22 @@ class HotfixInputTest(unittest.TestCase):
             elif args[0] == 'dpkg-query':result.stdout = installed[args[-1]]
             elif args[0] == 'apt-cache':
                 name = args[-1].split('=')[0]
-                if not getattr(self, 'missing_candidate', False) or refreshed:
+                if not getattr(self, 'missing_candidate', False) or any(call[-1] == 'update' for call in calls):
                     result.stdout = 'SHA256: ' + ('c'*64 if getattr(self, 'bad_candidate', False) else shared_patch.PINS[name]['sha256'])
-            elif args[0] == 'apt-get' and args[-1] == 'update':refreshed = True
+            elif args[0] == 'apt-get' and args[-1] == 'update':pass
+            elif args[0] == 'apt-get' and 'indextargets' in args:
+                result.stdout = '/var/lib/apt/lists/security_Packages ' + getattr(self, 'index_trust', 'yes')
+            elif args[0] == 'apt' and args[-2:] == ['list', '--upgradable']:
+                result.stdout = 'Listing...'
+                if getattr(self, 'security_update', False) and (not security_installed or getattr(self, 'security_stuck', False)):
+                    result.stdout += '\nopenssl/stable-security 3.5.4-1 amd64 [upgradable from: 3.5.3-1]'
             elif args[0] == 'apt-get' and 'install' in args:
-                installed.update(target.split('=', 1) for target in args[args.index('install')+1:])
+                for target in args[args.index('install') + 1:]:
+                    name, revision = target.split('=', 1)
+                    if name == 'openssl:amd64':
+                        security_installed = True
+                    else:
+                        installed[name] = revision
             elif args[:2] == ['dpkg', '--compare-versions']:return real_run(args, **kwargs)
             else:raise AssertionError(args)
             return result
@@ -609,7 +623,7 @@ class HotfixInputTest(unittest.TestCase):
         self.assertIn('custom=value\n',config)
         self.assertIn('extracas=/etc/ssl/private/cert.pem\n',config)
         self.assertEqual((root/'etc/turnkey_version').read_text(),'turnkey-lamp-19.0.3.12-trixie-amd64\n')
-        apt=next(args for args in calls if 'apt-get' in args)
+        apt=next(args for args in calls if args[0] == 'apt-get' and 'install' in args)
         self.assertEqual(set(apt[apt.index('install')+1:]),{name+'='+self.data['packages'][name]['version'] for name in module.hotfix.PACKAGES})
         self.assertIn('APT::Get::AllowUnauthenticated=false',apt)
         self.assertIn('--no-remove',apt);self.assertIn('DPkg::Options::=--force-confold',apt)
@@ -651,10 +665,41 @@ class HotfixInputTest(unittest.TestCase):
                     self.install(root)
                 self.assertEqual(config.read_text(), original)
 
-    def test_standard_patch_delegation_and_cached_metadata_avoid_update(self):
+    def test_standard_patch_refreshes_metadata_even_when_pins_are_cached(self):
         root=self.factory(); calls=self.install(root)
         self.assertIn(['tklpatch-apply',str(root),str(self.base/'library-19.0-hotfix.tar.gz')], calls)
-        self.assertFalse(any(args[-1:] == ['update'] for args in calls))
+        refresh = [args for args in calls if args[-1] == 'update']
+        self.assertEqual(len(refresh), 1)
+        self.assertIn('APT::Update::Error-Mode=any', refresh[0])
+
+    def test_security_upgrade_uses_full_sources_for_dependencies_before_webmin_repair(self):
+        root = self.factory()
+        self.security_update = True
+        calls = self.install(root)
+        queries = [i for i, args in enumerate(calls) if args[-2:] == ['list', '--upgradable']]
+        self.assertEqual(len(queries), 2)
+        self.assertIn('Dir::Etc::sourcelist=' + shared_patch.SECURITY_SOURCES, calls[queries[0]])
+        install = next(i for i, args in enumerate(calls) if 'openssl:amd64=3.5.4-1' in args)
+        repair = next(i for i, args in enumerate(calls) if args[0] == 'sh' and Path(args[1]).name == 'ssh-access')
+        self.assertLess(queries[0], install)
+        self.assertLess(install, queries[1])
+        self.assertLess(queries[1], repair)
+        self.assertNotIn('Dir::Etc::sourceparts=/dev/null', calls[install])
+        self.assertIn('--no-remove', calls[install])
+
+    def test_patch_stops_when_security_updates_are_still_pending(self):
+        root = self.factory()
+        self.security_update = self.security_stuck = True
+        with self.assertRaisesRegex(ValueError, 'security upgrades still pending: openssl:amd64='):
+            self.install(root)
+        self.assertFalse(any(args[0] == 'sh' for args in self.calls))
+
+    def test_patch_stops_with_an_unauthenticated_security_index(self):
+        root = self.factory()
+        self.index_trust = 'no'
+        with self.assertRaisesRegex(ValueError, 'unauthenticated security index'):
+            self.install(root)
+        self.assertFalse(any(args[0] == 'sh' for args in self.calls))
 
     def test_absent_candidate_refreshes_once_and_newer_floor_is_preserved(self):
         root=self.factory(); self.missing_candidate=True
